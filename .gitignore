@@ -13,27 +13,45 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+
+	# Variables de entorno y credenciales locales.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env*.example
 *.pem
 *.key
 *.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*.secret
+
+	# Registros, bases de datos y artefactos generados.
 *.log
+*.sqlite
+*.sqlite3
+*.db
+generated/
+exports/
+storage/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-generated/
-exports/
-storage/
+	# Configuracion local de editores y del sistema operativo.
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
 .DS_Store
 Thumbs.db
+desktop.ini
 
+	# Archivos comprimidos y planes de infraestructura locales.
 *.zip
 *.tar
 *.tar.gz
-
 infra/aws/terraform/.terraform/
 infra/aws/terraform/terraform.tfstate*
 infra/aws/terraform/terraform.tfvars

@@ -2,6 +2,9 @@
 
 Plataforma CASE inteligente y colaborativa para modelado UML, validacion asistida por IA local offline y generacion automatica de software.
 
+## Configuracion y publicacion
+
+
 ## Componentes
 
 - `frontend/`: aplicacion web React + TypeScript + Vite + Tailwind.
