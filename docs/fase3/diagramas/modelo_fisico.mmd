@@ -1,0 +1,15 @@
+flowchart LR
+    UUID[UUID PK en tablas de dominio]
+    TS[created_at / updated_at]
+    JSONB[JSONB para payloads y metadatos]
+    IDX[Indices por FK, estado y tipo]
+    FK[Claves foraneas explicitas]
+    UQ[Restricciones unicas]
+    DB[(PostgreSQL)]
+    UUID --> DB
+    TS --> DB
+    JSONB --> DB
+    IDX --> DB
+    FK --> DB
+    UQ --> DB
+

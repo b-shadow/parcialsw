@@ -1,0 +1,10 @@
+flowchart TB
+    A[FastAPI /api/v1/ai] --> B[AiService]
+    B --> C[LocalAIService]
+    C --> D[LocalAIEngine]
+    D --> E[Datasets especializados]
+    D --> F[Vector Store local]
+    D --> G[Validadores UML]
+    D --> H[Evaluacion offline]
+    D --> I[Plan entrenamiento]
+    D --> J[Guia codigo Spring Boot/Flutter]

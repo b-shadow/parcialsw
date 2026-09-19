@@ -1,0 +1,8 @@
+flowchart TD
+  Modelo[Modelo interno UML] --> Exportador[Exportador XMI]
+  Exportador --> Archivo[Archivo XMI]
+  Archivo --> Importador[Importador XMI]
+  Importador --> Persistencia[Persistencia UML]
+  Persistencia --> Editor[Diagrama editable]
+  Exportador --> Registro[xmi_exchanges]
+  Importador --> Registro

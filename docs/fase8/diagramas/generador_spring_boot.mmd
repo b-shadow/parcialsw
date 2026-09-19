@@ -1,0 +1,10 @@
+flowchart LR
+  UML[Modelo UML intermedio] --> Parser[uml_parser]
+  Parser --> Analyzer[analyzer]
+  Analyzer --> Validator[validators]
+  Validator --> Templates[templates]
+  Templates --> Writer[generator]
+  Writer --> Files[Proyecto Spring Boot]
+  Files --> Exporter[exporter ZIP checksum]
+  Exporter --> Storage[(storage/generated/backend)]
+  Exporter --> DB[(generated_artifacts)]

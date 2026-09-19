@@ -1,0 +1,10 @@
+flowchart LR
+    T[Texto] --> N[Normalizacion]
+    V[Voz] --> STT[Transcripcion local]
+    I[Imagen] --> OCR[OCR/deteccion local preparada]
+    STT --> N
+    OCR --> N
+    N --> R[RAG local + dataset]
+    R --> U[Modelo UML]
+    U --> Q[Validacion]
+    U --> C[Guia codigo]

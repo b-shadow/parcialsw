@@ -1,0 +1,15 @@
+sequenceDiagram
+    participant U1 as Usuario A
+    participant FE1 as Frontend A
+    participant BE as Backend FastAPI
+    participant DB as PostgreSQL
+    participant FE2 as Frontend B
+    participant U2 as Usuario B
+    U1->>FE1: Modifica clase UML
+    FE1->>BE: CREATE_CLASS por WebSocket
+    BE->>BE: Valida JWT, proyecto y permisos
+    BE->>DB: Guarda evento y cambio
+    BE-->>FE1: EVENT_ACK
+    BE-->>FE2: CREATE_CLASS validado
+    FE2-->>U2: Actualiza canvas
+

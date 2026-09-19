@@ -1,0 +1,26 @@
+[project]
+name = "case-inteligente-ai-engine"
+version = "0.1.0"
+description = "Motor inicial de IA local offline para la plataforma CASE inteligente."
+requires-python = ">=3.12"
+dependencies = [
+  "pydantic>=2.8.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "ruff>=0.6.0"
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["ai_engine*"]
+exclude = ["models*", "training*", "inference*", "datasets*", "preprocessing*", "prompts*", "validators*", "services*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

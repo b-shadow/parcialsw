@@ -1,0 +1,13 @@
+sequenceDiagram
+  participant U as Usuario
+  participant FE as Frontend
+  participant API as FastAPI AI
+  participant IA as AI Engine local
+  participant UML as Motor UML
+
+  U->>FE: Texto, voz o imagen
+  FE->>API: POST /ai/uml/{modo}
+  API->>IA: Procesar fuente offline
+  IA-->>API: Clases, relaciones, confianza
+  API-->>FE: Respuesta estructurada
+  FE->>UML: Persistir diagrama editable

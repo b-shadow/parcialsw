@@ -1,0 +1,23 @@
+flowchart TD
+    subgraph Cliente
+      Browser[Navegador web]
+    end
+    subgraph AWS
+      CDN[S3 + CloudFront / Amplify]
+      API[EC2/ECS Backend FastAPI]
+      RDS[(RDS PostgreSQL)]
+      S3[(S3 Artefactos)]
+      MON[CloudWatch]
+    end
+    subgraph IA_Local[Infraestructura IA controlada]
+      AI[Motor IA offline]
+      MODELS[Modelos locales]
+    end
+    Browser --> CDN
+    Browser -->|HTTPS/WSS| API
+    API --> RDS
+    API --> S3
+    API --> AI
+    AI --> MODELS
+    API --> MON
+

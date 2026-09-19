@@ -1,0 +1,14 @@
+sequenceDiagram
+  participant U as Usuario
+  participant FE as Editor React
+  participant API as FastAPI UML
+  participant DB as PostgreSQL
+  participant WS as WebSocket
+
+  U->>FE: Mueve clase
+  FE->>API: PATCH /uml/diagrams/{id}/visual-elements
+  API->>DB: Actualiza posicion
+  API-->>FE: Elemento visual
+  FE->>WS: UML_EVENT MOVE_ELEMENT
+  WS-->>FE: EVENT_ACK
+  WS-->>FE: Broadcast a sala de proyecto

@@ -1,0 +1,10 @@
+flowchart TD
+  JWT[Usuario autenticado JWT] --> Router[Ai Router]
+  Router --> Schema[Schemas Pydantic]
+  Schema --> AiService[AiService backend]
+  AiService --> LocalService[LocalAIService]
+  LocalService --> Text[Texto a UML]
+  LocalService --> Voice[Voz a UML]
+  LocalService --> Image[Imagen a UML]
+  LocalService --> Validate[Validacion UML]
+  LocalService --> Software[Plan Spring Boot Flutter]

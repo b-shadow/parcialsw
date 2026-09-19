@@ -1,0 +1,16 @@
+sequenceDiagram
+  participant FE as Frontend
+  participant API as FastAPI
+  participant GS as GenerationService
+  participant GEN as SpringBootGenerator
+  participant ST as Storage
+  participant DB as PostgreSQL
+
+  FE->>API: POST /generation/spring-boot
+  API->>GS: generate_backend
+  GS->>GEN: Generar desde modelo intermedio
+  GEN->>ST: Escribir proyecto y ZIP
+  GS->>DB: Registrar backend y artefactos
+  API-->>FE: GeneratedBackend + manifest
+  FE->>API: GET /generation/spring-boot/{id}/download
+  API-->>FE: ZIP

@@ -1,0 +1,13 @@
+sequenceDiagram
+    participant U as Usuario
+    participant API as FastAPI
+    participant AI as LocalAIEngine
+    participant DS as Dataset
+    participant VS as VectorStore
+    U->>API: prompt UML
+    API->>AI: UmlGenerationRequest
+    AI->>DS: buscar intencion
+    AI->>VS: recuperar conocimiento
+    VS-->>AI: topicos relevantes
+    AI-->>API: UML + knowledge_context
+    API-->>U: respuesta estructurada

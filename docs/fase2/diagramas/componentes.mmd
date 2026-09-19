@@ -1,0 +1,34 @@
+flowchart LR
+    subgraph FE[Frontend React]
+      FE1[Acceso y usuarios]
+      FE2[Proyectos y colaboracion]
+      FE3[Editor UML]
+      FE4[Generacion]
+    end
+    subgraph BE[Backend FastAPI]
+      BE1[Modulo acceso]
+      BE2[Modulo proyectos]
+      BE3[Modulo UML]
+      BE4[Modulo generacion]
+      BE5[WebSocket]
+    end
+    subgraph CORE[Servicios base]
+      DB[(PostgreSQL)]
+      IA[IA local]
+      XMI[XMI]
+      ART[Artefactos]
+    end
+    FE1 --> BE1
+    FE2 --> BE2
+    FE3 --> BE3
+    FE3 --> BE5
+    FE4 --> BE4
+    BE1 --> DB
+    BE2 --> DB
+    BE3 --> DB
+    BE4 --> DB
+    BE3 --> IA
+    BE4 --> IA
+    BE3 --> XMI
+    BE4 --> ART
+

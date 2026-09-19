@@ -1,0 +1,12 @@
+flowchart TD
+    D[uml_diagrams] --> C[uml_classes]
+    C --> A[uml_attributes]
+    C --> M[uml_methods]
+    M --> P[uml_parameters]
+    D --> R[uml_relationships]
+    R -->|source_class_id| C
+    R -->|target_class_id| C
+    D --> V[uml_visual_elements]
+    V -->|element_id + element_type| C
+    V -->|element_id + element_type| R
+

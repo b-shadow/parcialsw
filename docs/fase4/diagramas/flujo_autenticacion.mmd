@@ -1,0 +1,13 @@
+sequenceDiagram
+    participant Usuario
+    participant API as FastAPI
+    participant Auth as AuthService
+    participant DB as PostgreSQL
+    Usuario->>API: POST /auth/register
+    API->>Auth: validar y crear usuario
+    Auth->>DB: users, user_roles, audit_logs
+    Usuario->>API: POST /auth/login
+    API->>Auth: verificar password
+    Auth->>DB: actualizar last_access_at
+    Auth-->>Usuario: JWT Bearer
+

@@ -1,0 +1,22 @@
+erDiagram
+    USERS ||--o{ USER_ROLES : has
+    ROLES ||--o{ USER_ROLES : grants
+    USERS ||--o{ PROJECTS : owns
+    PROJECTS ||--o{ PROJECT_MEMBERS : contains
+    USERS ||--o{ PROJECT_MEMBERS : joins
+    PROJECT_MEMBERS ||--o{ PROJECT_PERMISSIONS : has
+    PROJECTS ||--o{ PROJECT_VERSIONS : versions
+    PROJECTS ||--o{ UML_DIAGRAMS : contains
+    UML_DIAGRAMS ||--o{ UML_CLASSES : contains
+    UML_CLASSES ||--o{ UML_ATTRIBUTES : owns
+    UML_CLASSES ||--o{ UML_METHODS : owns
+    UML_METHODS ||--o{ UML_PARAMETERS : owns
+    UML_DIAGRAMS ||--o{ UML_RELATIONSHIPS : contains
+    UML_DIAGRAMS ||--o{ UML_VISUAL_ELEMENTS : renders
+    PROJECTS ||--o{ COLLABORATION_EVENTS : records
+    UML_DIAGRAMS ||--o{ XMI_EXCHANGES : exchanges
+    UML_DIAGRAMS ||--o{ UML_TRANSFORMATIONS : transforms
+    UML_TRANSFORMATIONS ||--o{ GENERATED_BACKENDS : creates
+    UML_TRANSFORMATIONS ||--o{ GENERATED_FRONTENDS : creates
+    PROJECTS ||--o{ GENERATED_ARTIFACTS : stores
+

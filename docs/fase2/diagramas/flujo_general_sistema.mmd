@@ -1,0 +1,17 @@
+flowchart TD
+    A[Crear cuenta / iniciar sesion] --> B[Crear o abrir proyecto]
+    B --> C[Gestionar integrantes y permisos]
+    C --> D[Crear o importar diagrama UML]
+    D --> E[Editar manualmente]
+    D --> F[Generar desde texto, voz o imagen]
+    E --> G[Sincronizar cambios por WebSocket]
+    F --> G
+    G --> H[Guardar version]
+    H --> I[Validar UML con reglas e IA local]
+    I --> J[Transformar UML]
+    J --> K[Generar backend Spring Boot]
+    J --> L[Generar frontend Flutter]
+    K --> M[Registrar artefactos y bitacora]
+    L --> M
+    M --> N[Exportar resultados]
+

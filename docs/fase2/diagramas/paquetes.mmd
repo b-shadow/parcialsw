@@ -1,0 +1,13 @@
+flowchart TB
+    subgraph Plataforma_CASE
+      P1[Gestion de acceso, usuarios y seguimiento]
+      P2[Gestion de proyectos y colaboracion]
+      P3[Modelado UML inteligente]
+      P4[Transformacion y generacion automatica]
+    end
+    P1 -->|Identidad y permisos| P2
+    P2 -->|Contexto proyecto/versiones| P3
+    P3 -->|Modelo UML validado| P4
+    P4 -->|Registro de generaciones| P2
+    P1 -->|Bitacora| P4
+

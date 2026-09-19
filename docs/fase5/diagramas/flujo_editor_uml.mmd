@@ -1,0 +1,14 @@
+sequenceDiagram
+  participant U as Usuario
+  participant FE as Frontend React
+  participant API as FastAPI REST
+  participant WS as WebSocket
+
+  U->>FE: Crear clase UML
+  FE->>API: POST /uml/diagrams/{id}/classes
+  API-->>FE: Clase creada
+  FE->>WS: UML_EVENT CREATE_CLASS
+  WS-->>FE: EVENT_ACK / broadcast
+  U->>FE: Validar diagrama
+  FE->>API: POST /uml/diagrams/{id}/validate
+  API-->>FE: Errores, advertencias y recomendaciones

@@ -1,0 +1,13 @@
+sequenceDiagram
+    participant Usuario
+    participant Frontend
+    participant Backend
+    participant DB as PostgreSQL
+    participant Otros as Usuarios conectados
+    Usuario->>Frontend: Modifica elemento UML
+    Frontend->>Backend: Evento WebSocket
+    Backend->>Backend: Valida permisos y version base
+    Backend->>DB: Persiste evento y cambio
+    Backend->>Otros: Distribuye evento validado
+    Backend->>Frontend: Confirma recepcion
+

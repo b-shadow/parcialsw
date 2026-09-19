@@ -1,0 +1,12 @@
+.git
+frontend/node_modules
+frontend/dist
+!frontend/dist
+backend/.venv
+ai-engine/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.pyc
+storage/generated
+docs/fase*/diagramas/*.png

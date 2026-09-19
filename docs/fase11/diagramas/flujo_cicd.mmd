@@ -1,0 +1,11 @@
+flowchart LR
+    A[Push main] --> B[GitHub Actions]
+    B --> C[Lint AI/Backend/Frontend]
+    C --> D[Tests]
+    D --> E[Build frontend]
+    E --> F[Build Docker images]
+    F --> G[ECR]
+    G --> H[Terraform/ECS]
+    E --> I[S3 sync]
+    I --> J[CloudFront invalidation]
+    H --> K[Smoke test]

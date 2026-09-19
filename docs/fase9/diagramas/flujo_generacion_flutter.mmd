@@ -1,0 +1,18 @@
+sequenceDiagram
+    participant UI as React GenerationPage
+    participant API as FastAPI Generation Router
+    participant S as GenerationService
+    participant G as FlutterGeneratorService
+    participant FS as Storage
+    UI->>API: POST /generation/flutter
+    API->>S: generate_frontend(payload, user)
+    S->>S: validar transformacion y membresia
+    S->>G: generate(intermediate_model, name, id)
+    G->>FS: escribir proyecto Flutter
+    G->>FS: crear ZIP
+    G-->>S: manifest + rutas
+    S->>S: persistir GeneratedFrontend y GeneratedArtifact
+    S-->>API: GeneratedFrontend
+    API-->>UI: metadata de generacion
+    UI->>API: GET /generation/flutter/{id}/download
+    API-->>UI: ZIP Flutter

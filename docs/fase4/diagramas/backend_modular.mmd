@@ -1,0 +1,23 @@
+flowchart TB
+    MAIN[app/main.py]
+    CORE[core: config, database, security, middleware]
+    WS[websocket manager]
+    A[acceso_usuarios]
+    P[proyectos_colaboracion]
+    U[modelado_uml]
+    G[generacion_software]
+    DB[(PostgreSQL)]
+    MAIN --> CORE
+    MAIN --> A
+    MAIN --> P
+    MAIN --> U
+    MAIN --> G
+    MAIN --> WS
+    A --> DB
+    P --> DB
+    U --> DB
+    G --> DB
+    P --> A
+    U --> P
+    G --> U
+

@@ -1,0 +1,9 @@
+flowchart TD
+  Login[/login/] --> Proyectos[/proyectos/]
+  Registro[/registro/] --> Proyectos
+  Proyectos --> Workspace[/proyectos/:projectId/]
+  Workspace --> Editor[/proyectos/:projectId/uml/:diagramId/]
+  Proyectos --> Generacion[/generacion/]
+  Proyectos --> Perfil[/perfil/]
+  Proyectos --> Reportes[/reportes/]
+  Proyectos --> Manual[/manual/]

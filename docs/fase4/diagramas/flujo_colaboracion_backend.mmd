@@ -1,0 +1,14 @@
+sequenceDiagram
+    participant FE as Frontend
+    participant WS as WebSocket Router
+    participant CM as ConnectionManager
+    participant BE as Servicios backend
+    participant DB as PostgreSQL
+    FE->>WS: conectar /ws/projects/{project_id}
+    WS->>CM: registrar conexion
+    WS-->>FE: SESSION_CONNECTED
+    FE->>WS: evento UML
+    WS->>CM: broadcast por proyecto
+    BE->>DB: persistencia via endpoints REST
+    WS-->>FE: EVENT_ACK
+

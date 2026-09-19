@@ -1,0 +1,8 @@
+flowchart TB
+    Internet[Internet] --> SGALB[SG ALB 80/443]
+    SGALB --> ALB[ALB]
+    ALB --> SGBE[SG Backend 8000 desde ALB]
+    SGBE --> ECS[ECS Backend]
+    ECS --> SGRDS[SG RDS 5432 desde Backend]
+    SGRDS --> RDS[(PostgreSQL)]
+    ECS --> S3[S3 Artefactos cifrado]

@@ -1,0 +1,27 @@
+classDiagram
+    class User
+    class Role
+    class Project
+    class ProjectMember
+    class UmlDiagram
+    class UmlClass
+    class UmlAttribute
+    class UmlMethod
+    class UmlRelationship
+    class AiProcess
+    class UmlTransformation
+    class GeneratedBackend
+    class GeneratedFrontend
+    User "1" --> "*" Project : owns
+    User "*" --> "*" Role : user_roles
+    Project "1" --> "*" ProjectMember
+    Project "1" --> "*" UmlDiagram
+    UmlDiagram "1" --> "*" UmlClass
+    UmlClass "1" --> "*" UmlAttribute
+    UmlClass "1" --> "*" UmlMethod
+    UmlDiagram "1" --> "*" UmlRelationship
+    UmlDiagram "1" --> "*" UmlTransformation
+    UmlTransformation "1" --> "*" GeneratedBackend
+    UmlTransformation "1" --> "*" GeneratedFrontend
+    User "1" --> "*" AiProcess
+

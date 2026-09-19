@@ -1,0 +1,15 @@
+flowchart LR
+  App[React App] --> Router[React Router]
+  Router --> Layout[AppLayout]
+  Layout --> Acceso[Gestion acceso usuarios]
+  Layout --> Proyectos[Gestion proyectos colaboracion]
+  Layout --> UML[Modelado UML inteligente]
+  Layout --> Generacion[Transformacion generacion]
+  Acceso --> API[Axios API Client]
+  Proyectos --> API
+  UML --> API
+  Generacion --> API
+  UML --> WS[Project WebSocket]
+  API --> FastAPI[Backend FastAPI]
+  WS --> FastAPI
+  App --> Store[Zustand Stores]

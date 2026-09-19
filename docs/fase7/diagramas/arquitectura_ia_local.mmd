@@ -1,0 +1,11 @@
+flowchart LR
+  Frontend[Editor React] --> Backend[FastAPI /api/v1/ai]
+  Backend --> Service[AiService]
+  Service --> Package[case-inteligente-ai-engine]
+  Package --> Pre[Preprocessing]
+  Package --> Engine[LocalAIEngine]
+  Engine --> Model[CASE-UML-Local-RuleModel-v1]
+  Engine --> Validator[UML Quality Validator]
+  Engine --> Planner[Software Planner]
+  Package --> Prompts[Prompts especializados]
+  Package --> Training[Dataset strategy]

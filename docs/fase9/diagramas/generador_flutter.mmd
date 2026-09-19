@@ -1,0 +1,9 @@
+flowchart TB
+    A[Modelo intermedio UML] --> B[uml_analyzer]
+    B --> C[FlutterProject]
+    C --> D[validators]
+    D --> E[templates]
+    E --> F[project_writer]
+    F --> G[Proyecto Flutter]
+    G --> H[exporter ZIP]
+    H --> I[Manifest + GeneratedArtifact]

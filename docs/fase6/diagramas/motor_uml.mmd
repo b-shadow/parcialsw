@@ -1,0 +1,11 @@
+flowchart LR
+  Editor[Editor React Flow] --> API[FastAPI UML Router]
+  API --> Service[UmlService]
+  Service --> Engine[Motor UML interno]
+  Engine --> Validator[Validador UML]
+  Engine --> XMI[XMI Import Export]
+  Engine --> TextParser[Parser texto voz imagen]
+  Service --> ORM[SQLAlchemy]
+  ORM --> DB[(PostgreSQL)]
+  Editor --> WS[WebSocket proyecto]
+  WS --> Editor

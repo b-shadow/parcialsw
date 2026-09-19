@@ -1,0 +1,34 @@
+flowchart TB
+    subgraph A[Acceso]
+      users --> user_roles
+      roles --> user_roles
+      users --> user_sessions
+      users --> audit_logs
+    end
+    subgraph P[Proyectos]
+      users --> projects
+      projects --> project_members
+      users --> project_members
+      project_members --> project_permissions
+      projects --> project_versions
+      projects --> collaboration_events
+    end
+    subgraph U[UML]
+      projects --> uml_diagrams
+      uml_diagrams --> uml_classes
+      uml_classes --> uml_attributes
+      uml_classes --> uml_methods
+      uml_methods --> uml_parameters
+      uml_diagrams --> uml_relationships
+      uml_diagrams --> uml_visual_elements
+      uml_diagrams --> xmi_exchanges
+    end
+    subgraph G[Generacion]
+      uml_diagrams --> ai_processes
+      uml_diagrams --> uml_transformations
+      uml_transformations --> generated_backends
+      uml_transformations --> generated_frontends
+      generated_backends --> generated_artifacts
+      generated_frontends --> generated_artifacts
+    end
+

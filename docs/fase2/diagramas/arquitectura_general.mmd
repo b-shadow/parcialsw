@@ -1,0 +1,16 @@
+flowchart TD
+    U[Usuario web] --> FE[Frontend React + Tailwind]
+    FE -->|REST HTTPS| BE[Backend FastAPI]
+    FE <-->|WSS| WS[WebSocket colaborativo]
+    WS --> BE
+    BE --> DB[(PostgreSQL)]
+    BE --> UML[Motor UML]
+    BE --> AI[Motor IA local offline]
+    BE --> TR[Transformador UML]
+    TR --> BG[Generador Spring Boot]
+    TR --> FG[Generador Flutter]
+    BG --> ART[Artefactos generados]
+    FG --> ART
+    AI --> UML
+    UML --> TR
+

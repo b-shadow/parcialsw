@@ -1,0 +1,12 @@
+flowchart LR
+    subgraph Backend FastAPI
+      A[Acceso, usuarios y seguimiento]
+      P[Proyectos y colaboracion]
+      M[Modelado UML inteligente]
+      G[Transformacion y generacion]
+    end
+    A --> P
+    P --> M
+    M --> G
+    G --> M
+
