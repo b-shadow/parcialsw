@@ -1,8 +1,13 @@
 import { apiClient } from "../../../core/api/client";
 
 type AiUmlResponse = {
-  classes: Array<{ name: string }>;
-  relationships: Array<{ source: string; target: string; relationship_type: string }>;
+  classes: Array<{
+    name: string;
+    stereotype?: string | null;
+    attributes?: Array<{ name: string; data_type: string }>;
+    methods?: Array<{ name: string; return_type?: string | null }>;
+  }>;
+  relationships: Array<{ source: string; target: string; relationship_type: string; label?: string | null }>;
   confidence: number;
   observations: string[];
   knowledge_context: string[];
@@ -26,16 +31,16 @@ export const aiService = {
     });
     return response.data;
   },
-  async voiceToUml(transcript: string) {
+  async voiceToUml(payload: string | { transcript?: string; audio_base64?: string }) {
     const response = await apiClient.post<AiUmlResponse>("/ai/uml/voice", {
-      transcript,
+      ...(typeof payload === "string" ? { transcript: payload } : payload),
       language: "es"
     });
     return response.data;
   },
-  async imageToUml(description: string) {
+  async imageToUml(payload: string | { description?: string; image_base64?: string; file_name?: string }) {
     const response = await apiClient.post<AiUmlResponse>("/ai/uml/image", {
-      description,
+      ...(typeof payload === "string" ? { description: payload } : payload),
       language: "es"
     });
     return response.data;

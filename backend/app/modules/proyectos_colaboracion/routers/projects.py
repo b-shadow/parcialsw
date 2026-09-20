@@ -15,6 +15,7 @@ from app.modules.proyectos_colaboracion.schemas.project import (
     ProjectMemberResponse,
     ProjectResponse,
     ProjectUpdateRequest,
+    UpdateMemberRequest,
     VersionCreateRequest,
     VersionResponse,
 )
@@ -87,6 +88,27 @@ def list_members(
     return ProjectService(db).list_members(project_id, current_user.id)
 
 
+@router.patch("/{project_id}/members/{member_id}", response_model=ProjectMemberResponse)
+def update_member(
+    project_id: UUID,
+    member_id: UUID,
+    payload: UpdateMemberRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ProjectMember:
+    return ProjectService(db).update_member(project_id, member_id, payload, current_user.id)
+
+
+@router.delete("/{project_id}/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_member(
+    project_id: UUID,
+    member_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    ProjectService(db).remove_member(project_id, member_id, current_user.id)
+
+
 @router.post("/{project_id}/members/{member_id}/permissions")
 def set_permission(
     project_id: UUID,
@@ -109,4 +131,3 @@ def create_version(
     db: Annotated[Session, Depends(get_db)],
 ) -> VersionResponse:
     return ProjectService(db).create_version(project_id, payload, current_user.id)
-

@@ -76,6 +76,17 @@ class UmlAttributeCreateRequest(BaseModel):
     constraints: dict = Field(default_factory=dict)
 
 
+class UmlAttributeUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    data_type: str | None = Field(default=None, min_length=1, max_length=120)
+    visibility: str | None = None
+    initial_value: str | None = None
+    multiplicity: str | None = None
+    is_required: bool | None = None
+    order_index: int | None = None
+    constraints: dict | None = None
+
+
 class UmlAttributeResponse(BaseModel):
     id: UUID
     class_id: UUID
@@ -97,6 +108,14 @@ class UmlMethodCreateRequest(BaseModel):
     visibility: str = "public"
     order_index: int = 0
     metadata_json: dict = Field(default_factory=dict)
+
+
+class UmlMethodUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    return_type: str | None = None
+    visibility: str | None = None
+    order_index: int | None = None
+    metadata_json: dict | None = None
 
 
 class UmlParameterCreateRequest(BaseModel):
@@ -217,7 +236,7 @@ class XmiImportRequest(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     content: str = Field(min_length=10)
     tool_name: str | None = "Enterprise Architect"
-    file_name: str = "modelo-importado.xmi"
+    file_name: str = "modelo-importado.xml"
 
 
 class XmiExportResponse(BaseModel):

@@ -35,3 +35,6 @@ class MemberRepository:
                 .order_by(ProjectMember.created_at)
             )
         )
+
+    def delete(self, member: ProjectMember) -> None:
+        self.db.delete(member)

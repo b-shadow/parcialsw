@@ -44,6 +44,10 @@ class AddMemberRequest(BaseModel):
     project_role: str = Field(pattern="^(ORGANIZADOR|EDITOR)$")
 
 
+class UpdateMemberRequest(BaseModel):
+    project_role: str = Field(pattern="^(ORGANIZADOR|EDITOR)$")
+
+
 class PermissionRequest(BaseModel):
     permission_code: str = Field(min_length=2, max_length=80)
     is_allowed: bool = True
@@ -67,4 +71,3 @@ class VersionResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
-

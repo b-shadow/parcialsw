@@ -32,10 +32,12 @@ from app.modules.modelado_uml.schemas.uml import (
     MoveElementRequest,
     TextToUmlRequest,
     UmlAttributeCreateRequest,
+    UmlAttributeUpdateRequest,
     UmlClassCreateRequest,
     UmlClassDetailResponse,
     UmlClassUpdateRequest,
     UmlMethodCreateRequest,
+    UmlMethodUpdateRequest,
     UmlParameterCreateRequest,
     UmlRelationshipCreateRequest,
     UmlRelationshipUpdateRequest,
@@ -85,6 +87,21 @@ class UmlService:
     def list_diagrams(self, project_id: UUID, user_id: UUID) -> list[UmlDiagram]:
         ensure_membership(self.members.get_membership(project_id, user_id))
         return self.uml.list_diagrams_by_project(project_id)
+
+    def delete_diagram(self, diagram_id: UUID, user_id: UUID) -> None:
+        diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
+        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self.uml.delete_visual_elements_by_diagram(diagram_id)
+        self.uml.delete_xmi_exchanges_by_diagram(diagram_id)
+        self.uml.delete_diagram(diagram)
+        self.audit.record(
+            module="modelado_uml",
+            action="DELETE_DIAGRAM",
+            user_id=user_id,
+            project_id=diagram.project_id,
+            metadata={"diagram_id": str(diagram_id)},
+        )
+        self.db.commit()
 
     def create_class(
         self, diagram_id: UUID, payload: UmlClassCreateRequest, user_id: UUID
@@ -170,7 +187,10 @@ class UmlService:
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
         for relationship in self.uml.list_relationships_for_class(class_id):
+            self.uml.delete_visual_element(diagram.id, "relationship", relationship.id)
             self.uml.delete_relationship(relationship)
+        self.db.flush()
+        self.uml.delete_visual_element(diagram.id, "class", class_id)
         self.uml.delete_class(uml_class)
         self.audit.record(
             module="modelado_uml",
@@ -199,6 +219,49 @@ class UmlService:
         self.db.refresh(attribute)
         return attribute
 
+    def update_attribute(
+        self, attribute_id: UUID, payload: UmlAttributeUpdateRequest, user_id: UUID
+    ) -> UmlAttribute:
+        from fastapi import HTTPException, status
+
+        attribute = self.uml.get_attribute(attribute_id)
+        if attribute is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Atributo UML no encontrado")
+        uml_class = ensure_class_exists(self.uml.get_class(attribute.class_id))
+        diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
+        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        for field, value in payload.model_dump(exclude_unset=True).items():
+            setattr(attribute, field, value)
+        self.audit.record(
+            module="modelado_uml",
+            action="UPDATE_ATTRIBUTE",
+            user_id=user_id,
+            project_id=diagram.project_id,
+            metadata={"attribute_id": str(attribute_id), "class_id": str(attribute.class_id)},
+        )
+        self.db.commit()
+        self.db.refresh(attribute)
+        return attribute
+
+    def delete_attribute(self, attribute_id: UUID, user_id: UUID) -> None:
+        from fastapi import HTTPException, status
+
+        attribute = self.uml.get_attribute(attribute_id)
+        if attribute is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Atributo UML no encontrado")
+        uml_class = ensure_class_exists(self.uml.get_class(attribute.class_id))
+        diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
+        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self.uml.delete_attribute(attribute)
+        self.audit.record(
+            module="modelado_uml",
+            action="DELETE_ATTRIBUTE",
+            user_id=user_id,
+            project_id=diagram.project_id,
+            metadata={"attribute_id": str(attribute_id), "class_id": str(uml_class.id)},
+        )
+        self.db.commit()
+
     def add_method(
         self, class_id: UUID, payload: UmlMethodCreateRequest, user_id: UUID
     ) -> UmlMethod:
@@ -216,6 +279,49 @@ class UmlService:
         self.db.commit()
         self.db.refresh(method)
         return method
+
+    def update_method(
+        self, method_id: UUID, payload: UmlMethodUpdateRequest, user_id: UUID
+    ) -> UmlMethod:
+        from fastapi import HTTPException, status
+
+        method = self.uml.get_method(method_id)
+        if method is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Metodo UML no encontrado")
+        uml_class = ensure_class_exists(self.uml.get_class(method.class_id))
+        diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
+        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        for field, value in payload.model_dump(exclude_unset=True).items():
+            setattr(method, field, value)
+        self.audit.record(
+            module="modelado_uml",
+            action="UPDATE_METHOD",
+            user_id=user_id,
+            project_id=diagram.project_id,
+            metadata={"method_id": str(method_id), "class_id": str(method.class_id)},
+        )
+        self.db.commit()
+        self.db.refresh(method)
+        return method
+
+    def delete_method(self, method_id: UUID, user_id: UUID) -> None:
+        from fastapi import HTTPException, status
+
+        method = self.uml.get_method(method_id)
+        if method is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Metodo UML no encontrado")
+        uml_class = ensure_class_exists(self.uml.get_class(method.class_id))
+        diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
+        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self.uml.delete_method(method)
+        self.audit.record(
+            module="modelado_uml",
+            action="DELETE_METHOD",
+            user_id=user_id,
+            project_id=diagram.project_id,
+            metadata={"method_id": str(method_id), "class_id": str(uml_class.id)},
+        )
+        self.db.commit()
 
     def add_parameter(
         self, method_id: UUID, payload: UmlParameterCreateRequest, user_id: UUID
@@ -294,6 +400,7 @@ class UmlService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Relacion UML no encontrada")
         diagram = ensure_diagram_exists(self.uml.get_diagram(relationship.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self.uml.delete_visual_element(diagram.id, "relationship", relationship_id)
         self.uml.delete_relationship(relationship)
         self.audit.record(
             module="modelado_uml",
@@ -356,7 +463,7 @@ class UmlService:
         diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
         content = export_xmi(self._build_internal_model(diagram))
-        file_name = f"{diagram.name.lower().replace(' ', '-')}.xmi"
+        file_name = f"{diagram.name.lower().replace(' ', '-')}.xml"
         self.uml.add_xmi_exchange(
             XmiExchange(
                 diagram_id=diagram_id,
@@ -398,6 +505,51 @@ class UmlService:
             action="IMPORT_XMI",
             user_id=user_id,
             project_id=payload.project_id,
+            metadata={"diagram_id": str(diagram.id), "file_name": payload.file_name},
+        )
+        self.db.commit()
+        self.db.refresh(diagram)
+        return diagram
+
+    def import_diagram_xmi_into_existing(
+        self, diagram_id: UUID, payload: XmiImportRequest, user_id: UUID
+    ) -> UmlDiagram:
+        diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
+        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        model = import_xmi(payload.content, payload.name)
+
+        self.uml.delete_visual_elements_by_diagram(diagram_id)
+        self.uml.delete_relationships_by_diagram(diagram_id)
+        self.uml.delete_classes_by_diagram(diagram_id)
+        self.db.flush()
+
+        diagram.name = model.name or payload.name
+        diagram.diagram_type = model.diagram_type
+        diagram.status = model.status
+        diagram.current_version = model.current_version
+        diagram.description = model.description
+        diagram.metadata_json = {
+            **diagram.metadata_json,
+            **model.metadata_json,
+            "imported_file_name": payload.file_name,
+        }
+        self._populate_existing_diagram_from_model(diagram, model)
+        self.uml.add_xmi_exchange(
+            XmiExchange(
+                diagram_id=diagram.id,
+                user_id=user_id,
+                exchange_type="import",
+                tool_name=payload.tool_name,
+                file_name=payload.file_name,
+                status="completed",
+                metadata_json={"class_count": len(model.classes), "mode": "replace"},
+            )
+        )
+        self.audit.record(
+            module="modelado_uml",
+            action="IMPORT_XMI_REPLACE_DIAGRAM",
+            user_id=user_id,
+            project_id=diagram.project_id,
             metadata={"diagram_id": str(diagram.id), "file_name": payload.file_name},
         )
         self.db.commit()
@@ -530,6 +682,12 @@ class UmlService:
                 metadata_json={**model.metadata_json, **(metadata or {})},
             )
         )
+        self._populate_existing_diagram_from_model(diagram, model)
+        return diagram
+
+    def _populate_existing_diagram_from_model(
+        self, diagram: UmlDiagram, model: UmlDiagramModel
+    ) -> None:
         id_by_external_ref: dict[str, UUID] = {}
         for uml_class_model in model.classes:
             uml_class = self.uml.add_class(
@@ -543,7 +701,9 @@ class UmlService:
                     metadata_json=uml_class_model.metadata_json,
                 )
             )
-            id_by_external_ref[uml_class_model.id or uml_class_model.name] = uml_class.id
+            if uml_class_model.id:
+                id_by_external_ref[uml_class_model.id] = uml_class.id
+            id_by_external_ref[uml_class_model.name] = uml_class.id
             self.uml.add_visual_element(
                 UmlVisualElement(
                     diagram_id=diagram.id,
@@ -570,6 +730,10 @@ class UmlService:
             source_id = id_by_external_ref.get(relationship_model.source_class_id)
             target_id = id_by_external_ref.get(relationship_model.target_class_id)
             if source_id and target_id:
+                metadata_json = dict(relationship_model.metadata_json)
+                association_class_id = metadata_json.get("association_class_id")
+                if association_class_id in id_by_external_ref:
+                    metadata_json["association_class_id"] = str(id_by_external_ref[association_class_id])
                 self.uml.add_relationship(
                     UmlRelationship(
                         diagram_id=diagram.id,
@@ -580,7 +744,6 @@ class UmlService:
                         target_cardinality=relationship_model.target_cardinality,
                         direction=relationship_model.direction,
                         label=relationship_model.label,
-                        metadata_json=relationship_model.metadata_json,
+                        metadata_json=metadata_json,
                     )
                 )
-        return diagram

@@ -6,6 +6,7 @@ import { RegisterPage } from "../../modules/gestion_acceso_usuarios/pages/Regist
 import { ProfilePage } from "../../modules/gestion_acceso_usuarios/pages/ProfilePage";
 import { ReportsPage } from "../../modules/gestion_acceso_usuarios/pages/ReportsPage";
 import { HelpPage } from "../../modules/gestion_acceso_usuarios/pages/HelpPage";
+import { ProjectManagementPage } from "../../modules/gestion_proyectos_colaboracion/pages/ProjectManagementPage";
 import { ProjectsPage } from "../../modules/gestion_proyectos_colaboracion/pages/ProjectsPage";
 import { ProjectWorkspacePage } from "../../modules/gestion_proyectos_colaboracion/pages/ProjectWorkspacePage";
 import { UmlEditorPage } from "../../modules/modelado_uml_inteligente/pages/UmlEditorPage";
@@ -26,7 +27,8 @@ export function AppRoutes() {
         <Route element={<AppLayout />}>
           <Route index element={<Navigate to="/proyectos" replace />} />
           <Route path="/proyectos" element={<ProjectsPage />} />
-          <Route path="/proyectos/:projectId" element={<ProjectWorkspacePage />} />
+          <Route path="/proyectos/:projectId" element={<ProjectManagementPage />} />
+          <Route path="/proyectos/:projectId/colaborativo" element={<ProjectWorkspacePage />} />
           <Route path="/proyectos/:projectId/uml/:diagramId" element={<UmlEditorPage />} />
           <Route path="/generacion" element={<GenerationPage />} />
           <Route path="/perfil" element={<ProfilePage />} />

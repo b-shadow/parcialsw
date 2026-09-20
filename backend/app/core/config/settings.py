@@ -12,7 +12,10 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "change-me-in-development"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
-    cors_origins_raw: str = Field(default="http://localhost:5173", alias="CORS_ORIGINS")
+    cors_origins_raw: str = Field(
+        default="http://localhost:5173,http://127.0.0.1:5173",
+        alias="CORS_ORIGINS",
+    )
     allowed_hosts_raw: str = Field(default="*", alias="ALLOWED_HOSTS")
     generated_storage_path: str = "../storage/generated"
     s3_artifacts_bucket: str | None = None

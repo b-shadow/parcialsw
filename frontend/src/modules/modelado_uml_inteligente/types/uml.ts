@@ -35,9 +35,33 @@ export type UmlVisualElement = {
 };
 
 export type UmlClassDetail = UmlClass & {
-  attributes: Array<{ id: string; name: string; data_type: string; visibility: string }>;
-  methods: Array<{ id: string; name: string; return_type: string | null; visibility: string }>;
+  attributes: UmlAttribute[];
+  methods: UmlMethod[];
   visual: UmlVisualElement | null;
+};
+
+export type UmlAttribute = {
+  id: string;
+  class_id: string;
+  name: string;
+  data_type: string;
+  visibility: string;
+  initial_value: string | null;
+  multiplicity: string | null;
+  is_required: boolean;
+  order_index: number;
+  constraints: Record<string, unknown>;
+};
+
+export type UmlMethod = {
+  id: string;
+  class_id: string;
+  name: string;
+  return_type: string | null;
+  visibility: string;
+  order_index: number;
+  metadata_json: Record<string, unknown>;
+  parameters: Array<{ id: string; name: string; data_type: string; default_value: string | null; order_index: number }>;
 };
 
 export type UmlRelationship = {

@@ -18,6 +18,10 @@ export const projectService = {
     });
     return response.data;
   },
+  async update(projectId: string, payload: Partial<Pick<Project, "name" | "description" | "status" | "settings">>) {
+    const response = await apiClient.patch<Project>(`/projects/${projectId}`, payload);
+    return response.data;
+  },
   async archive(projectId: string) {
     const response = await apiClient.delete<Project>(`/projects/${projectId}`);
     return response.data;
@@ -29,6 +33,13 @@ export const projectService = {
   async addMember(projectId: string, payload: { user_id: string; project_role: "ORGANIZADOR" | "EDITOR" }) {
     const response = await apiClient.post<ProjectMember>(`/projects/${projectId}/members`, payload);
     return response.data;
+  },
+  async updateMember(projectId: string, memberId: string, payload: { project_role: "ORGANIZADOR" | "EDITOR" }) {
+    const response = await apiClient.patch<ProjectMember>(`/projects/${projectId}/members/${memberId}`, payload);
+    return response.data;
+  },
+  async removeMember(projectId: string, memberId: string) {
+    await apiClient.delete(`/projects/${projectId}/members/${memberId}`);
   },
   async saveVersion(projectId: string, payload: { name: string; description?: string; snapshot: Record<string, unknown> }) {
     const response = await apiClient.post<ProjectVersion>(`/projects/${projectId}/versions`, payload);

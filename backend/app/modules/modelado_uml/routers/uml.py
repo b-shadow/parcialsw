@@ -15,10 +15,14 @@ from app.modules.modelado_uml.schemas.uml import (
     MoveElementRequest,
     TextToUmlRequest,
     UmlAttributeCreateRequest,
+    UmlAttributeResponse,
+    UmlAttributeUpdateRequest,
     UmlClassCreateRequest,
     UmlClassResponse,
     UmlClassUpdateRequest,
     UmlMethodCreateRequest,
+    UmlMethodResponse,
+    UmlMethodUpdateRequest,
     UmlParameterCreateRequest,
     UmlParameterResponse,
     UmlRelationshipCreateRequest,
@@ -50,6 +54,15 @@ def list_diagrams(
     db: Annotated[Session, Depends(get_db)],
 ) -> list[UmlDiagram]:
     return UmlService(db).list_diagrams(project_id, current_user.id)
+
+
+@router.delete("/diagrams/{diagram_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_diagram(
+    diagram_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    UmlService(db).delete_diagram(diagram_id, current_user.id)
 
 
 @router.post(
@@ -103,26 +116,62 @@ def delete_class(
     UmlService(db).delete_class(class_id, current_user.id)
 
 
-@router.post("/classes/{class_id}/attributes", status_code=status.HTTP_201_CREATED)
+@router.post("/classes/{class_id}/attributes", response_model=UmlAttributeResponse, status_code=status.HTTP_201_CREATED)
 def add_attribute(
     class_id: UUID,
     payload: UmlAttributeCreateRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
-) -> dict[str, str]:
-    attribute = UmlService(db).add_attribute(class_id, payload, current_user.id)
-    return {"id": str(attribute.id), "name": attribute.name}
+) -> UmlAttributeResponse:
+    return UmlService(db).add_attribute(class_id, payload, current_user.id)
 
 
-@router.post("/classes/{class_id}/methods", status_code=status.HTTP_201_CREATED)
+@router.patch("/attributes/{attribute_id}", response_model=UmlAttributeResponse)
+def update_attribute(
+    attribute_id: UUID,
+    payload: UmlAttributeUpdateRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> UmlAttributeResponse:
+    return UmlService(db).update_attribute(attribute_id, payload, current_user.id)
+
+
+@router.delete("/attributes/{attribute_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_attribute(
+    attribute_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    UmlService(db).delete_attribute(attribute_id, current_user.id)
+
+
+@router.post("/classes/{class_id}/methods", response_model=UmlMethodResponse, status_code=status.HTTP_201_CREATED)
 def add_method(
     class_id: UUID,
     payload: UmlMethodCreateRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
-) -> dict[str, str]:
-    method = UmlService(db).add_method(class_id, payload, current_user.id)
-    return {"id": str(method.id), "name": method.name}
+) -> UmlMethodResponse:
+    return UmlService(db).add_method(class_id, payload, current_user.id)
+
+
+@router.patch("/methods/{method_id}", response_model=UmlMethodResponse)
+def update_method(
+    method_id: UUID,
+    payload: UmlMethodUpdateRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> UmlMethodResponse:
+    return UmlService(db).update_method(method_id, payload, current_user.id)
+
+
+@router.delete("/methods/{method_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_method(
+    method_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    UmlService(db).delete_method(method_id, current_user.id)
 
 
 @router.post("/methods/{method_id}/parameters", response_model=UmlParameterResponse, status_code=status.HTTP_201_CREATED)
@@ -203,6 +252,16 @@ def import_xmi_diagram(
     db: Annotated[Session, Depends(get_db)],
 ) -> UmlDiagram:
     return UmlService(db).import_diagram_xmi(payload, current_user.id)
+
+
+@router.post("/diagrams/{diagram_id}/xmi/import", response_model=DiagramResponse)
+def import_xmi_into_diagram(
+    diagram_id: UUID,
+    payload: XmiImportRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> UmlDiagram:
+    return UmlService(db).import_diagram_xmi_into_existing(diagram_id, payload, current_user.id)
 
 
 @router.get("/diagrams/{diagram_id}/xmi", response_model=XmiExportResponse)
