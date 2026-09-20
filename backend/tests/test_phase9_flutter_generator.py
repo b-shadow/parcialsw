@@ -36,7 +36,12 @@ def _intermediate_model() -> dict:
     }
 
 
-def test_flutter_generator_writes_complete_project(tmp_path: Path) -> None:
+def test_flutter_generator_writes_complete_project(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.modules.generacion_software.flutter_generator.generator.project_writer.which",
+        lambda _: None,
+    )
+
     result = FlutterGeneratorService(storage_root=tmp_path).generate(
         _intermediate_model(),
         "Sistema Ventas Mobile",
@@ -53,6 +58,7 @@ def test_flutter_generator_writes_complete_project(tmp_path: Path) -> None:
     assert result.zip_path.exists()
     assert result.manifest["technology"] == "Flutter"
     assert result.manifest["language"] == "Dart"
+    assert result.manifest["platforms"] == ["source"]
     assert result.manifest["entity_count"] == 2
     assert result.manifest["file_count"] >= 20
 
@@ -69,6 +75,35 @@ def test_flutter_generator_writes_complete_project(tmp_path: Path) -> None:
     assert "TextFormField" in form.read_text(encoding="utf-8")
     assert "SwitchListTile" in form.read_text(encoding="utf-8")
     assert "'/cliente'" in router.read_text(encoding="utf-8")
+
+
+def test_flutter_generator_scaffolds_android_when_flutter_cli_exists(tmp_path: Path, monkeypatch) -> None:
+    def fake_run(args, cwd, check, capture_output, text, timeout):
+        assert "create" in args
+        assert "--platforms=android,web" in args
+        (Path(cwd) / "android" / "app" / "build.gradle.kts").parent.mkdir(parents=True)
+        (Path(cwd) / "android" / "app" / "build.gradle.kts").write_text("// android", encoding="utf-8")
+        (Path(cwd) / "web").mkdir(exist_ok=True)
+
+    monkeypatch.setattr(
+        "app.modules.generacion_software.flutter_generator.generator.project_writer.which",
+        lambda _: "flutter",
+    )
+    monkeypatch.setattr(
+        "app.modules.generacion_software.flutter_generator.generator.project_writer.subprocess.run",
+        fake_run,
+    )
+
+    result = FlutterGeneratorService(storage_root=tmp_path).generate(
+        _intermediate_model(),
+        "Sistema Ventas Mobile",
+        str(uuid4()),
+        api_base_url="http://localhost:8080",
+    )
+
+    assert (result.project_dir / "android/app/build.gradle.kts").exists()
+    assert result.manifest["platforms"] == ["android", "web"]
+    assert "android/app/build.gradle.kts" in result.manifest["checksums"]
 
 
 def test_phase9_openapi_contracts_are_registered() -> None:

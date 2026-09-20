@@ -1,4 +1,5 @@
 from ai_engine.inference.health import check_health
+from ai_engine.preprocessing import analyze_uml_image
 from ai_engine.services import LocalAIService
 from ai_engine.services.contracts import (
     ImageProcessingRequest,
@@ -31,6 +32,31 @@ def test_text_voice_and_image_generate_structured_uml() -> None:
     assert image.classes
     assert text.engine == "local-offline"
     assert text.confidence > 0
+
+
+def test_image_detector_identifies_association_class_geometry() -> None:
+    import base64
+
+    import cv2
+    import numpy as np
+
+    image = np.full((720, 960, 3), 255, dtype=np.uint8)
+    cv2.rectangle(image, (70, 70), (370, 280), (0, 0, 0), 4)
+    cv2.line(image, (70, 120), (370, 120), (0, 0, 0), 3)
+    cv2.line(image, (70, 220), (370, 220), (0, 0, 0), 3)
+    cv2.rectangle(image, (590, 70), (890, 280), (0, 0, 0), 4)
+    cv2.line(image, (590, 120), (890, 120), (0, 0, 0), 3)
+    cv2.line(image, (590, 220), (890, 220), (0, 0, 0), 3)
+    cv2.rectangle(image, (330, 420), (650, 650), (0, 0, 0), 4)
+    cv2.line(image, (330, 470), (650, 470), (0, 0, 0), 3)
+    cv2.line(image, (330, 590), (650, 590), (0, 0, 0), 3)
+    ok, encoded = cv2.imencode(".jpg", image)
+
+    assert ok
+    detection = analyze_uml_image(base64.b64encode(encoded.tobytes()).decode("ascii"))
+
+    assert len(detection.boxes) == 3
+    assert detection.signature == "association_class_triangular"
 
 
 def test_ai_validation_and_software_plan() -> None:

@@ -1,5 +1,7 @@
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from shutil import which
 
 from app.modules.generacion_software.flutter_generator.templates import (
     render_analysis_options,
@@ -29,6 +31,35 @@ class GeneratedFlutterFile:
     content: str
 
 
+@dataclass(frozen=True)
+class FlutterWriteResult:
+    files: list[Path]
+    scaffolded_platforms: list[str]
+
+
+def _scaffold_flutter_platforms(project: FlutterProject, output_dir: Path) -> list[str]:
+    flutter = which("flutter")
+    if flutter is None:
+        return []
+
+    subprocess.run(
+        [
+            flutter,
+            "create",
+            "--platforms=android,web",
+            "--project-name",
+            project.package_name,
+            ".",
+        ],
+        cwd=output_dir,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    return ["android", "web"]
+
+
 def build_file_set(project: FlutterProject) -> list[GeneratedFlutterFile]:
     files = [
         GeneratedFlutterFile("pubspec.yaml", render_pubspec(project)),
@@ -56,12 +87,17 @@ def build_file_set(project: FlutterProject) -> list[GeneratedFlutterFile]:
     return files
 
 
-def write_flutter_project(project: FlutterProject, output_dir: Path) -> list[Path]:
+def write_flutter_project(project: FlutterProject, output_dir: Path) -> FlutterWriteResult:
     output_dir.mkdir(parents=True, exist_ok=True)
+    scaffolded_platforms = _scaffold_flutter_platforms(project, output_dir)
     written: list[Path] = []
     for generated_file in build_file_set(project):
         target = output_dir / generated_file.relative_path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(generated_file.content, encoding="utf-8")
         written.append(target)
-    return written
+    if scaffolded_platforms:
+        for path in output_dir.rglob("*"):
+            if path.is_file() and path not in written:
+                written.append(path)
+    return FlutterWriteResult(files=written, scaffolded_platforms=scaffolded_platforms)

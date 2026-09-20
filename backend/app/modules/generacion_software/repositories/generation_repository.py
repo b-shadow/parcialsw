@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.modules.generacion_software.models import (
@@ -46,3 +47,43 @@ class GenerationRepository:
         self.db.flush()
         self.db.refresh(artifact)
         return artifact
+
+    def delete_generation_tree_by_diagram(self, diagram_id: UUID) -> None:
+        transformation_ids = list(
+            self.db.scalars(
+                select(UmlTransformation.id).where(UmlTransformation.diagram_id == diagram_id)
+            )
+        )
+        if not transformation_ids:
+            return
+
+        backend_ids = list(
+            self.db.scalars(
+                select(GeneratedBackend.id).where(
+                    GeneratedBackend.transformation_id.in_(transformation_ids)
+                )
+            )
+        )
+        frontend_ids = list(
+            self.db.scalars(
+                select(GeneratedFrontend.id).where(
+                    GeneratedFrontend.transformation_id.in_(transformation_ids)
+                )
+            )
+        )
+
+        if frontend_ids:
+            self.db.execute(
+                delete(GeneratedArtifact).where(
+                    GeneratedArtifact.generated_frontend_id.in_(frontend_ids)
+                )
+            )
+            self.db.execute(delete(GeneratedFrontend).where(GeneratedFrontend.id.in_(frontend_ids)))
+        if backend_ids:
+            self.db.execute(
+                delete(GeneratedArtifact).where(
+                    GeneratedArtifact.generated_backend_id.in_(backend_ids)
+                )
+            )
+            self.db.execute(delete(GeneratedBackend).where(GeneratedBackend.id.in_(backend_ids)))
+        self.db.execute(delete(UmlTransformation).where(UmlTransformation.id.in_(transformation_ids)))

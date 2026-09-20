@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "Motor inicial de IA local offline para la plataforma CASE inteligente."
 requires-python = ">=3.12"
 dependencies = [
-  "pydantic>=2.8.0"
+  "pydantic>=2.8.0",
+  "numpy>=2.0.0",
+  "opencv-python-headless>=4.10.0",
+  "pillow>=10.0.0",
+  "pytesseract>=0.3.13"
 ]
 
 [project.optional-dependencies]

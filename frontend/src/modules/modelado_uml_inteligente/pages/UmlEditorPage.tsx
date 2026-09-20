@@ -32,6 +32,8 @@ const visibilityOptions = [
   { value: "private", label: "Privado", symbol: "-" }
 ];
 
+const multiplicityOptions = ["", "0", "0..1", "1", "1..*", "0..*", "*"];
+
 const springDataTypes = [
   "String",
   "Integer",
@@ -142,6 +144,7 @@ export function UmlEditorPage() {
   const [activeTool, setActiveTool] = useState<UmlTool>("select");
   const [pendingSourceId, setPendingSourceId] = useState("");
   const [selectedRelationshipId, setSelectedRelationshipId] = useState<string | null>(null);
+  const [isRelationshipModalOpen, setIsRelationshipModalOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isCreatingClass, setIsCreatingClass] = useState(false);
   const [showValidationModal, setShowValidationModal] = useState(false);
@@ -367,8 +370,8 @@ export function UmlEditorPage() {
         target_class_id: targetId,
         relationship_type: "association",
         label: relationshipLabel.trim() || "",
-        source_cardinality: sourceMultiplicity.trim() || null,
-        target_cardinality: targetMultiplicity.trim() || null,
+        source_cardinality: "*",
+        target_cardinality: "*",
         metadata_json: { association_class_id: associationClass.id }
       });
       addRelationship(association);
@@ -420,6 +423,14 @@ export function UmlEditorPage() {
     setSelectedRelationshipId(relationshipId);
     setSelectedClassId(null);
     setPendingSourceId("");
+    setIsRelationshipModalOpen(true);
+  }, [setSelectedClassId]);
+
+  const handleRelationshipDoubleClick = useCallback((relationshipId: string) => {
+    setSelectedRelationshipId(relationshipId);
+    setSelectedClassId(null);
+    setPendingSourceId("");
+    setIsRelationshipModalOpen(true);
   }, [setSelectedClassId]);
 
   const handleClassMove = useCallback(
@@ -631,7 +642,7 @@ export function UmlEditorPage() {
         : sourceType === "voice"
           ? await aiService.voiceToUml({ transcript: basePrompt })
           : await aiService.imageToUml({
-              description: basePrompt,
+              description: promptOverride?.trim() || undefined,
               image_base64: file ? await fileToBase64(file) : undefined,
               file_name: file?.name
             });
@@ -640,12 +651,21 @@ export function UmlEditorPage() {
         .map((umlClass) => umlClass.name)
         .join(", ")}`
     );
-    const generated = await umlService.generate({
-      project_id: projectId,
-      name: `UML generado ${sourceType}`,
-      prompt: promptFromAiResult(aiResult, basePrompt),
-      source_type: sourceType
-    });
+    const generated =
+      sourceType === "image"
+        ? await umlService.createDiagramFromAiResult({
+            project_id: projectId,
+            name: `UML generado ${sourceType}`,
+            description: promptFromAiResult(aiResult, "Modelo UML generado desde imagen"),
+            source_type: sourceType,
+            result: aiResult
+          })
+        : await umlService.generate({
+            project_id: projectId,
+            name: `UML generado ${sourceType}`,
+            prompt: promptFromAiResult(aiResult, basePrompt),
+            source_type: sourceType
+          });
     window.location.href = `/proyectos/${projectId}/uml/${generated.id}`;
   }
 
@@ -886,6 +906,7 @@ export function UmlEditorPage() {
               onClassMove={handleClassMove}
               onClassRename={renameClassInline}
               onRelationshipClick={handleRelationshipClick}
+              onRelationshipDoubleClick={handleRelationshipDoubleClick}
               pendingSourceId={pendingSourceId}
               relationships={relationships}
               selectedClassId={selectedClassId}
@@ -934,6 +955,16 @@ export function UmlEditorPage() {
                       onClick={() => {
                         setActiveTool(tool as UmlTool);
                         setPendingSourceId("");
+                        if (tool === "associationClass") {
+                          setSourceMultiplicity("*");
+                          setTargetMultiplicity("*");
+                        } else if (tool === "inheritance") {
+                          setSourceMultiplicity("");
+                          setTargetMultiplicity("");
+                        } else if (tool === "association") {
+                          setSourceMultiplicity((current) => current || "1");
+                          setTargetMultiplicity((current) => current || "0..*");
+                        }
                       }}
                       type="button"
                     >
@@ -949,25 +980,6 @@ export function UmlEditorPage() {
                   </p>
                 </div>
               </Panel>
-
-              {selectedRelationship && (
-                <Panel className="grid gap-3 p-4 dark:border-slate-700 dark:bg-slate-900">
-                  <h2 className="text-sm font-semibold text-ink dark:text-white">Relacion seleccionada</h2>
-                  <Input label="Etiqueta" value={relationshipLabel} onChange={(event) => setRelationshipLabel(event.target.value)} />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input label="Origen" value={sourceMultiplicity} onChange={(event) => setSourceMultiplicity(event.target.value)} />
-                    <Input label="Destino" value={targetMultiplicity} onChange={(event) => setTargetMultiplicity(event.target.value)} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button icon={<Save size={16} aria-hidden="true" />} onClick={saveSelectedRelationship} variant="secondary">
-                      Guardar
-                    </Button>
-                    <Button icon={<Trash2 size={16} aria-hidden="true" />} onClick={deleteSelectedRelationship} variant="danger">
-                      Eliminar
-                    </Button>
-                  </div>
-                </Panel>
-              )}
 
               <Panel className="grid gap-3 p-4 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="text-sm font-semibold text-ink dark:text-white">IA local preparada</h2>
@@ -1195,16 +1207,149 @@ export function UmlEditorPage() {
         </div>
       </Panel>
 
-      {showValidationModal && validation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-          <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-950">
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+      {isRelationshipModalOpen && selectedRelationship && (
+        <div
+          className={cn(
+            "fixed inset-0 z-50 flex items-center justify-center px-4",
+            isDark ? "bg-slate-950/65" : "bg-slate-900/25"
+          )}
+        >
+          <div
+            className={cn(
+              "w-full max-w-md rounded-lg border shadow-2xl",
+              isDark ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-200 bg-white text-slate-950"
+            )}
+          >
+            <div className={cn("flex items-center justify-between border-b px-5 py-4", isDark ? "border-slate-700" : "border-slate-200")}>
               <div>
-                <h2 className="text-lg font-semibold text-ink dark:text-white">Validacion UML</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Resultado del analisis del diagrama.</p>
+                <h2 className={cn("text-lg font-semibold", isDark ? "text-white" : "text-slate-950")}>Propiedades de relacion</h2>
+                <p className={cn("text-sm", isDark ? "text-slate-400" : "text-slate-500")}>
+                  {selectedRelationship.relationship_type === "inheritance"
+                    ? "Generalize usa herencia y no requiere multiplicidad."
+                    : "Seleccione la multiplicidad en ambos extremos."}
+                </p>
               </div>
               <button
-                className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                className={cn(
+                  "rounded-md p-2 transition",
+                  isDark ? "text-slate-300 hover:bg-slate-800" : "text-slate-500 hover:bg-slate-100"
+                )}
+                onClick={() => setIsRelationshipModalOpen(false)}
+                type="button"
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="grid gap-4 px-5 py-4">
+              <label className={cn("grid gap-1.5 text-sm font-medium", isDark ? "text-slate-200" : "text-slate-700")}>
+                Etiqueta
+                <input
+                  className={cn(
+                    "h-10 rounded-md border px-3 text-sm outline-none transition focus:border-accent focus:ring-2",
+                    isDark
+                      ? "border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500 focus:ring-teal-900/50"
+                      : "border-slate-300 bg-white text-slate-950 placeholder:text-slate-400 focus:ring-teal-100"
+                  )}
+                  value={relationshipLabel}
+                  onChange={(event) => setRelationshipLabel(event.target.value)}
+                />
+              </label>
+              {selectedRelationship.relationship_type !== "inheritance" && (
+                <div className="grid grid-cols-2 gap-3">
+                  <label className={cn("grid gap-1 text-xs font-semibold", isDark ? "text-slate-300" : "text-slate-600")}>
+                    Origen
+                    <select
+                      className={cn(
+                        "h-10 rounded-md border px-3 text-sm outline-none",
+                        isDark ? "border-slate-700 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-950"
+                      )}
+                      value={sourceMultiplicity}
+                      onChange={(event) => setSourceMultiplicity(event.target.value)}
+                    >
+                      {multiplicityOptions.map((option) => (
+                        <option key={`modal-source-${option || "none"}`} value={option}>
+                          {option || "Sin definir"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className={cn("grid gap-1 text-xs font-semibold", isDark ? "text-slate-300" : "text-slate-600")}>
+                    Destino
+                    <select
+                      className={cn(
+                        "h-10 rounded-md border px-3 text-sm outline-none",
+                        isDark ? "border-slate-700 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-950"
+                      )}
+                      value={targetMultiplicity}
+                      onChange={(event) => setTargetMultiplicity(event.target.value)}
+                    >
+                      {multiplicityOptions.map((option) => (
+                        <option key={`modal-target-${option || "none"}`} value={option}>
+                          {option || "Sin definir"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  className={cn(
+                    "inline-flex h-10 items-center justify-center gap-2 rounded-md border px-4 text-sm font-medium transition",
+                    isDark
+                      ? "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
+                      : "border-slate-300 bg-white text-slate-900 hover:bg-slate-50"
+                  )}
+                  onClick={async () => {
+                    await saveSelectedRelationship();
+                    setIsRelationshipModalOpen(false);
+                  }}
+                  type="button"
+                >
+                  <Save size={16} aria-hidden="true" />
+                  Guardar
+                </button>
+                <button
+                  className={cn(
+                    "inline-flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium transition",
+                    isDark
+                      ? "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
+                      : "border-slate-300 bg-white text-slate-900 hover:bg-slate-50"
+                  )}
+                  onClick={() => setIsRelationshipModalOpen(false)}
+                  type="button"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showValidationModal && validation && (
+        <div
+          className={cn(
+            "fixed inset-0 z-50 flex items-center justify-center px-4",
+            isDark ? "bg-slate-950/65" : "bg-slate-900/25"
+          )}
+        >
+          <div
+            className={cn(
+              "w-full max-w-lg rounded-lg border shadow-2xl",
+              isDark ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-200 bg-white text-slate-950"
+            )}
+          >
+            <div className={cn("flex items-center justify-between border-b px-5 py-4", isDark ? "border-slate-700" : "border-slate-200")}>
+              <div>
+                <h2 className={cn("text-lg font-semibold", isDark ? "text-white" : "text-slate-950")}>Validacion UML</h2>
+                <p className={cn("text-sm", isDark ? "text-slate-400" : "text-slate-500")}>Resultado del analisis del diagrama.</p>
+              </div>
+              <button
+                className={cn(
+                  "rounded-md p-2 transition",
+                  isDark ? "text-slate-300 hover:bg-slate-800" : "text-slate-500 hover:bg-slate-100"
+                )}
                 onClick={() => setShowValidationModal(false)}
                 type="button"
               >
@@ -1213,27 +1358,27 @@ export function UmlEditorPage() {
             </div>
             <div className="grid gap-4 px-5 py-4 text-sm">
               <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-md border border-slate-200 p-3 dark:border-slate-700">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Errores</p>
+                <div className={cn("rounded-md border p-3", isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white")}>
+                  <p className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>Errores</p>
                   <p className="text-xl font-semibold text-rose-600">{validation.errors.length}</p>
                 </div>
-                <div className="rounded-md border border-slate-200 p-3 dark:border-slate-700">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Advertencias</p>
+                <div className={cn("rounded-md border p-3", isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white")}>
+                  <p className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>Advertencias</p>
                   <p className="text-xl font-semibold text-amber-600">{validation.warnings.length}</p>
                 </div>
-                <div className="rounded-md border border-slate-200 p-3 dark:border-slate-700">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Recomendaciones</p>
+                <div className={cn("rounded-md border p-3", isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white")}>
+                  <p className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>Recomendaciones</p>
                   <p className="text-xl font-semibold text-accent">{validation.recommendations.length}</p>
                 </div>
               </div>
               {[...validation.errors, ...validation.warnings, ...validation.recommendations].length > 0 ? (
-                <ul className="max-h-56 list-disc overflow-auto pl-5 text-slate-700 dark:text-slate-200">
+                <ul className={cn("max-h-56 list-disc overflow-auto pl-5", isDark ? "text-slate-200" : "text-slate-700")}>
                   {validation.errors.map((item) => <li key={`error-${item}`}>{item}</li>)}
                   {validation.warnings.map((item) => <li key={`warning-${item}`}>{item}</li>)}
                   {validation.recommendations.map((item) => <li key={`recommendation-${item}`}>{item}</li>)}
                 </ul>
               ) : (
-                <p className="rounded-md bg-teal-50 px-3 py-2 text-slate-700 dark:bg-teal-500/10 dark:text-slate-200">
+                <p className={cn("rounded-md px-3 py-2", isDark ? "bg-teal-500/10 text-slate-200" : "bg-teal-50 text-slate-700")}>
                   El diagrama no presenta observaciones.
                 </p>
               )}
@@ -1244,4 +1389,3 @@ export function UmlEditorPage() {
     </section>
   );
 }
-

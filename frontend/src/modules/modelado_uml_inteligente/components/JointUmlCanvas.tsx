@@ -15,6 +15,7 @@ type JointUmlCanvasProps = {
   isDark: boolean;
   onClassClick: (classId: string) => void;
   onRelationshipClick: (relationshipId: string) => void;
+  onRelationshipDoubleClick?: (relationshipId: string) => void;
   onClassMove: (classId: string, position: { x: number; y: number }) => void;
   onClassRename: (classId: string, name: string) => void;
 };
@@ -235,6 +236,7 @@ export function JointUmlCanvas({
   isDark,
   onClassClick,
   onRelationshipClick,
+  onRelationshipDoubleClick,
   onClassMove,
   onClassRename
 }: JointUmlCanvasProps) {
@@ -260,12 +262,24 @@ export function JointUmlCanvas({
   const [transientPositions, setTransientPositions] = useState<Record<string, { x: number; y: number }>>({});
   const classById = useMemo(() => new Map(classes.map((umlClass) => [umlClass.id, umlClass])), [classes]);
   const classByIdRef = useRef(classById);
-  const callbacksRef = useRef({ onClassClick, onRelationshipClick, onClassMove, onClassRename });
+  const callbacksRef = useRef({
+    onClassClick,
+    onRelationshipClick,
+    onRelationshipDoubleClick: onRelationshipDoubleClick ?? (() => undefined),
+    onClassMove,
+    onClassRename
+  });
 
   useEffect(() => {
     classByIdRef.current = classById;
-    callbacksRef.current = { onClassClick, onRelationshipClick, onClassMove, onClassRename };
-  }, [classById, onClassClick, onClassMove, onClassRename, onRelationshipClick]);
+    callbacksRef.current = {
+      onClassClick,
+      onRelationshipClick,
+      onRelationshipDoubleClick: onRelationshipDoubleClick ?? (() => undefined),
+      onClassMove,
+      onClassRename
+    };
+  }, [classById, onClassClick, onClassMove, onClassRename, onRelationshipClick, onRelationshipDoubleClick]);
 
   useEffect(() => {
     viewportRef.current = viewport;
@@ -311,6 +325,12 @@ export function JointUmlCanvas({
       const relationshipId = linkView.model.get("relationshipId");
       if (relationshipId) {
         callbacksRef.current.onRelationshipClick(String(relationshipId));
+      }
+    });
+    paper.on("link:pointerdblclick", (linkView: joint.dia.LinkView) => {
+      const relationshipId = linkView.model.get("relationshipId");
+      if (relationshipId) {
+        callbacksRef.current.onRelationshipDoubleClick(String(relationshipId));
       }
     });
     paper.on("element:pointerdblclick", (elementView: joint.dia.ElementView) => {
@@ -521,7 +541,7 @@ export function JointUmlCanvas({
     setTransientPositions((current) => ({ ...current, [drag.classId]: nextPosition }));
   }
 
-  function handlePointerUp(event: PointerEvent<HTMLDivElement>, umlClass: UmlClassDetail, index: number) {
+  function handlePointerUp(event: PointerEvent<HTMLDivElement>, umlClass: UmlClassDetail) {
     const drag = dragRef.current;
     if (!drag || drag.classId !== umlClass.id) {
       onClassClick(umlClass.id);
@@ -610,6 +630,10 @@ export function JointUmlCanvas({
           onClick={(event) => {
             event.stopPropagation();
             onRelationshipClick(relationship.id);
+          }}
+          onDoubleClick={(event) => {
+            event.stopPropagation();
+            onRelationshipDoubleClick?.(relationship.id);
           }}
           pointerEvents="visibleStroke"
           stroke={stroke}
@@ -700,7 +724,7 @@ export function JointUmlCanvas({
               key={umlClass.id}
               onPointerDown={(event) => handlePointerDown(event, umlClass, index)}
               onPointerMove={handlePointerMove}
-              onPointerUp={(event) => handlePointerUp(event, umlClass, index)}
+              onPointerUp={(event) => handlePointerUp(event, umlClass)}
               style={{
                 left: position.x,
                 top: position.y,

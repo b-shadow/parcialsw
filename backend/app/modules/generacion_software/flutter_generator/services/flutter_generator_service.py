@@ -39,9 +39,10 @@ class FlutterGeneratorService:
         target_dir = (self.storage_root / generation_id / project.package_name).resolve()
         if target_dir.exists():
             rmtree(target_dir)
-        files = write_flutter_project(project, target_dir)
+        write_result = write_flutter_project(project, target_dir)
+        files = write_result.files
         zip_path = create_zip_archive(target_dir, target_dir.parent / f"{project.package_name}.zip")
-        checksums = {str(path.relative_to(target_dir)): checksum_file(path) for path in files}
+        checksums = {path.relative_to(target_dir).as_posix(): checksum_file(path) for path in files}
         manifest = {
             "technology": "Flutter",
             "language": "Dart",
@@ -49,6 +50,7 @@ class FlutterGeneratorService:
             "package_name": project.package_name,
             "api_base_url": project.api_base_url,
             "state_management": "Provider",
+            "platforms": write_result.scaffolded_platforms or ["source"],
             "generated_layers": ["models", "services", "providers", "screens", "forms", "routes", "network"],
             "entity_count": len(project.entities),
             "file_count": len(files),

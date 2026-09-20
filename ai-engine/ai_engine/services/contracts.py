@@ -37,6 +37,7 @@ class UmlRelationship(BaseModel):
     label: str | None = None
     source_cardinality: str | None = None
     target_cardinality: str | None = None
+    metadata_json: dict = Field(default_factory=dict)
 
 
 class UmlGenerationResponse(BaseModel):

@@ -18,11 +18,14 @@ class JavaEntity:
 
 @dataclass(frozen=True)
 class JavaRelationship:
-    source: str
+    owner: str
     target: str
     relationship_type: str
     annotation: str
     label: str | None = None
+    source: str | None = None
+    target_multiplicity: str | None = None
+    source_multiplicity: str | None = None
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,9 @@ class SpringBootProject:
 TYPE_MAPPING = {
     "string": "String",
     "str": "String",
+    "char": "String",
+    "character": "String",
+    "text": "String",
     "integer": "Integer",
     "int": "Integer",
     "long": "Long",
@@ -69,6 +75,17 @@ def map_java_type(raw_type: str | None) -> str:
     if not raw_type:
         return "String"
     return TYPE_MAPPING.get(raw_type.lower(), to_pascal_case(raw_type))
+
+
+def _is_many(multiplicity: str | None) -> bool:
+    value = (multiplicity or "").strip().lower()
+    return "*" in value or value.endswith("n") or value in {"many", "m"}
+
+
+def _association_class_id(relation: dict) -> str | None:
+    metadata = relation.get("metadata_json") if isinstance(relation.get("metadata_json"), dict) else {}
+    raw = metadata.get("association_class_id") or relation.get("association_class_id")
+    return str(raw) if raw else None
 
 
 def analyze_model(intermediate_model: dict, name: str) -> SpringBootProject:
@@ -106,21 +123,43 @@ def analyze_model(intermediate_model: dict, name: str) -> SpringBootProject:
         if not source or not target:
             continue
         relation_type = str(relation.get("type") or relation.get("relationship_type") or "association")
-        annotation = {
-            "composition": "OneToMany",
-            "aggregation": "OneToMany",
-            "association": "ManyToOne",
-            "inheritance": "Inheritance",
-            "implementation": "Transient",
-            "dependency": "Transient",
-        }.get(relation_type, "ManyToOne")
+        if relation_type in {"inheritance", "implementation", "dependency"}:
+            continue
+
+        association_class_id = _association_class_id(relation)
+        association_class = class_by_id.get(association_class_id or "")
+        if association_class:
+            for endpoint in (source, target):
+                relationships.append(
+                    JavaRelationship(
+                        owner=to_pascal_case(association_class),
+                        source=to_pascal_case(association_class),
+                        target=to_pascal_case(endpoint),
+                        relationship_type="association_class",
+                        annotation="ManyToOne",
+                        label=relation.get("label"),
+                        source_multiplicity=relation.get("source_cardinality"),
+                        target_multiplicity=relation.get("target_cardinality"),
+                    )
+                )
+            continue
+
+        source_multiplicity = relation.get("source_cardinality")
+        target_multiplicity = relation.get("target_cardinality")
+        if _is_many(target_multiplicity) and not _is_many(source_multiplicity):
+            owner, related = target, source
+        else:
+            owner, related = source, target
         relationships.append(
             JavaRelationship(
+                owner=to_pascal_case(owner),
                 source=to_pascal_case(source),
-                target=to_pascal_case(target),
+                target=to_pascal_case(related),
                 relationship_type=relation_type,
-                annotation=annotation,
+                annotation="ManyToOne",
                 label=relation.get("label"),
+                source_multiplicity=source_multiplicity,
+                target_multiplicity=target_multiplicity,
             )
         )
 

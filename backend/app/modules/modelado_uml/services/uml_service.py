@@ -3,6 +3,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.modules.acceso_usuarios.services.audit_service import AuditService
+from app.modules.generacion_software.repositories.generation_repository import GenerationRepository
 from app.modules.modelado_uml.engine.internal_model import (
     UmlAttributeModel,
     UmlClassModel,
@@ -58,6 +59,7 @@ class UmlService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.uml = UmlRepository(db)
+        self.generations = GenerationRepository(db)
         self.members = MemberRepository(db)
         self.audit = AuditService(db)
 
@@ -91,7 +93,10 @@ class UmlService:
     def delete_diagram(self, diagram_id: UUID, user_id: UUID) -> None:
         diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self.generations.delete_generation_tree_by_diagram(diagram_id)
         self.uml.delete_visual_elements_by_diagram(diagram_id)
+        self.uml.delete_relationships_by_diagram(diagram_id)
+        self.uml.delete_classes_by_diagram(diagram_id)
         self.uml.delete_xmi_exchanges_by_diagram(diagram_id)
         self.uml.delete_diagram(diagram)
         self.audit.record(

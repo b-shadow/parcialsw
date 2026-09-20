@@ -1,5 +1,6 @@
 from app.modules.generacion_software.backend_generator.analyzer.model_analyzer import (
     JavaEntity,
+    JavaRelationship,
     SpringBootProject,
     to_camel_case,
 )
@@ -94,10 +95,11 @@ public class {project.name}Application {{
 
 
 def render_application_properties(project: SpringBootProject) -> str:
+    database_name = project.artifact_id.replace("-", "_")
     return f"""spring.application.name={project.artifact_id}
 server.port=8080
 
-spring.datasource.url=${{SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/{project.artifact_id.replace("-", "_")}}}
+spring.datasource.url=${{SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/{database_name}}}
 spring.datasource.username=${{SPRING_DATASOURCE_USERNAME:postgres}}
 spring.datasource.password=${{SPRING_DATASOURCE_PASSWORD:postgres}}
 
@@ -106,6 +108,79 @@ spring.jpa.open-in-view=false
 spring.jpa.properties.hibernate.format_sql=true
 
 springdoc.swagger-ui.path=/swagger-ui.html
+"""
+
+
+def render_env_example(project: SpringBootProject) -> str:
+    database_name = project.artifact_id.replace("-", "_")
+    return f"""POSTGRES_DB={database_name}
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/{database_name}
+SPRING_DATASOURCE_USERNAME=postgres
+SPRING_DATASOURCE_PASSWORD=postgres
+"""
+
+
+def render_docker_compose(project: SpringBootProject) -> str:
+    database_name = project.artifact_id.replace("-", "_")
+    return f"""services:
+  postgres:
+    image: postgres:16
+    container_name: {project.artifact_id}-postgres
+    environment:
+      POSTGRES_DB: ${{POSTGRES_DB:-{database_name}}}
+      POSTGRES_USER: ${{POSTGRES_USER:-postgres}}
+      POSTGRES_PASSWORD: ${{POSTGRES_PASSWORD:-postgres}}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${{POSTGRES_USER:-postgres}} -d $${{POSTGRES_DB:-{database_name}}}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+"""
+
+
+def render_database_init(project: SpringBootProject) -> str:
+    database_name = project.artifact_id.replace("-", "_")
+    return f"""-- Inicializacion PostgreSQL para {project.name}.
+-- El contenedor oficial crea POSTGRES_DB automaticamente; este bloque ayuda si se ejecuta manualmente en pgAdmin.
+SELECT 'CREATE DATABASE {database_name}'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{database_name}')\\gexec
+"""
+
+
+def render_run_script_sh(project: SpringBootProject) -> str:
+    return """#!/usr/bin/env bash
+set -euo pipefail
+
+if command -v docker >/dev/null 2>&1; then
+  docker compose up -d postgres
+fi
+
+./mvnw spring-boot:run 2>/dev/null || mvn spring-boot:run
+"""
+
+
+def render_run_script_ps1(project: SpringBootProject) -> str:
+    return """$ErrorActionPreference = "Stop"
+
+if (Get-Command docker -ErrorAction SilentlyContinue) {
+    docker compose up -d postgres
+}
+
+if (Test-Path ".\\mvnw.cmd") {
+    .\\mvnw.cmd spring-boot:run
+} else {
+    mvn spring-boot:run
+}
 """
 
 
@@ -141,7 +216,10 @@ public class {entity.name} {{
 
 def render_dto_request(project: SpringBootProject, entity: JavaEntity) -> str:
     fields = "\n".join(_render_dto_field(field.name, field.java_type, field.required, field.email) for field in entity.fields)
+    relation_fields = "\n".join(_render_relation_dto_field(relationship) for relationship in _owning_relationships(project, entity))
     imports = _dto_imports(entity)
+    if relation_fields:
+        imports += "import java.util.UUID;\n"
     return f"""package {project.base_package}.dto;
 
 {imports}import lombok.Getter;
@@ -151,15 +229,18 @@ import lombok.Setter;
 @Setter
 public class {entity.name}Request {{
 {fields}
+{relation_fields}
 }}
 """
 
 
 def render_dto_response(project: SpringBootProject, entity: JavaEntity) -> str:
     fields = "\n".join(f"    private {field.java_type} {field.name};" for field in entity.fields)
+    relation_fields = "\n".join(_render_relation_dto_field(relationship) for relationship in _owning_relationships(project, entity))
+    imports = _dto_imports(entity)
     return f"""package {project.base_package}.dto;
 
-import java.util.UUID;
+{imports}import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -168,6 +249,7 @@ import lombok.Setter;
 public class {entity.name}Response {{
     private UUID id;
 {fields}
+{relation_fields}
 }}
 """
 
@@ -186,7 +268,19 @@ public interface {entity.name}Repository extends JpaRepository<{entity.name}, UU
 
 def render_service(project: SpringBootProject, entity: JavaEntity) -> str:
     assignments = "\n".join(f"        entity.set{field.name[:1].upper() + field.name[1:]}(request.get{field.name[:1].upper() + field.name[1:]}());" for field in entity.fields)
+    relation_assignments = "\n".join(_render_relation_assignment(relationship) for relationship in _owning_relationships(project, entity))
     response = "\n".join(f"        response.set{field.name[:1].upper() + field.name[1:]}(entity.get{field.name[:1].upper() + field.name[1:]}());" for field in entity.fields)
+    relation_response = "\n".join(_render_relation_response(relationship) for relationship in _owning_relationships(project, entity))
+    repository_imports = "".join(
+        f"import {project.base_package}.repository.{relationship.target}Repository;\n"
+        for relationship in _owning_relationships(project, entity)
+    )
+    constructor_params = _service_constructor_params(entity, _owning_relationships(project, entity))
+    constructor_assignments = _service_constructor_assignments(_owning_relationships(project, entity))
+    repository_fields = "".join(
+        f"    private final {relationship.target}Repository {to_camel_case(relationship.target)}Repository;\n"
+        for relationship in _owning_relationships(project, entity)
+    )
     return f"""package {project.base_package}.service;
 
 import {project.base_package}.dto.{entity.name}Request;
@@ -194,6 +288,7 @@ import {project.base_package}.dto.{entity.name}Response;
 import {project.base_package}.entity.{entity.name};
 import {project.base_package}.exception.ResourceNotFoundException;
 import {project.base_package}.repository.{entity.name}Repository;
+{repository_imports}import jakarta.persistence.EntityNotFoundException;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -202,15 +297,18 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class {entity.name}Service {{
     private final {entity.name}Repository repository;
+{repository_fields}
 
-    public {entity.name}Service({entity.name}Repository repository) {{
+    public {entity.name}Service({constructor_params}) {{
         this.repository = repository;
+{constructor_assignments}
     }}
 
     @Transactional
     public {entity.name}Response create({entity.name}Request request) {{
         {entity.name} entity = new {entity.name}();
 {assignments}
+{relation_assignments}
         return toResponse(repository.save(entity));
     }}
 
@@ -228,6 +326,7 @@ public class {entity.name}Service {{
     public {entity.name}Response update(UUID id, {entity.name}Request request) {{
         {entity.name} entity = findEntity(id);
 {assignments}
+{relation_assignments}
         return toResponse(repository.save(entity));
     }}
 
@@ -245,6 +344,7 @@ public class {entity.name}Service {{
         {entity.name}Response response = new {entity.name}Response();
         response.setId(entity.getId());
 {response}
+{relation_response}
         return response;
     }}
 }}
@@ -380,6 +480,7 @@ public class GlobalExceptionHandler {{
 
 
 def render_readme(project: SpringBootProject) -> str:
+    database_name = project.artifact_id.replace("-", "_")
     endpoints = "\n".join(
         f"- `/api/{to_camel_case(entity.name).lower()}s`" for entity in project.entities
     )
@@ -389,9 +490,27 @@ Backend Spring Boot generado automaticamente desde un modelo UML de la plataform
 
 ## Ejecucion
 
+Con Docker/PostgreSQL:
+
 ```bash
+docker compose up -d postgres
 mvn spring-boot:run
 ```
+
+En Windows tambien puede usar:
+
+```powershell
+.\\scripts\\run.ps1
+```
+
+En Linux/macOS:
+
+```bash
+chmod +x scripts/run.sh
+./scripts/run.sh
+```
+
+La base por defecto es `{database_name}` en `localhost:5432`. Si usa pgAdmin, puede ejecutar `database/init.sql` manualmente antes de iniciar la API.
 
 ## Validacion
 
@@ -447,11 +566,7 @@ def _entity_imports(project: SpringBootProject, entity: JavaEntity) -> str:
         imports.append("import jakarta.validation.constraints.NotNull;")
     if any(field.email for field in entity.fields):
         imports.append("import jakarta.validation.constraints.Email;")
-    entity_relationships = [relationship for relationship in project.relationships if relationship.source == entity.name]
-    if any(relationship.annotation == "OneToMany" for relationship in entity_relationships):
-        imports.append("import jakarta.persistence.OneToMany;")
-        imports.append("import java.util.ArrayList;")
-        imports.append("import java.util.List;")
+    entity_relationships = _owning_relationships(project, entity)
     if any(relationship.annotation == "ManyToOne" for relationship in entity_relationships):
         imports.append("import jakarta.persistence.ManyToOne;")
     return "\n".join(sorted(imports))
@@ -459,15 +574,56 @@ def _entity_imports(project: SpringBootProject, entity: JavaEntity) -> str:
 
 def _render_relation_field(project: SpringBootProject, entity: JavaEntity) -> str:
     lines: list[str] = []
-    for relationship in project.relationships:
+    for relationship in _owning_relationships(project, entity):
         target_field = to_camel_case(relationship.target)
-        if relationship.source != entity.name:
-            continue
-        if relationship.annotation == "OneToMany":
-            lines.append(f"    @OneToMany\n    private List<{relationship.target}> {target_field}List = new ArrayList<>();\n")
-        elif relationship.annotation == "ManyToOne":
+        if relationship.annotation == "ManyToOne":
             lines.append(f"    @ManyToOne\n    private {relationship.target} {target_field};\n")
     return "\n".join(lines)
+
+
+def _owning_relationships(project: SpringBootProject, entity: JavaEntity) -> list[JavaRelationship]:
+    return [relationship for relationship in project.relationships if relationship.owner == entity.name and relationship.annotation == "ManyToOne"]
+
+
+def _relation_id_field(relationship: JavaRelationship) -> str:
+    return f"{to_camel_case(relationship.target)}Id"
+
+
+def _render_relation_dto_field(relationship: JavaRelationship) -> str:
+    return f"    private UUID {_relation_id_field(relationship)};\n"
+
+
+def _render_relation_assignment(relationship: JavaRelationship) -> str:
+    target_field = to_camel_case(relationship.target)
+    repository = f"{target_field}Repository"
+    getter = _relation_id_field(relationship)[:1].upper() + _relation_id_field(relationship)[1:]
+    setter = target_field[:1].upper() + target_field[1:]
+    return f"""        if (request.get{getter}() != null) {{
+            entity.set{setter}({repository}.findById(request.get{getter}())
+                .orElseThrow(() -> new EntityNotFoundException("{relationship.target} no encontrado: " + request.get{getter}())));
+        }} else {{
+            entity.set{setter}(null);
+        }}"""
+
+
+def _render_relation_response(relationship: JavaRelationship) -> str:
+    target_field = to_camel_case(relationship.target)
+    getter = target_field[:1].upper() + target_field[1:]
+    setter = _relation_id_field(relationship)[:1].upper() + _relation_id_field(relationship)[1:]
+    return f"        response.set{setter}(entity.get{getter}() != null ? entity.get{getter}().getId() : null);"
+
+
+def _service_constructor_params(entity: JavaEntity, relationships: list[JavaRelationship]) -> str:
+    params = [f"{entity.name}Repository repository"]
+    params.extend(f"{relationship.target}Repository {to_camel_case(relationship.target)}Repository" for relationship in relationships)
+    return ", ".join(params)
+
+
+def _service_constructor_assignments(relationships: list[JavaRelationship]) -> str:
+    return "\n".join(
+        f"        this.{to_camel_case(relationship.target)}Repository = {to_camel_case(relationship.target)}Repository;"
+        for relationship in relationships
+    )
 
 
 def _dto_imports(entity: JavaEntity) -> str:

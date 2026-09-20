@@ -1,5 +1,6 @@
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from xml.etree import ElementTree
 
 from app.modules.modelado_uml.engine.internal_model import (
@@ -7,8 +8,8 @@ from app.modules.modelado_uml.engine.internal_model import (
     UmlClassModel,
     UmlDiagramModel,
     UmlMethodModel,
-    UmlVisualModel,
     UmlRelationshipModel,
+    UmlVisualModel,
 )
 
 XMI_NS = "http://www.omg.org/XMI"
@@ -30,15 +31,45 @@ def _xml_id(value: str | None, fallback: str) -> str:
     return normalized
 
 
+def _uuid_from_seed(value: str | None, fallback: str) -> UUID:
+    seed = str(value or fallback).strip() or fallback
+    candidate = seed.strip("{}")
+    for prefix in ("MX_EAID_", "EAID_", "EAPK_"):
+        if candidate.startswith(prefix):
+            candidate = candidate[len(prefix) :]
+            break
+    candidate = candidate.replace("_", "-")
+    try:
+        return UUID(candidate)
+    except ValueError:
+        return uuid5(NAMESPACE_URL, seed)
+
+
+def _ea_guid_fragment(value: str | None, fallback: str) -> str:
+    return str(_uuid_from_seed(value, fallback)).upper().replace("-", "_")
+
+
 def _ea_id(value: str | None, fallback: str, prefix: str = "EAID") -> str:
-    normalized = _xml_id(value, fallback)
+    if str(value or "").startswith(("EAID_", "EAPK_", "MX_EAID_")):
+        normalized = _xml_id(value, fallback)
+    else:
+        normalized = _ea_guid_fragment(value, fallback)
     if normalized.startswith(("EAID_", "EAPK_", "MX_EAID_")):
         return normalized
     return f"{prefix}_{normalized}"
 
 
+def _ea_guid(value: str | None, fallback: str) -> str:
+    return f"{{{str(_uuid_from_seed(value, fallback)).upper()}}}"
+
+
+def _ea_return_guid(value: str | None, fallback: str) -> str:
+    operation_guid = str(_uuid_from_seed(value, fallback)).upper()
+    return f"{{RETURNID-{operation_guid[9:]}}}"
+
+
 def _timestamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _xmi_attr(node: ElementTree.Element, name: str) -> str | None:
@@ -59,6 +90,23 @@ def _tagged_value(node: ElementTree.Element, tag: str) -> str | None:
         if _is_tag(child, "TaggedValue") and child.attrib.get("tag") == tag:
             return child.attrib.get("value")
     return None
+
+
+def _multiplicity_from_end(end: ElementTree.Element | None, fallback: str | None = None) -> str | None:
+    if end is None:
+        return fallback
+    multiplicity = (
+        end.attrib.get("multiplicity")
+        or _tagged_value(end, "multiplicity")
+        or _tagged_value(end, "cardinality")
+    )
+    lower = _tagged_value(end, "lowerBound") or end.attrib.get("lower")
+    upper = _tagged_value(end, "upperBound") or end.attrib.get("upper")
+    if lower and upper:
+        multiplicity = upper if lower == upper else f"{lower}..{upper}"
+    elif upper:
+        multiplicity = upper
+    return multiplicity or fallback
 
 
 def _direct_children(node: ElementTree.Element, name: str) -> list[ElementTree.Element]:
@@ -183,6 +231,25 @@ def _owned_operation_return_type(method: UmlMethodModel) -> str:
     return method.return_type or "void"
 
 
+def _collect_data_types(diagram: UmlDiagramModel, export_token: str) -> dict[str, str]:
+    data_types: list[str] = []
+    for uml_class in diagram.classes:
+        for attribute in uml_class.attributes:
+            data_types.append(_owned_attribute_type(attribute))
+        for method in uml_class.methods:
+            data_types.append(_owned_operation_return_type(method))
+            for parameter in method.parameters:
+                data_types.append(parameter.data_type)
+    data_types.append("void")
+
+    ids: dict[str, str] = {}
+    for data_type in data_types:
+        normalized = data_type.strip() or "String"
+        if normalized not in ids:
+            ids[normalized] = f"eaxmiid_{export_token}_{len(ids)}"
+    return ids
+
+
 def _tagged_values(parent: ElementTree.Element, values: dict[str, str]) -> ElementTree.Element:
     tagged_values = ElementTree.SubElement(parent, "UML:ModelElement.taggedValue")
     for tag, value in values.items():
@@ -190,10 +257,36 @@ def _tagged_values(parent: ElementTree.Element, values: dict[str, str]) -> Eleme
     return tagged_values
 
 
+def _type_reference(parent: ElementTree.Element, wrapper_tag: str, type_id: str) -> None:
+    wrapper = ElementTree.SubElement(parent, wrapper_tag)
+    ElementTree.SubElement(wrapper, "UML:Classifier", {"xmi.idref": type_id})
+
+
+def _relationship_export_id(
+    relationship: UmlRelationshipModel,
+    source_id: str,
+    target_id: str,
+) -> str:
+    return _ea_id(relationship.id, f"{source_id}_{target_id}_{relationship.relationship_type}")
+
+
 def export_xmi(diagram: UmlDiagramModel) -> str:
-    package_id = _ea_id(diagram.id, f"package_{diagram.name}", "EAPK")
+    export_token = uuid4().hex[:12].upper()
+
+    def export_id(value: str | None, fallback: str, prefix: str = "EAID") -> str:
+        return _ea_id(f"{export_token}_{value or fallback}", fallback, prefix)
+
+    def export_guid(value: str | None, fallback: str) -> str:
+        return _ea_guid(f"{export_token}_{value or fallback}", fallback)
+
+    def export_return_guid(value: str | None, fallback: str) -> str:
+        return _ea_return_guid(f"{export_token}_{value or fallback}", fallback)
+
+    package_id = export_id(diagram.id, f"package_{diagram.name}", "EAPK")
     model_id = f"MX_{package_id.replace('EAPK_', 'EAID_', 1)}"
-    diagram_id = _ea_id(None, f"diagram_{diagram.name}")
+    diagram_id = export_id(None, f"diagram_{diagram.name}")
+    root_class_id = export_id(None, "EARootClass")
+    data_type_ids = _collect_data_types(diagram, export_token)
     root = ElementTree.Element(
         "XMI",
         {
@@ -219,12 +312,12 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
     )
     model_owned_elements = ElementTree.SubElement(model, "UML:Namespace.ownedElement")
     ElementTree.SubElement(
-        model_owned_elements,
-        "UML:Class",
-        {
-            "xmi.id": "EAID_11111111_5487_4080_A7F4_41526CB0AA00",
-            "name": "EARootClass",
-            "isRoot": "true",
+            model_owned_elements,
+            "UML:Class",
+            {
+                "xmi.id": root_class_id,
+                "name": "EARootClass",
+                "isRoot": "true",
             "isLeaf": "false",
             "isAbstract": "false",
         },
@@ -264,17 +357,47 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
     )
     owned_elements = ElementTree.SubElement(package, "UML:Namespace.ownedElement")
     class_id_by_original: dict[str, str] = {}
+    class_name_by_original: dict[str, str] = {}
     class_visuals: dict[str, tuple[int, int, int, int]] = {}
+    relationship_id_by_original: dict[str, str] = {}
+    attribute_local_id = 1
+    operation_local_id = 1
+
+    relationship_local_id = 1
+    for relationship in diagram.relationships:
+        source_id = export_id(relationship.source_class_id, "source")
+        target_id = export_id(relationship.target_class_id, "target")
+        relationship_id_by_original[relationship.id or f"{source_id}_{target_id}"] = (
+            export_id(
+                relationship.id,
+                f"{source_id}_{target_id}_{relationship.relationship_type}",
+            )
+        )
 
     for index, uml_class in enumerate(diagram.classes, start=1):
-        class_id = _ea_id(uml_class.id, uml_class.name)
+        class_id = export_id(uml_class.id, uml_class.name)
         class_id_by_original[uml_class.id or uml_class.name] = class_id
         class_id_by_original[uml_class.name] = class_id
+        class_name_by_original[uml_class.id or uml_class.name] = uml_class.name
+        class_name_by_original[uml_class.name] = uml_class.name
         x = int(uml_class.visual.x or (120 + index * 40))
         y = int(uml_class.visual.y or (90 + index * 40))
         width = int(uml_class.visual.width or 220)
         height = int(uml_class.visual.height or 130)
         class_visuals[class_id] = (x, y, x + width, y + height)
+        association_connector_id = next(
+            (
+                relationship_id_by_original.get(
+                    relationship.id
+                    or f"{relationship.source_class_id}_{relationship.target_class_id}"
+                )
+                for relationship in diagram.relationships
+                if str(relationship.metadata_json.get("association_class_id"))
+                in {str(uml_class.id), uml_class.name}
+            ),
+            None,
+        )
+        ea_ntype = str(uml_class.metadata_json.get("ea_ntype") or "17" if association_connector_id else "0")
         class_node = ElementTree.SubElement(
             owned_elements,
             "UML:Class",
@@ -295,7 +418,7 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
             {
                 "isSpecification": "false",
                 "ea_stype": "Class",
-                "ea_ntype": "0",
+                "ea_ntype": ea_ntype,
                 "version": "1.0",
                 "isActive": "false",
                 "package": package_id,
@@ -311,53 +434,153 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
                 "tpos": "0",
                 "ea_localid": str(index),
                 "ea_eleType": "element",
-                "style": "BackColor=-1;BorderColor=-1;BorderWidth=-1;FontColor=-1;",
+                **({"conID": association_connector_id} if association_connector_id else {}),
+                "style": (
+                    "BackColor=-1;BorderColor=-1;BorderWidth=-1;FontColor=-1;"
+                    "VSwimLanes=1;HSwimLanes=1;BorderStyle=0;"
+                ),
             },
         )
         features_node = ElementTree.SubElement(class_node, "UML:Classifier.feature")
 
-        for attribute in uml_class.attributes:
-            ElementTree.SubElement(
+        for attribute_index, attribute in enumerate(uml_class.attributes):
+            attribute_type = _owned_attribute_type(attribute)
+            attribute_node = ElementTree.SubElement(
                 features_node,
                 "UML:Attribute",
                 {
-                    "xmi.id": _xml_id(attribute.id, f"{class_id}_{attribute.name}"),
                     "name": attribute.name,
-                    "type": _owned_attribute_type(attribute),
+                    "changeable": "none",
                     "visibility": attribute.visibility,
                     "ownerScope": "instance",
-                    "changeability": "changeable",
+                    "targetScope": "instance",
                 },
             )
-        for method in uml_class.methods:
+            initial_value = ElementTree.SubElement(attribute_node, "UML:Attribute.initialValue")
+            expression_attrs = {"body": attribute.initial_value} if attribute.initial_value else {}
+            ElementTree.SubElement(initial_value, "UML:Expression", expression_attrs)
+            _type_reference(
+                attribute_node,
+                "UML:StructuralFeature.type",
+                data_type_ids.get(attribute_type, data_type_ids["void"]),
+            )
+            _tagged_values(
+                attribute_node,
+                {
+                    "type": attribute_type,
+                    "containment": "Not Specified",
+                    "ordered": "0",
+                    "static": "0",
+                    "collection": "false",
+                    "position": str(attribute.order_index),
+                    "duplicates": "0",
+                    "ea_guid": export_guid(attribute.id, f"{class_id}_{attribute.name}"),
+                    "ea_localid": str(attribute_local_id),
+                    "styleex": "volatile=0;",
+                },
+            )
+            attribute_local_id += 1
+        for method_index, method in enumerate(uml_class.methods):
+            return_type = _owned_operation_return_type(method)
             operation_node = ElementTree.SubElement(
                 features_node,
                 "UML:Operation",
                 {
-                    "xmi.id": _xml_id(method.id, f"{class_id}_{method.name}"),
                     "name": method.name,
                     "visibility": method.visibility,
-                    "returnType": _owned_operation_return_type(method),
                     "ownerScope": "instance",
                     "isQuery": "false",
+                    "concurrency": "sequential",
                 },
             )
-            parameters_node = ElementTree.SubElement(operation_node, "UML:BehavioralFeature.parameter")
-            ElementTree.SubElement(
+            _tagged_values(
+                operation_node,
+                {
+                    "type": return_type,
+                    "const": "false",
+                    "synchronised": "0",
+                    "concurrency": "Sequential",
+                    "position": str(method.order_index),
+                    "pure": "0",
+                    "ea_guid": export_guid(method.id, f"{class_id}_{method.name}"),
+                    "ea_localid": str(operation_local_id),
+                },
+            )
+            operation_local_id += 1
+            parameters_node = ElementTree.SubElement(
+                operation_node,
+                "UML:BehavioralFeature.parameter",
+            )
+            for parameter_index, parameter in enumerate(method.parameters, start=1):
+                parameter_node = ElementTree.SubElement(
+                    parameters_node,
+                    "UML:Parameter",
+                    {"name": parameter.name, "kind": "in", "visibility": "public"},
+                )
+                _type_reference(
+                    parameter_node,
+                    "UML:Parameter.type",
+                    data_type_ids.get(parameter.data_type, data_type_ids["void"]),
+                )
+                _tagged_values(
+                    parameter_node,
+                    {
+                        "pos": str(parameter.order_index or parameter_index),
+                        "type": parameter.data_type,
+                        "const": "0",
+                        "ea_guid": export_guid(
+                            parameter.id,
+                            f"{class_id}_{method.name}_{parameter.name}",
+                        ),
+                    },
+                )
+                default_value = ElementTree.SubElement(
+                    parameter_node,
+                    "UML:Parameter.defaultValue",
+                )
+                expression_attrs = (
+                    {"body": parameter.default_value} if parameter.default_value else {}
+                )
+                ElementTree.SubElement(default_value, "UML:Expression", expression_attrs)
+
+            return_parameter = ElementTree.SubElement(
                 parameters_node,
                 "UML:Parameter",
+                {"kind": "return", "visibility": "public"},
+            )
+            _type_reference(
+                return_parameter,
+                "UML:Parameter.type",
+                data_type_ids.get(return_type, data_type_ids["void"]),
+            )
+            _tagged_values(
+                return_parameter,
                 {
-                    "xmi.id": _xml_id(None, f"{class_id}_{method.name}_return"),
-                    "name": "return",
-                    "kind": "return",
-                    "type": _owned_operation_return_type(method),
+                    "pos": "0",
+                    "type": return_type,
+                    "const": "0",
+                    "ea_guid": export_return_guid(method.id, f"{class_id}_{method.name}"),
                 },
             )
+            default_value = ElementTree.SubElement(return_parameter, "UML:Parameter.defaultValue")
+            ElementTree.SubElement(default_value, "UML:Expression")
 
     for relationship in diagram.relationships:
-        source_id = class_id_by_original.get(relationship.source_class_id, _ea_id(relationship.source_class_id, "source"))
-        target_id = class_id_by_original.get(relationship.target_class_id, _ea_id(relationship.target_class_id, "target"))
-        relationship_id = _ea_id(relationship.id, f"{source_id}_{target_id}_{relationship.relationship_type}")
+        source_id = class_id_by_original.get(
+            relationship.source_class_id,
+            export_id(relationship.source_class_id, "source"),
+        )
+        target_id = class_id_by_original.get(
+            relationship.target_class_id,
+            export_id(relationship.target_class_id, "target"),
+        )
+        relationship_id = export_id(
+            relationship.id,
+            f"{source_id}_{target_id}_{relationship.relationship_type}",
+        )
+        relationship_id_by_original[
+            relationship.id or f"{relationship.source_class_id}_{relationship.target_class_id}"
+        ] = relationship_id
         relationship_name = relationship.label or relationship.relationship_type
         relationship_type = relationship.relationship_type.lower()
 
@@ -376,7 +599,11 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
             continue
 
         if relationship_type in {"dependency", "realization", "implementation"}:
-            tag = "UML:Abstraction" if relationship_type in {"realization", "implementation"} else "UML:Dependency"
+            tag = (
+                "UML:Abstraction"
+                if relationship_type in {"realization", "implementation"}
+                else "UML:Dependency"
+            )
             ElementTree.SubElement(
                 owned_elements,
                 tag,
@@ -405,15 +632,24 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
         association_tagged_values = {
             "style": "3",
             "ea_type": "Association",
-            "direction": "Source -> Destination",
+            "direction": "Unspecified",
             "linemode": "3",
             "linecolor": "-1",
             "linewidth": "0",
             "seqno": "0",
+            "subtype": "Class",
             "headStyle": "0",
             "lineStyle": "0",
-            "ea_sourceName": relationship.source_class_id,
-            "ea_targetName": relationship.target_class_id,
+            "privatedata1": "4",
+            "ea_localid": str(relationship_local_id),
+            "ea_sourceName": class_name_by_original.get(
+                relationship.source_class_id,
+                relationship.source_class_id,
+            ),
+            "ea_targetName": class_name_by_original.get(
+                relationship.target_class_id,
+                relationship.target_class_id,
+            ),
             "ea_sourceType": "Class",
             "ea_targetType": "Class",
             "virtualInheritance": "0",
@@ -423,7 +659,14 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
             association_class_export_id = class_id_by_original.get(str(association_class_id))
             if association_class_export_id:
                 association_tagged_values["associationclass"] = association_class_export_id
+        if relationship.source_cardinality:
+            association_tagged_values["lb"] = relationship.source_cardinality
+            association_tagged_values["sourceMultiplicity"] = relationship.source_cardinality
+        if relationship.target_cardinality:
+            association_tagged_values["rb"] = relationship.target_cardinality
+            association_tagged_values["targetMultiplicity"] = relationship.target_cardinality
         _tagged_values(association_node, association_tagged_values)
+        relationship_local_id += 1
         connection_node = ElementTree.SubElement(association_node, "UML:Association.connection")
         source_end_attributes = {
             "name": "",
@@ -433,7 +676,7 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
             "isOrdered": "false",
             "targetScope": "instance",
             "changeable": "none",
-            "isNavigable": "false",
+            "isNavigable": "true",
         }
         if relationship.source_cardinality:
             source_end_attributes["multiplicity"] = relationship.source_cardinality
@@ -455,22 +698,54 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
         if relationship.target_cardinality:
             target_end_attributes["multiplicity"] = relationship.target_cardinality
 
-        source_end = ElementTree.SubElement(connection_node, "UML:AssociationEnd", source_end_attributes)
+        source_end = ElementTree.SubElement(
+            connection_node,
+            "UML:AssociationEnd",
+            source_end_attributes,
+        )
         _tagged_values(
             source_end,
             {
                 "containment": "Unspecified",
-                "sourcestyle": "Union=0;Derived=0;AllowDuplicates=0;Owned=0;Navigable=Non-Navigable;",
+                **({"multiplicity": relationship.source_cardinality} if relationship.source_cardinality else {}),
+                **({"cardinality": relationship.source_cardinality} if relationship.source_cardinality else {}),
+                "sourcestyle": (
+                    "Union=0;Derived=0;AllowDuplicates=0;Owned=0;"
+                    "Navigable=Unspecified;"
+                ),
                 "ea_end": "source",
             },
         )
-        target_end = ElementTree.SubElement(connection_node, "UML:AssociationEnd", target_end_attributes)
+        target_end = ElementTree.SubElement(
+            connection_node,
+            "UML:AssociationEnd",
+            target_end_attributes,
+        )
         _tagged_values(
             target_end,
             {
                 "containment": "Unspecified",
-                "deststyle": "Union=0;Derived=0;AllowDuplicates=0;Owned=0;Navigable=Navigable;",
+                **({"multiplicity": relationship.target_cardinality} if relationship.target_cardinality else {}),
+                **({"cardinality": relationship.target_cardinality} if relationship.target_cardinality else {}),
+                "deststyle": (
+                    "Union=0;Derived=0;AllowDuplicates=0;Owned=0;"
+                    "Navigable=Unspecified;"
+                ),
                 "ea_end": "target",
+            },
+        )
+
+    for data_type, data_type_id in data_type_ids.items():
+        ElementTree.SubElement(
+            model_owned_elements,
+            "UML:DataType",
+            {
+                "xmi.id": data_type_id,
+                "name": data_type,
+                "visibility": "private",
+                "isRoot": "false",
+                "isLeaf": "false",
+                "isAbstract": "false",
             },
         )
 
@@ -494,9 +769,26 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
             "modified_date": _timestamp(),
             "package": package_id,
             "type": "Logical",
+            "swimlanes": (
+                "locked=false;orientation=0;width=0;inbar=false;names=false;color=-1;"
+                "bold=false;fcol=0;tcol=-1;ofCol=-1;"
+            ),
+            "matrixitems": (
+                "locked=false;matrixactive=false;swimlanesactive=true;"
+                "kanbanactive=false;width=1;clrLine=0;"
+            ),
             "ea_localid": "1",
-            "EAStyle": "ShowPrivate=1;ShowProtected=1;ShowPublic=1;HideRelationships=0;Locked=0;ConnectorNotation=UML 2.1;ShowOpRetType=1;",
-            "styleex": "AdvancedElementProps=1;AdvancedFeatureProps=1;AdvancedConnectorProps=1;",
+            "EAStyle": (
+                "ShowPrivate=1;ShowProtected=1;ShowPublic=1;HideRelationships=0;Locked=0;"
+                "Border=1;HighlightForeign=1;PackageContents=1;ShowDetails=0;"
+                "ConnectorNotation=UML 2.1;ShowOpRetType=1;ShowIcons=1;"
+                "AdvancedElementProps=1;AdvancedFeatureProps=1;AdvancedConnectorProps=1;"
+            ),
+            "styleex": (
+                "ExcludeRTF=0;DocAll=0;HideQuals=0;AttPkg=1;SuppressFOC=1;"
+                "TConnectorNotation=UML 2.1;AdvancedElementProps=1;"
+                "AdvancedFeatureProps=1;AdvancedConnectorProps=1;"
+            ),
         },
     )
     diagram_elements = ElementTree.SubElement(diagram_node, "UML:Diagram.element")
@@ -513,24 +805,44 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
             },
         )
     for relationship in diagram.relationships:
-        source_id = class_id_by_original.get(relationship.source_class_id, _ea_id(relationship.source_class_id, "source"))
-        target_id = class_id_by_original.get(relationship.target_class_id, _ea_id(relationship.target_class_id, "target"))
-        relationship_id = _ea_id(relationship.id, f"{source_id}_{target_id}_{relationship.relationship_type}")
+        source_id = class_id_by_original.get(
+            relationship.source_class_id,
+            export_id(relationship.source_class_id, "source"),
+        )
+        target_id = class_id_by_original.get(
+            relationship.target_class_id,
+            export_id(relationship.target_class_id, "target"),
+        )
+        relationship_id = export_id(
+            relationship.id,
+            f"{source_id}_{target_id}_{relationship.relationship_type}",
+        )
         ElementTree.SubElement(
             diagram_elements,
             "UML:DiagramElement",
             {
-                "geometry": "SX=0;SY=0;EX=0;EY=0;EDGE=2;$LLB=;LLT=;LMT=;LMB=;LRT=;LRB=;IRHS=;ILHS=;Path=;",
+                "geometry": (
+                    "SX=0;SY=0;EX=0;EY=0;EDGE=2;$LLB=;LLT=;LMT=;LMB=;"
+                    "LRT=;LRB=;IRHS=;ILHS=;Path=;"
+                ),
                 "subject": relationship_id,
                 "style": "Mode=3;Color=-1;LWidth=0;Hidden=0;",
             },
         )
 
     ElementTree.SubElement(root, "XMI.difference")
-    ElementTree.SubElement(root, "XMI.extensions", {"xmi.extender": "Enterprise Architect 2.5"})
+    extensions = ElementTree.SubElement(
+        root,
+        "XMI.extensions",
+        {"xmi.extender": "Enterprise Architect 2.5"},
+    )
+    ElementTree.SubElement(extensions, "EAModel.paramSub")
 
     ElementTree.indent(root, space="\t")
-    return '<?xml version="1.0" encoding="windows-1252"?>\n' + ElementTree.tostring(root, encoding="unicode")
+    return (
+        '<?xml version="1.0" encoding="windows-1252"?>\n'
+        + ElementTree.tostring(root, encoding="unicode")
+    )
 
 
 def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramModel:
@@ -552,13 +864,19 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                 continue
             attributes = []
             for order_index, child in enumerate(_feature_children(node, "Attribute")):
+                lower_bound = _tagged_value(child, "lowerBound")
+                upper_bound = _tagged_value(child, "upperBound")
+                multiplicity = child.attrib.get("multiplicity")
+                if upper_bound and upper_bound != "1":
+                    multiplicity = upper_bound
                 attributes.append(
                     UmlAttributeModel(
                         id=_xmi_attr(child, "id"),
                         name=child.attrib.get("name", "atributo"),
                         data_type=child.attrib.get("type") or _tagged_value(child, "type") or "String",
                         visibility=child.attrib.get("visibility", "private"),
-                        multiplicity=child.attrib.get("multiplicity"),
+                        multiplicity=multiplicity,
+                        is_required=lower_bound != "0",
                         order_index=int(_tagged_value(child, "position") or order_index),
                     )
                 )
@@ -585,6 +903,13 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
             class_name = node.attrib.get("name", "ClaseImportada")
             if class_id:
                 id_to_class_name[class_id] = class_name
+            class_metadata = {"external_xmi_id": class_id} if class_id else {}
+            ea_ntype = _tagged_value(node, "ea_ntype")
+            con_id = _tagged_value(node, "conID")
+            if ea_ntype:
+                class_metadata["ea_ntype"] = ea_ntype
+            if con_id:
+                class_metadata["conID"] = con_id
             classes.append(
                 UmlClassModel(
                     id=class_id,
@@ -593,7 +918,7 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                     attributes=attributes,
                     methods=methods,
                     visual=visual_by_subject.get(class_id or "", UmlVisualModel()),
-                    metadata_json={"external_xmi_id": class_id} if class_id else {},
+                    metadata_json=class_metadata,
                 )
             )
 
@@ -626,6 +951,14 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
             source_end = next((child for child in node.iter() if _is_tag(child, "AssociationEnd") or _is_tag(child, "ownedEnd")), None)
             all_ends = [child for child in node.iter() if _is_tag(child, "AssociationEnd") or _is_tag(child, "ownedEnd")]
             target_end = all_ends[1] if len(all_ends) > 1 else None
+            source_multiplicity = _multiplicity_from_end(
+                source_end,
+                _tagged_value(node, "sourceMultiplicity") or _tagged_value(node, "lb"),
+            )
+            target_multiplicity = _multiplicity_from_end(
+                target_end,
+                _tagged_value(node, "targetMultiplicity") or _tagged_value(node, "rb"),
+            )
             association_class_id = _tagged_value(node, "associationclass")
             metadata = {"external_xmi_id": relationship_id}
             if association_class_id and association_class_id in id_to_class_name:
@@ -637,8 +970,8 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                     target_class_id=id_to_class_name.get(target_id, target_id),
                     relationship_type="association",
                     label=node.attrib.get("name"),
-                    source_cardinality=source_end.attrib.get("multiplicity") if source_end is not None else None,
-                    target_cardinality=target_end.attrib.get("multiplicity") if target_end is not None else None,
+                    source_cardinality=source_multiplicity,
+                    target_cardinality=target_multiplicity,
                     metadata_json=metadata,
                 )
             )

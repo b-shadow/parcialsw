@@ -80,6 +80,7 @@ class GenerationService:
                     "source_cardinality": relation.source_cardinality,
                     "target_cardinality": relation.target_cardinality,
                     "label": relation.label,
+                    "metadata_json": relation.metadata_json,
                 }
                 for relation in relationships
             ],
@@ -141,6 +142,7 @@ class GenerationService:
         generated.artifact_path = str(generation_result.project_dir)
         generated.manifest = generation_result.manifest
         for file_path in generation_result.files:
+            relative_path = file_path.relative_to(generation_result.project_dir).as_posix()
             self.generations.add_artifact(
                 GeneratedArtifact(
                     project_id=transformation.project_id,
@@ -149,9 +151,9 @@ class GenerationService:
                     file_name=file_path.name,
                     file_path=str(file_path),
                     checksum=generation_result.manifest["checksums"][
-                        str(file_path.relative_to(generation_result.project_dir))
+                        relative_path
                     ],
-                    metadata_json={"relative_path": str(file_path.relative_to(generation_result.project_dir))},
+                    metadata_json={"relative_path": relative_path},
                 )
             )
         self.generations.add_artifact(
@@ -207,10 +209,12 @@ class GenerationService:
             )
         )
         try:
+            api_base_url = "http://10.0.2.2:8080" if payload.backend_id else "http://localhost:8080"
             generation_result = FlutterGeneratorService().generate(
                 transformation.intermediate_model,
                 payload.name,
                 str(generated.id),
+                api_base_url=api_base_url,
             )
         except ValueError as exc:
             generated.status = "failed"
@@ -222,7 +226,7 @@ class GenerationService:
         generated.artifact_path = str(generation_result.project_dir)
         generated.manifest = generation_result.manifest
         for file_path in generation_result.files:
-            relative_path = str(file_path.relative_to(generation_result.project_dir))
+            relative_path = file_path.relative_to(generation_result.project_dir).as_posix()
             self.generations.add_artifact(
                 GeneratedArtifact(
                     project_id=transformation.project_id,

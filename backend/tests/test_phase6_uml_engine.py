@@ -1,9 +1,10 @@
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
+from xml.etree import ElementTree
 
 from app.main import app
-from app.modules.modelado_uml.services.uml_service import UmlService
 from app.modules.modelado_uml.engine.internal_model import (
     UmlClassModel,
     UmlDiagramModel,
@@ -12,6 +13,39 @@ from app.modules.modelado_uml.engine.internal_model import (
 from app.modules.modelado_uml.engine.text_parser import build_uml_from_text
 from app.modules.modelado_uml.engine.validator import validate_internal_model
 from app.modules.modelado_uml.engine.xmi import export_xmi, import_xmi
+from app.modules.modelado_uml.services.uml_service import UmlService
+
+EA_GUID_PATTERN = re.compile(r'tag="ea_guid" value="([^"]+)"')
+
+
+def _assert_enterprise_architect_guid_values_are_bounded(xmi: str) -> None:
+    ea_guids = EA_GUID_PATTERN.findall(xmi)
+    assert ea_guids
+    assert all(len(guid) == 38 for guid in ea_guids)
+    assert all("_" not in guid for guid in ea_guids)
+
+
+def _assert_attributes_do_not_export_multiplicity(xmi: str) -> None:
+    root = ElementTree.fromstring(xmi)
+    for node in root.iter():
+        if node.tag.endswith("Attribute"):
+            tags = {
+                child.attrib.get("tag")
+                for child in node.iter()
+                if child.tag.endswith("TaggedValue")
+            }
+            assert "lowerBound" not in tags
+            assert "upperBound" not in tags
+
+
+def _xmi_ids(xmi: str) -> set[str]:
+    root = ElementTree.fromstring(xmi)
+    return {
+        value
+        for node in root.iter()
+        for key, value in node.attrib.items()
+        if key.endswith("id")
+    }
 
 
 class _DrawingImportRepository:
@@ -120,8 +154,14 @@ def test_xmi_export_import_roundtrip_keeps_classes() -> None:
     assert "<XMI.exporter>Enterprise Architect</XMI.exporter>" in xmi
     assert "<UML:Package" in xmi
     assert "<UML:Class" in xmi
+    assert "<UML:DataType" in xmi
+    assert "<UML:StructuralFeature.type>" in xmi
+    assert "<UML:Parameter.type>" in xmi
     assert "<UML:Diagram" in xmi
+    assert "<EAModel.paramSub" in xmi
     assert '<XMI.extensions xmi.extender="Enterprise Architect 2.5"' in xmi
+    _assert_enterprise_architect_guid_values_are_bounded(xmi)
+    _assert_attributes_do_not_export_multiplicity(xmi)
     assert imported.name == source.name
     assert {uml_class.name for uml_class in imported.classes} == {
         uml_class.name for uml_class in source.classes
@@ -247,7 +287,15 @@ def test_enterprise_architect_xml_import_export_roundtrip_keeps_drawable_relatio
 
     assert exported.startswith('<?xml version="1.0" encoding="windows-1252"?>')
     assert "<XMI.exporter>Enterprise Architect</XMI.exporter>" in exported
+    assert "<UML:DataType" in exported
+    assert "<UML:StructuralFeature.type>" in exported
+    assert "<UML:Parameter.type>" in exported
+    assert 'tag="type"' in exported
+    assert 'tag="containment" value="Not Specified"' in exported
     assert 'tag="associationclass"' in exported
+    assert "<EAModel.paramSub" in exported
+    _assert_enterprise_architect_guid_values_are_bounded(exported)
+    _assert_attributes_do_not_export_multiplicity(exported)
     assert reimported.name == "clases"
     assert {uml_class.name for uml_class in reimported.classes} == {
         "Inscripcion",
@@ -260,6 +308,29 @@ def test_enterprise_architect_xml_import_export_roundtrip_keeps_drawable_relatio
         relationship.metadata_json.get("association_class_id")
         for relationship in reimported.relationships
     )
+
+
+def test_enterprise_architect_export_uses_fresh_ids_and_keeps_association_class_attributes() -> None:
+    fixture_path = Path(__file__).resolve().parents[2] / "exportar.xml"
+    imported = import_xmi(fixture_path.read_text(encoding="utf-8", errors="replace"), name="exportar")
+
+    first_export = export_xmi(imported)
+    second_export = export_xmi(imported)
+    first_reimport = import_xmi(first_export, name="first")
+
+    assert _xmi_ids(first_export).isdisjoint(_xmi_ids(second_export))
+    inscripcion = next(uml_class for uml_class in first_reimport.classes if uml_class.name == "Inscripcion")
+    assert [attribute.name for attribute in inscripcion.attributes] == [
+        "estado",
+        "fecha",
+        "id",
+        "notaFinal",
+    ]
+    assert any(
+        relationship.metadata_json.get("association_class_id") == inscripcion.id
+        for relationship in first_reimport.relationships
+    )
+    _assert_attributes_do_not_export_multiplicity(first_export)
 
 
 def test_phase6_openapi_contracts_are_registered() -> None:

@@ -1,13 +1,21 @@
 import { apiClient } from "../../../core/api/client";
 
-type AiUmlResponse = {
+export type AiUmlResponse = {
   classes: Array<{
     name: string;
     stereotype?: string | null;
-    attributes?: Array<{ name: string; data_type: string }>;
-    methods?: Array<{ name: string; return_type?: string | null }>;
+    attributes?: Array<{ name: string; data_type: string; visibility?: string | null; is_required?: boolean }>;
+    methods?: Array<{ name: string; return_type?: string | null; visibility?: string | null }>;
   }>;
-  relationships: Array<{ source: string; target: string; relationship_type: string; label?: string | null }>;
+  relationships: Array<{
+    source: string;
+    target: string;
+    relationship_type: string;
+    label?: string | null;
+    source_cardinality?: string | null;
+    target_cardinality?: string | null;
+    metadata_json?: Record<string, unknown>;
+  }>;
   confidence: number;
   observations: string[];
   knowledge_context: string[];
