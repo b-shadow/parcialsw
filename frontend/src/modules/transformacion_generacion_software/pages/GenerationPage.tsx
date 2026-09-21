@@ -23,6 +23,7 @@ export function GenerationPage() {
   const [transformation, setTransformation] = useState<Transformation | null>(null);
   const [backend, setBackend] = useState<GeneratedBackend | null>(null);
   const [frontend, setFrontend] = useState<GeneratedFrontend | null>(null);
+  const [apiBaseUrl, setApiBaseUrl] = useState("http://10.0.2.2:8080");
   const [loading, setLoading] = useState<LoadingKey>("projects");
   const [error, setError] = useState("");
 
@@ -133,7 +134,8 @@ export function GenerationPage() {
         transformation_id: transformation.id,
         name: `${name}Mobile`,
         version_label: "v1",
-        backend_id: backend.id
+        backend_id: backend.id,
+        api_base_url: apiBaseUrl.trim() || undefined
       });
       setFrontend(generated);
     } catch {
@@ -260,6 +262,14 @@ export function GenerationPage() {
             <Smartphone className="text-accent" aria-hidden="true" />
             <h2 className="mt-4 text-lg font-semibold">Flutter</h2>
             <p className="mt-2 text-sm text-slate-600">{frontend?.name ?? (backend ? "Disponible" : "Genere backend primero")}</p>
+            {backend && (
+              <Input
+                className="mt-3"
+                label="URL backend para app"
+                value={apiBaseUrl}
+                onChange={(event) => setApiBaseUrl(event.target.value)}
+              />
+            )}
             {frontend && (
               <p className="mt-2 text-xs text-slate-500">
                 {frontend.manifest.file_count ?? 0} archivos, API {String(frontend.manifest.api_base_url ?? "")}

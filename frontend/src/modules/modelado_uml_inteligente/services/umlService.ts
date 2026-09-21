@@ -25,7 +25,13 @@ function normalizeRelationshipType(type: string) {
 
 function positionForClass(index: number, total: number, className: string, associationClassNames: Set<string>) {
   if (associationClassNames.has(className.toLowerCase())) {
-    return { position_x: 360, position_y: 330 };
+    return { position_x: 360, position_y: 350 };
+  }
+  if (total === 3 && associationClassNames.size > 0) {
+    return {
+      position_x: index === 0 ? 80 : 620,
+      position_y: 100
+    };
   }
   if (total <= 3) {
     return { position_x: 80 + index * 330, position_y: 110 };

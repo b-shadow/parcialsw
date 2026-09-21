@@ -5,6 +5,7 @@ from shutil import which
 
 from app.modules.generacion_software.flutter_generator.templates import (
     render_analysis_options,
+    render_android_manifest,
     render_api_client,
     render_app_router,
     render_app_theme,
@@ -19,6 +20,7 @@ from app.modules.generacion_software.flutter_generator.templates import (
     render_shared_button,
     render_web_index,
     render_web_manifest,
+    render_widget_test,
 )
 from app.modules.generacion_software.flutter_generator.uml_analyzer.model_analyzer import (
     FlutterProject,
@@ -64,9 +66,11 @@ def build_file_set(project: FlutterProject) -> list[GeneratedFlutterFile]:
     files = [
         GeneratedFlutterFile("pubspec.yaml", render_pubspec(project)),
         GeneratedFlutterFile("analysis_options.yaml", render_analysis_options()),
+        GeneratedFlutterFile("android/app/src/main/AndroidManifest.xml", render_android_manifest(project)),
         GeneratedFlutterFile("README.md", render_readme(project)),
         GeneratedFlutterFile("web/index.html", render_web_index(project)),
         GeneratedFlutterFile("web/manifest.json", render_web_manifest(project)),
+        GeneratedFlutterFile("test/widget_test.dart", render_widget_test(project)),
         GeneratedFlutterFile("lib/main.dart", render_main(project)),
         GeneratedFlutterFile("lib/core/network/api_client.dart", render_api_client(project)),
         GeneratedFlutterFile("lib/core/routes/app_router.dart", render_app_router(project)),

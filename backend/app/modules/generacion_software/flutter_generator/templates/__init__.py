@@ -1,5 +1,6 @@
 from app.modules.generacion_software.flutter_generator.templates.flutter_templates import (
     render_analysis_options,
+    render_android_manifest,
     render_api_client,
     render_app_router,
     render_app_theme,
@@ -14,10 +15,12 @@ from app.modules.generacion_software.flutter_generator.templates.flutter_templat
     render_shared_button,
     render_web_index,
     render_web_manifest,
+    render_widget_test,
 )
 
 __all__ = [
     "render_analysis_options",
+    "render_android_manifest",
     "render_api_client",
     "render_app_router",
     "render_app_theme",
@@ -32,4 +35,5 @@ __all__ = [
     "render_shared_button",
     "render_web_index",
     "render_web_manifest",
+    "render_widget_test",
 ]

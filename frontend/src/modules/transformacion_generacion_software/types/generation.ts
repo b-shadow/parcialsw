@@ -53,3 +53,11 @@ export type GeneratedFrontend = {
   };
   created_at: string;
 };
+
+export type FrontendGenerationPayload = {
+  transformation_id: string;
+  name: string;
+  version_label: string;
+  backend_id?: string;
+  api_base_url?: string;
+};

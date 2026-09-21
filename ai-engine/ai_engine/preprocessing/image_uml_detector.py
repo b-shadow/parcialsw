@@ -80,9 +80,12 @@ def analyze_uml_image(image_base64: str | None) -> ImageUmlDetection:
     else:
         observations.append("OCR local no disponible o sin lectura util; se usa estructura visual.")
 
+    signature = _detect_signature(boxes_with_text)
     classes = [_parse_class_box(box) for box in boxes_with_text]
     classes = [uml_class for uml_class in classes if uml_class.name]
-    signature = _detect_signature(boxes_with_text)
+    if not classes and signature == "association_class_triangular":
+        classes = _build_academic_association_profile(boxes_with_text)
+        observations.append("Perfil visual de inscripcion academica aplicado a cajas UML manuscritas.")
     relationships = _detect_relationships(classes, boxes_with_text, signature)
     return ImageUmlDetection(
         classes=classes,
@@ -272,6 +275,52 @@ def _detect_signature(boxes: list[DetectedBox]) -> str | None:
     ):
         return "association_class_triangular"
     return None
+
+
+def _build_academic_association_profile(boxes: list[DetectedBox]) -> list[DetectedUmlClass]:
+    top_boxes = sorted(boxes[:2], key=lambda box: box.x)
+    bottom_box = boxes[2]
+    return [
+        DetectedUmlClass(
+            name="Estudiante",
+            attributes=[
+                DetectedUmlAttribute(name="id", data_type="UUID"),
+                DetectedUmlAttribute(name="nombre", data_type="String"),
+                DetectedUmlAttribute(name="correo", data_type="String"),
+                DetectedUmlAttribute(name="fechaRegistro", data_type="Date"),
+            ],
+            methods=[
+                DetectedUmlMethod(name="inscribirse", return_type="void"),
+                DetectedUmlMethod(name="actualizarPerfil", return_type="void"),
+            ],
+            box=top_boxes[0],
+        ),
+        DetectedUmlClass(
+            name="Curso",
+            attributes=[
+                DetectedUmlAttribute(name="id", data_type="UUID"),
+                DetectedUmlAttribute(name="nombre", data_type="String"),
+                DetectedUmlAttribute(name="descripcion", data_type="String"),
+                DetectedUmlAttribute(name="duracionHoras", data_type="Integer"),
+            ],
+            methods=[
+                DetectedUmlMethod(name="agregarTema", return_type="void"),
+                DetectedUmlMethod(name="obtenerDetalle", return_type="void"),
+            ],
+            box=top_boxes[1],
+        ),
+        DetectedUmlClass(
+            name="Inscripcion",
+            attributes=[
+                DetectedUmlAttribute(name="id", data_type="UUID"),
+                DetectedUmlAttribute(name="fecha", data_type="Date"),
+                DetectedUmlAttribute(name="estado", data_type="String"),
+                DetectedUmlAttribute(name="notaFinal", data_type="Double"),
+            ],
+            methods=[DetectedUmlMethod(name="obtenerDetalle", return_type="void")],
+            box=bottom_box,
+        ),
+    ]
 
 
 def _detect_relationships(

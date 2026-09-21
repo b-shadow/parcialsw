@@ -35,6 +35,7 @@ class FrontendGenerationRequest(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     version_label: str = "v1"
     backend_id: UUID | None = None
+    api_base_url: str | None = Field(default=None, max_length=255)
 
 
 class GeneratedBackendResponse(BaseModel):
@@ -71,4 +72,3 @@ class GeneratedFrontendResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
-

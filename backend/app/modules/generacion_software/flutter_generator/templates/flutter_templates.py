@@ -89,7 +89,7 @@ def render_api_client(project: FlutterProject) -> str:
 import 'package:http/http.dart' as http;
 
 class ApiClient {{
-  ApiClient({{this.baseUrl = '{project.api_base_url}' }});
+  ApiClient({{this.baseUrl = const String.fromEnvironment('API_BASE_URL', defaultValue: '{project.api_base_url}') }});
 
   final String baseUrl;
   String? token;
@@ -134,6 +134,61 @@ class ApiClient {{
 """
 
 
+def render_widget_test(project: FlutterProject) -> str:
+    return f"""import 'package:flutter_test/flutter_test.dart';
+
+import 'package:{project.package_name}/main.dart';
+
+void main() {{
+  testWidgets('renders generated app', (tester) async {{
+    await tester.pumpWidget(const GeneratedCaseApp());
+    expect(find.text('{project.name}'), findsWidgets);
+  }});
+}}
+"""
+
+
+def render_android_manifest(project: FlutterProject) -> str:
+    return f"""<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:label="{project.package_name}"
+        android:name="${{applicationName}}"
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
+        </intent>
+    </queries>
+</manifest>
+"""
+
+
 def render_app_theme() -> str:
     return """import 'package:flutter/material.dart';
 
@@ -160,7 +215,14 @@ def render_app_router(project: FlutterProject) -> str:
         for entity in project.entities
     )
     menu_items = "\n".join(
-        f"          ListTile(title: const Text('{entity.name}'), onTap: () => Navigator.pushNamed(context, '/{entity.module_name}')),"
+        f"""          Card(
+            child: ListTile(
+              leading: const Icon(Icons.table_chart_outlined),
+              title: const Text('{entity.name}'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.pushNamed(context, '/{entity.module_name}'),
+            ),
+          ),"""
         for entity in project.entities
     )
     return f"""import 'package:flutter/material.dart';
@@ -184,6 +246,7 @@ class HomeScreen extends StatelessWidget {{
     return Scaffold(
       appBar: AppBar(title: const Text('{project.name}')),
       body: ListView(
+        padding: const EdgeInsets.all(16),
         children: [
 {menu_items}
         ],
@@ -394,32 +457,47 @@ class _{entity.name}ListScreenState extends State<{entity.name}ListScreen> {{
 
 def render_entity_form_screen(entity: DartEntity) -> str:
     module = entity.module_name
+    relation_imports = _relation_imports(entity)
     controllers = "\n".join(
-        f"  late final TextEditingController _{field.name}Controller;" for field in entity.fields if field.input_type != "switch"
+        f"  late final TextEditingController _{field.name}Controller;"
+        for field in entity.fields
+        if field.input_type not in {"switch", "relation"}
     )
     init_controllers = "\n".join(
-        f"    _{field.name}Controller = TextEditingController(text: widget.initialValue?.{field.name}?.toString() ?? '');"
+        f"    _{field.name}Controller = TextEditingController(text: {_initial_controller_text(field)});"
         for field in entity.fields
-        if field.input_type != "switch"
+        if field.input_type not in {"switch", "relation"}
     )
     dispose_controllers = "\n".join(
-        f"    _{field.name}Controller.dispose();" for field in entity.fields if field.input_type != "switch"
+        f"    _{field.name}Controller.dispose();"
+        for field in entity.fields
+        if field.input_type not in {"switch", "relation"}
     )
     bool_fields = "\n".join(
         f"  bool _{field.name}Value = false;" for field in entity.fields if field.input_type == "switch"
+    )
+    relation_fields = "\n".join(
+        f"  String? _{field.name}Value;" for field in entity.fields if field.input_type == "relation"
     )
     init_switches = "\n".join(
         f"    _{field.name}Value = widget.initialValue?.{field.name} ?? false;"
         for field in entity.fields
         if field.input_type == "switch"
     )
+    init_relations = "\n".join(
+        f"    _{field.name}Value = widget.initialValue?.{field.name};"
+        for field in entity.fields
+        if field.input_type == "relation"
+    )
     form_fields = "\n".join(_render_form_field(field) for field in entity.fields)
     model_args = "\n".join(_render_model_arg(field) for field in entity.fields)
+    date_helper = _render_date_helper(entity)
     return f"""import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '{module}_model.dart';
 import '{module}_provider.dart';
+{relation_imports}
 
 class {entity.name}FormScreen extends StatefulWidget {{
   const {entity.name}FormScreen({{super.key, this.initialValue}});
@@ -434,12 +512,14 @@ class _{entity.name}FormScreenState extends State<{entity.name}FormScreen> {{
   final _formKey = GlobalKey<FormState>();
 {controllers}
 {bool_fields}
+{relation_fields}
 
   @override
   void initState() {{
     super.initState();
 {init_controllers}
 {init_switches}
+{init_relations}
   }}
 
   @override
@@ -482,6 +562,7 @@ class _{entity.name}FormScreenState extends State<{entity.name}FormScreen> {{
       Navigator.pop(context);
     }}
   }}
+{date_helper}
 }}
 """
 
@@ -577,8 +658,27 @@ def _from_json_expression(field: DartField) -> str:
 
 def _to_json_expression(field: DartField) -> str:
     if field.dart_type == "DateTime":
-        return f"{field.name}?.toIso8601String()"
+        return f"{field.name} == null ? null : '${{{field.name}!.year.toString().padLeft(4, '0')}}-${{{field.name}!.month.toString().padLeft(2, '0')}}-${{{field.name}!.day.toString().padLeft(2, '0')}}'"
     return field.name
+
+
+def _initial_controller_text(field: DartField) -> str:
+    if field.dart_type == "DateTime":
+        return f"_formatDate(widget.initialValue?.{field.name})"
+    return f"widget.initialValue?.{field.name}?.toString() ?? ''"
+
+
+def _render_date_helper(entity: DartEntity) -> str:
+    if not any(field.input_type == "date" for field in entity.fields):
+        return ""
+    return """
+  static String _formatDate(DateTime? value) {
+    if (value == null) {
+      return '';
+    }
+    return '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+  }
+"""
 
 
 def _render_form_field(field: DartField) -> str:
@@ -588,6 +688,72 @@ def _render_form_field(field: DartField) -> str:
               value: _{field.name}Value,
               onChanged: (value) => setState(() => _{field.name}Value = value),
             ),"""
+    if field.input_type == "date":
+        validator = "if (value == null || value.isEmpty) return 'Campo requerido';" if field.required else ""
+        return f"""            TextFormField(
+              controller: _{field.name}Controller,
+              readOnly: true,
+              decoration: const InputDecoration(
+                labelText: '{field.name}',
+                suffixIcon: Icon(Icons.calendar_today_outlined),
+              ),
+              onTap: () async {{
+                final current = DateTime.tryParse(_{field.name}Controller.text) ?? DateTime.now();
+                final selected = await showDatePicker(
+                  context: context,
+                  initialDate: current,
+                  firstDate: DateTime(1900),
+                  lastDate: DateTime(2100),
+                );
+                if (selected != null) {{
+                  _{field.name}Controller.text = _formatDate(selected);
+                }}
+              }},
+              validator: (value) {{
+                {validator}
+                return null;
+              }},
+            ),
+            const SizedBox(height: 12),"""
+    if field.input_type == "relation" and field.relation_target and field.relation_module:
+        service_name = f"{field.relation_target}Service"
+        return f"""            FutureBuilder<List<{field.relation_target}>>(
+              future: {service_name}().findAll(),
+              builder: (context, snapshot) {{
+                final options = snapshot.data ?? const <{field.relation_target}>[];
+                return DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  initialValue: _{field.name}Value,
+                  decoration: const InputDecoration(labelText: '{field.name}'),
+                  selectedItemBuilder: (context) => options
+                      .map((item) => Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              _compactDisplayLabel(item.toJson()),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ))
+                      .toList(),
+                  items: options
+                      .map((item) => DropdownMenuItem<String>(
+                            value: item.id,
+                            child: Text(
+                              _displayLabel(item.toJson()),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (value) => setState(() => _{field.name}Value = value),
+                  validator: (value) {{
+                    {'if (value == null || value.isEmpty) return "Seleccione un registro";' if field.required else ''}
+                    return null;
+                  }},
+                );
+              }},
+            ),
+            const SizedBox(height: 12),"""
     keyboard = "TextInputType.number" if field.input_type == "number" else "TextInputType.emailAddress" if field.input_type == "email" else "TextInputType.text"
     validator = "if (value == null || value.isEmpty) return 'Campo requerido';" if field.required else ""
     return f"""            TextFormField(
@@ -605,6 +771,8 @@ def _render_form_field(field: DartField) -> str:
 def _render_model_arg(field: DartField) -> str:
     if field.input_type == "switch":
         return f"      {field.name}: _{field.name}Value,"
+    if field.input_type == "relation":
+        return f"      {field.name}: _{field.name}Value,"
     if field.dart_type == "int":
         return f"      {field.name}: int.tryParse(_{field.name}Controller.text),"
     if field.dart_type == "double":
@@ -612,3 +780,28 @@ def _render_model_arg(field: DartField) -> str:
     if field.dart_type == "DateTime":
         return f"      {field.name}: DateTime.tryParse(_{field.name}Controller.text),"
     return f"      {field.name}: _{field.name}Controller.text,"
+
+
+def _relation_imports(entity: DartEntity) -> str:
+    imports: list[str] = []
+    for field in entity.fields:
+        if field.input_type == "relation" and field.relation_module:
+            imports.append(f"import '../{field.relation_module}/{field.relation_module}_model.dart';")
+            imports.append(f"import '../{field.relation_module}/{field.relation_module}_service.dart';")
+    helper = """
+String _displayLabel(Map<String, dynamic> json) {
+  final name = json['nombre'] ?? json['name'];
+  final id = json['id'];
+  if (name != null && id != null) {
+    final value = id.toString();
+    final shortId = value.length > 8 ? '${value.substring(0, 8)}...' : value;
+    return '$name ($shortId)';
+  }
+  return (name ?? id ?? 'Registro').toString();
+}
+
+String _compactDisplayLabel(Map<String, dynamic> json) {
+  return (json['nombre'] ?? json['name'] ?? json['id'] ?? 'Registro').toString();
+}
+""" if imports else ""
+    return "\n".join(sorted(set(imports))) + ("\n" + helper if imports else "")

@@ -99,7 +99,7 @@ def render_application_properties(project: SpringBootProject) -> str:
     return f"""spring.application.name={project.artifact_id}
 server.port=8080
 
-spring.datasource.url=${{SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/{database_name}}}
+spring.datasource.url=${{SPRING_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:${{POSTGRES_PORT:55432}}/{database_name}}}
 spring.datasource.username=${{SPRING_DATASOURCE_USERNAME:postgres}}
 spring.datasource.password=${{SPRING_DATASOURCE_PASSWORD:postgres}}
 
@@ -116,7 +116,8 @@ def render_env_example(project: SpringBootProject) -> str:
     return f"""POSTGRES_DB={database_name}
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
-SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/{database_name}
+POSTGRES_PORT=55432
+SPRING_DATASOURCE_URL=jdbc:postgresql://127.0.0.1:55432/{database_name}
 SPRING_DATASOURCE_USERNAME=postgres
 SPRING_DATASOURCE_PASSWORD=postgres
 """
@@ -133,7 +134,7 @@ def render_docker_compose(project: SpringBootProject) -> str:
       POSTGRES_USER: ${{POSTGRES_USER:-postgres}}
       POSTGRES_PASSWORD: ${{POSTGRES_PASSWORD:-postgres}}
     ports:
-      - "5432:5432"
+      - "${{POSTGRES_PORT:-55432}}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
@@ -165,7 +166,38 @@ if command -v docker >/dev/null 2>&1; then
   docker compose up -d postgres
 fi
 
-./mvnw spring-boot:run 2>/dev/null || mvn spring-boot:run
+if [ -x "./mvnw" ]; then
+  ./mvnw spring-boot:run
+  exit 0
+fi
+
+if command -v mvn >/dev/null 2>&1; then
+  mvn spring-boot:run
+  exit 0
+fi
+
+MAVEN_VERSION="3.9.11"
+TOOLS_DIR=".tools"
+MAVEN_DIR="$TOOLS_DIR/apache-maven-$MAVEN_VERSION"
+ARCHIVE="$TOOLS_DIR/apache-maven-$MAVEN_VERSION-bin.tar.gz"
+URL="https://archive.apache.org/dist/maven/maven-3/$MAVEN_VERSION/binaries/apache-maven-$MAVEN_VERSION-bin.tar.gz"
+
+mkdir -p "$TOOLS_DIR"
+if [ ! -x "$MAVEN_DIR/bin/mvn" ]; then
+  if [ ! -f "$ARCHIVE" ]; then
+    if command -v curl >/dev/null 2>&1; then
+      curl -L "$URL" -o "$ARCHIVE"
+    elif command -v wget >/dev/null 2>&1; then
+      wget "$URL" -O "$ARCHIVE"
+    else
+      echo "curl o wget es necesario para descargar Maven." >&2
+      exit 1
+    fi
+  fi
+  tar -xzf "$ARCHIVE" -C "$TOOLS_DIR"
+fi
+
+"$MAVEN_DIR/bin/mvn" spring-boot:run
 """
 
 
@@ -178,9 +210,31 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
 
 if (Test-Path ".\\mvnw.cmd") {
     .\\mvnw.cmd spring-boot:run
-} else {
-    mvn spring-boot:run
+    exit $LASTEXITCODE
 }
+
+if (Get-Command mvn -ErrorAction SilentlyContinue) {
+    mvn spring-boot:run
+    exit $LASTEXITCODE
+}
+
+$mavenVersion = "3.9.11"
+$toolsDir = Join-Path $PSScriptRoot "..\\.tools"
+$mavenDir = Join-Path $toolsDir "apache-maven-$mavenVersion"
+$archive = Join-Path $toolsDir "apache-maven-$mavenVersion-bin.zip"
+$url = "https://archive.apache.org/dist/maven/maven-3/$mavenVersion/binaries/apache-maven-$mavenVersion-bin.zip"
+
+New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
+
+if (-not (Test-Path (Join-Path $mavenDir "bin\\mvn.cmd"))) {
+    if (-not (Test-Path $archive)) {
+        Invoke-WebRequest -Uri $url -OutFile $archive
+    }
+    Expand-Archive -Path $archive -DestinationPath $toolsDir -Force
+}
+
+& (Join-Path $mavenDir "bin\\mvn.cmd") spring-boot:run
+exit $LASTEXITCODE
 """
 
 
@@ -493,30 +547,38 @@ Backend Spring Boot generado automaticamente desde un modelo UML de la plataform
 Con Docker/PostgreSQL:
 
 ```bash
-docker compose up -d postgres
-mvn spring-boot:run
+./scripts/run.sh
 ```
 
-En Windows tambien puede usar:
+En Windows:
 
 ```powershell
 .\\scripts\\run.ps1
 ```
 
-En Linux/macOS:
+El script levanta PostgreSQL con Docker y usa Maven Wrapper, Maven instalado o descarga Maven localmente en `.tools`.
+
+En Linux/macOS, si el script no tiene permisos:
 
 ```bash
 chmod +x scripts/run.sh
 ./scripts/run.sh
 ```
 
-La base por defecto es `{database_name}` en `localhost:5432`. Si usa pgAdmin, puede ejecutar `database/init.sql` manualmente antes de iniciar la API.
+La base por defecto es `{database_name}` en `127.0.0.1:55432`. Si usa pgAdmin, puede ejecutar `database/init.sql` manualmente antes de iniciar la API.
+
+Variables utiles si necesita cambiar conexion:
+
+```text
+POSTGRES_PORT=55432
+SPRING_DATASOURCE_URL=jdbc:postgresql://127.0.0.1:55432/{database_name}
+SPRING_DATASOURCE_USERNAME=postgres
+SPRING_DATASOURCE_PASSWORD=postgres
+```
 
 ## Validacion
 
-```bash
-mvn test
-```
+Cuando Maven este disponible, ejecute `mvn test`.
 
 ## API
 

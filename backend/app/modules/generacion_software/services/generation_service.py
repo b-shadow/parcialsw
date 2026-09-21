@@ -209,7 +209,7 @@ class GenerationService:
             )
         )
         try:
-            api_base_url = "http://10.0.2.2:8080" if payload.backend_id else "http://localhost:8080"
+            api_base_url = payload.api_base_url or ("http://10.0.2.2:8080" if payload.backend_id else "http://localhost:8080")
             generation_result = FlutterGeneratorService().generate(
                 transformation.intermediate_model,
                 payload.name,

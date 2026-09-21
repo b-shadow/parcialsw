@@ -4,7 +4,10 @@ export type AuthUser = {
   id: string;
   email: string;
   full_name: string;
-  status: string;
+  is_active: boolean;
+  last_access_at: string | null;
+  created_at: string;
+  status?: string;
 };
 
 type AuthState = {

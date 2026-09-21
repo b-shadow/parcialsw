@@ -1,5 +1,5 @@
 import { apiClient } from "../../../core/api/client";
-import type { GeneratedBackend, GeneratedFrontend, Transformation } from "../types/generation";
+import type { FrontendGenerationPayload, GeneratedBackend, GeneratedFrontend, Transformation } from "../types/generation";
 
 export const generationService = {
   async transform(payload: { diagram_id: string; target_platform: "spring_boot" | "flutter" | "full_stack" }) {
@@ -10,7 +10,7 @@ export const generationService = {
     const response = await apiClient.post<GeneratedBackend>("/generation/spring-boot", payload);
     return response.data;
   },
-  async flutter(payload: { transformation_id: string; name: string; version_label: string; backend_id?: string }) {
+  async flutter(payload: FrontendGenerationPayload) {
     const response = await apiClient.post<GeneratedFrontend>("/generation/flutter", payload);
     return response.data;
   },

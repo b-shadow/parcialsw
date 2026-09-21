@@ -36,6 +36,47 @@ def _intermediate_model() -> dict:
     }
 
 
+def _association_class_model() -> dict:
+    return {
+        "classes": [
+            {
+                "id": "estudiante",
+                "name": "Estudiante",
+                "attributes": [
+                    {"name": "nombre", "data_type": "String", "is_required": True},
+                    {"name": "correo", "data_type": "String", "is_required": False},
+                ],
+            },
+            {
+                "id": "curso",
+                "name": "Curso",
+                "attributes": [
+                    {"name": "nombre", "data_type": "String", "is_required": True},
+                    {"name": "descripcion", "data_type": "String", "is_required": False},
+                ],
+            },
+            {
+                "id": "inscripcion",
+                "name": "Inscripcion",
+                "attributes": [
+                    {"name": "estado", "data_type": "String", "is_required": False},
+                    {"name": "notaFinal", "data_type": "Double", "is_required": False},
+                ],
+            },
+        ],
+        "relationships": [
+            {
+                "source_class_id": "estudiante",
+                "target_class_id": "curso",
+                "relationship_type": "association",
+                "source_cardinality": "*",
+                "target_cardinality": "*",
+                "metadata_json": {"association_class_id": "inscripcion"},
+            }
+        ],
+    }
+
+
 def test_flutter_generator_writes_complete_project(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
         "app.modules.generacion_software.flutter_generator.generator.project_writer.which",
@@ -67,6 +108,8 @@ def test_flutter_generator_writes_complete_project(tmp_path: Path, monkeypatch) 
     provider = result.project_dir / "lib/modules/cliente/cliente_provider.dart"
     form = result.project_dir / "lib/modules/cliente/cliente_form_screen.dart"
     router = result.project_dir / "lib/core/routes/app_router.dart"
+    pedido_model = result.project_dir / "lib/modules/pedido/pedido_model.dart"
+    pedido_form = result.project_dir / "lib/modules/pedido/pedido_form_screen.dart"
 
     assert "factory Cliente.fromJson" in model.read_text(encoding="utf-8")
     assert "Map<String, dynamic> toJson()" in model.read_text(encoding="utf-8")
@@ -75,6 +118,11 @@ def test_flutter_generator_writes_complete_project(tmp_path: Path, monkeypatch) 
     assert "TextFormField" in form.read_text(encoding="utf-8")
     assert "SwitchListTile" in form.read_text(encoding="utf-8")
     assert "'/cliente'" in router.read_text(encoding="utf-8")
+    assert "Card(" in router.read_text(encoding="utf-8")
+    assert "showDatePicker" in pedido_form.read_text(encoding="utf-8")
+    assert "readOnly: true" in pedido_form.read_text(encoding="utf-8")
+    assert "toIso8601String" not in pedido_model.read_text(encoding="utf-8")
+    assert "padLeft(2, '0')" in pedido_model.read_text(encoding="utf-8")
 
 
 def test_flutter_generator_scaffolds_android_when_flutter_cli_exists(tmp_path: Path, monkeypatch) -> None:
@@ -104,6 +152,34 @@ def test_flutter_generator_scaffolds_android_when_flutter_cli_exists(tmp_path: P
     assert (result.project_dir / "android/app/build.gradle.kts").exists()
     assert result.manifest["platforms"] == ["android", "web"]
     assert "android/app/build.gradle.kts" in result.manifest["checksums"]
+
+
+def test_flutter_generator_renders_dropdowns_for_association_class_foreign_keys(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.modules.generacion_software.flutter_generator.generator.project_writer.which",
+        lambda _: None,
+    )
+
+    result = FlutterGeneratorService(storage_root=tmp_path).generate(
+        _association_class_model(),
+        "Academico Mobile",
+        str(uuid4()),
+        api_base_url="http://localhost:8080",
+    )
+
+    model = result.project_dir / "lib/modules/inscripcion/inscripcion_model.dart"
+    form = result.project_dir / "lib/modules/inscripcion/inscripcion_form_screen.dart"
+    model_text = model.read_text(encoding="utf-8")
+    form_text = form.read_text(encoding="utf-8")
+
+    assert "final String? estudianteId;" in model_text
+    assert "final String? cursoId;" in model_text
+    assert "DropdownButtonFormField<String>" in form_text
+    assert "isExpanded: true" in form_text
+    assert "_compactDisplayLabel(item.toJson())" in form_text
+    assert "EstudianteService().findAll()" in form_text
+    assert "CursoService().findAll()" in form_text
+    assert "_displayLabel(item.toJson())" in form_text
 
 
 def test_phase9_openapi_contracts_are_registered() -> None:
