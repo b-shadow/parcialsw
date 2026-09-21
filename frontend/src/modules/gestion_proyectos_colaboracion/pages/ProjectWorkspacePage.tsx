@@ -183,21 +183,13 @@ export function ProjectWorkspacePage() {
                 image_base64: file ? await fileToBase64(file) : undefined,
                 file_name: file?.name,
               });
-      const generated =
-        sourceType === "image"
-          ? await umlService.createDiagramFromAiResult({
-              project_id: projectId,
-              name: "UML generado por imagen",
-              description: promptFromAiResult(aiResult, "Modelo UML generado desde imagen"),
-              source_type: sourceType,
-              result: aiResult,
-            })
-          : await umlService.generate({
-              project_id: projectId,
-              name: `UML generado por ${sourceType === "text" ? "texto" : sourceType === "voice" ? "voz" : "imagen"}`,
-              prompt: promptFromAiResult(aiResult, basePrompt),
-              source_type: sourceType,
-            });
+      const generated = await umlService.createDiagramFromAiResult({
+        project_id: projectId,
+        name: `UML generado por ${sourceType === "text" ? "texto" : sourceType === "voice" ? "voz" : "imagen"}`,
+        description: promptFromAiResult(aiResult, sourceType === "image" ? "Modelo UML generado desde imagen" : basePrompt),
+        source_type: sourceType,
+        result: aiResult,
+      });
       setDiagrams((current) => [generated, ...current]);
       setOperationMessage(`Modelo creado con ${aiResult.engine}. Clases: ${aiResult.classes.map((item) => item.name).join(", ")}`);
     } catch {

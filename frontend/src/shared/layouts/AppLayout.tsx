@@ -1,15 +1,15 @@
-import { BarChart3, BookOpen, Box, Code2, FolderKanban, LogOut, User, Users } from "lucide-react";
+import { BarChart3, Box, Code2, FolderKanban, LogOut, User, Users } from "lucide-react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuthStore } from "../../core/auth/authStore";
 import { useThemeStore } from "../../core/theme/themeStore";
+import { AssistantWidget } from "../components/AssistantWidget";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { cn } from "../utils/cn";
 
 const navItems = [
   { to: "/generacion", label: "Generacion", icon: Code2 },
   { to: "/reportes", label: "Reportes", icon: BarChart3 },
-  { to: "/manual", label: "Manual", icon: BookOpen },
   { to: "/perfil", label: "Perfil", icon: User }
 ];
 
@@ -157,6 +157,7 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
+      <AssistantWidget />
     </div>
   );
 }

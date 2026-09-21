@@ -57,6 +57,51 @@ def test_image_detector_identifies_association_class_geometry() -> None:
 
     assert len(detection.boxes) == 3
     assert detection.signature == "association_class_triangular"
+    assert [uml_class.name for uml_class in detection.classes] == [
+        "Estudiante",
+        "Curso",
+        "Inscripcion",
+    ]
+    assert [attribute.name for attribute in detection.classes[0].attributes] == [
+        "id",
+        "nombre",
+        "correo",
+        "fechaRegistro",
+    ]
+    assert detection.relationships[0].source == "Estudiante"
+    assert detection.relationships[0].target == "Curso"
+    assert detection.relationships[0].association_class_name == "Inscripcion"
+
+
+def test_text_and_voice_generate_academic_association_class() -> None:
+    service = LocalAIService()
+    prompt = (
+        "Crea un diagrama UML con Estudiante, Curso e Inscripcion. "
+        "Estudiante y Curso tienen una relacion muchos a muchos. "
+        "Usa Inscripcion como clase asociativa de la relacion entre Estudiante y Curso. "
+        "La multiplicidad en ambos extremos debe ser *."
+    )
+
+    text = service.text_to_uml(UmlGenerationRequest(prompt=prompt))
+    voice = service.voice_to_uml(VoiceProcessingRequest(transcript=prompt))
+
+    for response in (text, voice):
+        assert [uml_class.name for uml_class in response.classes] == [
+            "Estudiante",
+            "Curso",
+            "Inscripcion",
+        ]
+        assert [attribute.name for attribute in response.classes[2].attributes] == [
+            "id",
+            "fecha",
+            "estado",
+            "notaFinal",
+        ]
+        assert response.relationships[0].source == "Estudiante"
+        assert response.relationships[0].target == "Curso"
+        assert response.relationships[0].source_cardinality == "*"
+        assert response.relationships[0].target_cardinality == "*"
+        assert response.relationships[0].metadata_json["association_class_name"] == "Inscripcion"
 
 
 def test_ai_validation_and_software_plan() -> None:

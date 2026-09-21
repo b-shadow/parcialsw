@@ -651,21 +651,16 @@ export function UmlEditorPage() {
         .map((umlClass) => umlClass.name)
         .join(", ")}`
     );
-    const generated =
-      sourceType === "image"
-        ? await umlService.createDiagramFromAiResult({
-            project_id: projectId,
-            name: `UML generado ${sourceType}`,
-            description: promptFromAiResult(aiResult, "Modelo UML generado desde imagen"),
-            source_type: sourceType,
-            result: aiResult
-          })
-        : await umlService.generate({
-            project_id: projectId,
-            name: `UML generado ${sourceType}`,
-            prompt: promptFromAiResult(aiResult, basePrompt),
-            source_type: sourceType
-          });
+    const generated = await umlService.createDiagramFromAiResult({
+      project_id: projectId,
+      name: `UML generado ${sourceType}`,
+      description: promptFromAiResult(
+        aiResult,
+        sourceType === "image" ? "Modelo UML generado desde imagen" : basePrompt
+      ),
+      source_type: sourceType,
+      result: aiResult
+    });
     window.location.href = `/proyectos/${projectId}/uml/${generated.id}`;
   }
 

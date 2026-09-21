@@ -1,13 +1,17 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.database.session import get_db
 from app.core.security.dependencies import get_current_user
 from app.modules.acceso_usuarios.models import User
-from app.modules.acceso_usuarios.schemas.user import UserResponse, UserUpdateRequest
+from app.modules.acceso_usuarios.schemas.user import (
+    ChangePasswordRequest,
+    UserResponse,
+    UserUpdateRequest,
+)
 from app.modules.acceso_usuarios.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["usuarios"])
@@ -30,3 +34,11 @@ def update_user(
 ) -> User:
     return UserService(db).update_user(user_id, payload, current_user.id)
 
+
+@router.patch("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+def change_my_password(
+    payload: ChangePasswordRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    UserService(db).change_password(current_user.id, payload)

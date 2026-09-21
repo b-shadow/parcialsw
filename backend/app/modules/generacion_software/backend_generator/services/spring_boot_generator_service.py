@@ -35,13 +35,13 @@ class SpringBootGeneratorService:
             rmtree(target_dir)
         files = write_spring_boot_project(project, target_dir)
         zip_path = create_zip_archive(target_dir, target_dir.parent / f"{project.artifact_id}.zip")
-        checksums = {str(path.relative_to(target_dir)): checksum_file(path) for path in files}
+        checksums = {path.relative_to(target_dir).as_posix(): checksum_file(path) for path in files}
         manifest = {
             "technology": "Spring Boot",
             "language": "Java",
             "database": "PostgreSQL",
             "database_name": project.artifact_id.replace("-", "_"),
-            "database_port": 5432,
+            "database_port": 55432,
             "database_bootstrap": ["docker-compose.yml", "database/init.sql", "scripts/run.ps1", "scripts/run.sh"],
             "project_name": project.name,
             "artifact_id": project.artifact_id,
