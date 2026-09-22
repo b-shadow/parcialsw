@@ -7,6 +7,7 @@ export type AuthUser = {
   is_active: boolean;
   last_access_at: string | null;
   created_at: string;
+  role_names: string[];
   status?: string;
 };
 

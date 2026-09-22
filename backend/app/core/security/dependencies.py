@@ -34,3 +34,11 @@ def get_current_user(
         )
     return user
 
+
+def require_admin(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+    if "ADMINISTRADOR" not in current_user.role_names:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Se requiere rol ADMINISTRADOR",
+        )
+    return current_user
