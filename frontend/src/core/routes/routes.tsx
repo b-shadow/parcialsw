@@ -5,6 +5,8 @@ import { LoginPage } from "../../modules/gestion_acceso_usuarios/pages/LoginPage
 import { RegisterPage } from "../../modules/gestion_acceso_usuarios/pages/RegisterPage";
 import { ProfilePage } from "../../modules/gestion_acceso_usuarios/pages/ProfilePage";
 import { ReportsPage } from "../../modules/gestion_acceso_usuarios/pages/ReportsPage";
+import { AdminUsersPage } from "../../modules/gestion_acceso_usuarios/pages/AdminUsersPage";
+import { AuditLogPage } from "../../modules/gestion_acceso_usuarios/pages/AuditLogPage";
 import { ProjectManagementPage } from "../../modules/gestion_proyectos_colaboracion/pages/ProjectManagementPage";
 import { ProjectsPage } from "../../modules/gestion_proyectos_colaboracion/pages/ProjectsPage";
 import { ProjectWorkspacePage } from "../../modules/gestion_proyectos_colaboracion/pages/ProjectWorkspacePage";
@@ -32,6 +34,8 @@ export function AppRoutes() {
           <Route path="/generacion" element={<GenerationPage />} />
           <Route path="/perfil" element={<ProfilePage />} />
           <Route path="/reportes" element={<ReportsPage />} />
+          <Route path="/usuarios" element={<AdminUsersPage />} />
+          <Route path="/bitacora" element={<AuditLogPage />} />
           <Route path="/manual" element={<Navigate to="/proyectos" replace />} />
         </Route>
       </Route>

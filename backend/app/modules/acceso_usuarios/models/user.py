@@ -27,3 +27,7 @@ class User(UuidPrimaryKeyMixin, TimestampMixin, Base):
     sessions: Mapped[list[UserSession]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+
+    @property
+    def role_names(self) -> list[str]:
+        return sorted(user_role.role.name for user_role in self.roles if user_role.role is not None)

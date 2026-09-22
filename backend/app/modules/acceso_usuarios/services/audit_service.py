@@ -33,3 +33,19 @@ class AuditService:
             )
         )
 
+    def list_logs(
+        self,
+        *,
+        module: str | None = None,
+        action: str | None = None,
+        user_id: UUID | None = None,
+        project_id: UUID | None = None,
+        limit: int = 100,
+    ) -> list[AuditLog]:
+        return self.repository.list(
+            module=module,
+            action=action,
+            user_id=user_id,
+            project_id=project_id,
+            limit=max(1, min(limit, 500)),
+        )

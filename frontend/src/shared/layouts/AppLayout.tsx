@@ -1,8 +1,10 @@
-import { BarChart3, Box, Code2, FolderKanban, LogOut, User, Users } from "lucide-react";
+import { useEffect } from "react";
+import { BarChart3, Box, ClipboardList, Code2, FolderKanban, LogOut, ShieldCheck, User, Users } from "lucide-react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuthStore } from "../../core/auth/authStore";
 import { useThemeStore } from "../../core/theme/themeStore";
+import { authService } from "../../modules/gestion_acceso_usuarios/services/authService";
 import { AssistantWidget } from "../components/AssistantWidget";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { cn } from "../utils/cn";
@@ -13,12 +15,25 @@ const navItems = [
   { to: "/perfil", label: "Perfil", icon: User }
 ];
 
+const adminNavItems = [
+  { to: "/usuarios", label: "Usuarios", icon: ShieldCheck },
+  { to: "/bitacora", label: "Bitacora", icon: ClipboardList }
+];
+
 export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const isDark = useThemeStore((state) => state.mode === "dark");
   const user = useAuthStore((state) => state.user);
+  const setUser = useAuthStore((state) => state.setUser);
   const logout = useAuthStore((state) => state.logout);
+  const isAdmin = user?.role_names?.includes("ADMINISTRADOR") ?? false;
+
+  useEffect(() => {
+    if (!user) {
+      authService.me().then(setUser).catch(() => undefined);
+    }
+  }, [setUser, user]);
 
   const isProjectsRoute = location.pathname.startsWith("/proyectos");
   const projectMatch = location.pathname.match(/^\/proyectos\/([^/]+)/);
@@ -113,6 +128,29 @@ export function AppLayout() {
               </NavLink>
             );
           })}
+
+          {isAdmin && (
+            <div className="mt-2 grid gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+              {adminNavItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    className={({ isActive }) =>
+                      cn(
+                        "flex h-12 items-center gap-4 rounded-lg px-4 text-base font-semibold transition",
+                        isActive ? activeNavTone : inactiveNavTone
+                      )
+                    }
+                  >
+                    <Icon size={22} aria-hidden="true" />
+                    {item.label}
+                  </NavLink>
+                );
+              })}
+            </div>
+          )}
         </nav>
 
         <div className="mt-auto p-6">
