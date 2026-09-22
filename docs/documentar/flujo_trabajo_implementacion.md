@@ -262,18 +262,18 @@ La plataforma CASE Inteligente se implementa como una aplicacion web modular con
 
 - Plataforma definida:
   - Frontend React: S3 privado + CloudFront.
-  - Backend FastAPI: ECS Fargate detras de Application Load Balancer HTTPS.
+  - Backend FastAPI: EC2 con Docker detras de Application Load Balancer HTTPS.
   - Base de datos: Amazon RDS PostgreSQL 16 en subnets privadas.
   - Artefactos: S3 versionado y cifrado.
   - Logs: CloudWatch Logs.
   - DNS y certificados: Route 53 y ACM.
 
 - Motivos:
-  - ECS Fargate evita administrar servidores directamente para el backend.
+  - EC2 permite un despliegue directo y controlado del backend Docker sin orquestador ECS.
   - RDS PostgreSQL permite operar la base de datos con backups, cifrado y administracion gestionada.
   - CloudFront mejora distribucion del frontend estatico.
   - S3 privado con CloudFront OAC evita exponer directamente el bucket frontend.
-  - ALB centraliza HTTPS y balanceo hacia tareas backend.
+  - ALB centraliza HTTPS y balanceo hacia la instancia backend.
   - CloudWatch concentra logs del backend.
 
 - Roles / servicios activos:
@@ -281,7 +281,7 @@ La plataforma CASE Inteligente se implementa como una aplicacion web modular con
   - S3 para frontend estatico.
   - S3 para artefactos generados.
   - Application Load Balancer para API.
-  - ECS Fargate para backend FastAPI.
+  - EC2 con Docker para backend FastAPI.
   - RDS PostgreSQL para datos persistentes.
   - Route 53 para dominios.
   - ACM para certificados TLS.
@@ -299,7 +299,7 @@ La plataforma CASE Inteligente se implementa como una aplicacion web modular con
   - Logs centralizados en CloudWatch.
 
 - Dimensionamiento inicial referencial:
-  - Backend ECS Fargate: 512 CPU units y 1024 MB de memoria.
+  - Backend EC2: `t3.small` inicial con Docker y volumen gp3 cifrado.
   - RDS: `db.t4g.micro`, 20 GB iniciales, cifrado y 7 dias de backup.
   - ALB publico para API.
   - CloudFront para frontend.
@@ -345,7 +345,7 @@ La plataforma CASE Inteligente se implementa como una aplicacion web modular con
 - Infraestructura:
   - Terraform para AWS.
   - S3 + CloudFront para frontend.
-  - ECS Fargate + ALB para backend.
+  - EC2 + Docker + ALB para backend.
   - RDS PostgreSQL para base de datos.
   - S3 para artefactos generados.
   - Route 53 + ACM para dominios y HTTPS.
@@ -478,7 +478,7 @@ La plataforma CASE Inteligente se implementa como una aplicacion web modular con
 - Variables por entorno:
   - `.env` local.
   - Variables del contenedor en Docker Compose.
-  - Variables de ECS en AWS.
+  - Variables del contenedor backend en EC2.
   - GitHub Secrets para CI/CD cuando aplique.
 
 - Secretos:
@@ -523,7 +523,7 @@ La plataforma CASE Inteligente se implementa como una aplicacion web modular con
   - Acceso al bucket mediante Origin Access Control.
 
 - API:
-  - Backend FastAPI en ECS Fargate.
+  - Backend FastAPI en EC2 con Docker.
   - Exposicion publica mediante Application Load Balancer HTTPS.
   - Target group HTTP hacia puerto 8000.
 
@@ -578,7 +578,7 @@ La plataforma CASE Inteligente se implementa como una aplicacion web modular con
     - `VITE_WS_BASE_URL`
 
 - Produccion:
-  - Variables de ECS.
+  - Variables generadas en `/opt/case-inteligente/backend.env` dentro de EC2.
   - Terraform variables.
   - GitHub Secrets.
   - AWS Systems Manager o Secrets Manager como evolucion recomendada.
@@ -631,7 +631,7 @@ La plataforma CASE Inteligente se implementa como una aplicacion web modular con
     - Amazon RDS PostgreSQL.
   - Infraestructura:
     - Docker.
-    - AWS ECS Fargate.
+    - AWS EC2.
     - AWS ALB.
     - AWS S3.
     - AWS CloudFront.

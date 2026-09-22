@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     cors_origins_raw: str = Field(
-        default="http://localhost:5173,http://127.0.0.1:5173",
+        default="http://localhost:5173,http://127.0.0.1:5173,https://case-inteligente.vercel.app",
         alias="CORS_ORIGINS",
     )
     allowed_hosts_raw: str = Field(default="*", alias="ALLOWED_HOSTS")

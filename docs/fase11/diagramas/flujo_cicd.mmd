@@ -5,7 +5,7 @@ flowchart LR
     D --> E[Build frontend]
     E --> F[Build Docker images]
     F --> G[ECR]
-    G --> H[Terraform/ECS]
+    G --> H[Terraform/EC2]
     E --> I[S3 sync]
     I --> J[CloudFront invalidation]
     H --> K[Smoke test]

@@ -98,7 +98,7 @@ resource "aws_security_group" "alb" {
 
 resource "aws_security_group" "backend" {
   name        = "${local.name}-backend-sg"
-  description = "Backend ECS access from ALB"
+  description = "Backend EC2 access from ALB"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -106,6 +106,16 @@ resource "aws_security_group" "backend" {
     to_port         = 8000
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
+  }
+
+  dynamic "ingress" {
+    for_each = var.enable_ssh ? [1] : []
+    content {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = [var.admin_ssh_cidr]
+    }
   }
 
   egress {
@@ -191,29 +201,83 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
 }
 
 resource "aws_cloudwatch_log_group" "backend" {
-  name              = "/ecs/${local.name}-backend"
+  name              = "/ec2/${local.name}-backend"
   retention_in_days = 30
 }
 
-resource "aws_iam_role" "ecs_task_execution" {
-  name = "${local.name}-ecs-task-execution"
+resource "aws_iam_role" "backend_ec2" {
+  name = "${local.name}-backend-ec2"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Principal = { Service = "ec2.amazonaws.com" }
       Action    = "sts:AssumeRole"
     }]
   })
 }
 
-resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
-  role       = aws_iam_role.ecs_task_execution.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+resource "aws_iam_role_policy_attachment" "backend_ecr_readonly" {
+  role       = aws_iam_role.backend_ec2.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
-resource "aws_ecs_cluster" "main" {
-  name = "${local.name}-cluster"
+resource "aws_iam_role_policy_attachment" "backend_ssm" {
+  role       = aws_iam_role.backend_ec2.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy" "backend_runtime" {
+  name = "${local.name}-backend-runtime"
+  role = aws_iam_role.backend_ec2.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          aws_s3_bucket.artifacts.arn,
+          "${aws_s3_bucket.artifacts.arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "backend" {
+  name = "${local.name}-backend-profile"
+  role = aws_iam_role.backend_ec2.name
+}
+
+data "aws_ami" "amazon_linux" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-*-x86_64"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
 }
 
 resource "aws_acm_certificate" "api" {
@@ -253,7 +317,7 @@ resource "aws_lb_target_group" "backend" {
   name        = "${local.name}-backend-tg"
   port        = 8000
   protocol    = "HTTP"
-  target_type = "ip"
+  target_type = "instance"
   vpc_id      = aws_vpc.main.id
 
   health_check {
@@ -293,59 +357,94 @@ resource "aws_lb_listener" "https" {
   }
 }
 
-resource "aws_ecs_task_definition" "backend" {
-  family                   = "${local.name}-backend"
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
-  cpu                      = "512"
-  memory                   = "1024"
-  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+locals {
+  backend_user_data = <<-EOF
+#!/bin/bash
+set -euxo pipefail
 
-  container_definitions = jsonencode([
-    {
-      name         = "backend"
-      image        = var.backend_image
-      essential    = true
-      portMappings = [{ containerPort = 8000, hostPort = 8000, protocol = "tcp" }]
-      environment = [
-        { name = "APP_ENV", value = "production" },
-        { name = "DATABASE_URL", value = "postgresql+psycopg://${var.database_username}:${var.database_password}@${aws_db_instance.postgres.address}:5432/${var.database_name}" },
-        { name = "JWT_SECRET_KEY", value = var.jwt_secret_key },
-        { name = "CORS_ORIGINS", value = "https://${var.frontend_domain}" },
-        { name = "ALLOWED_HOSTS", value = var.api_domain },
-        { name = "AWS_REGION", value = var.aws_region },
-        { name = "S3_ARTIFACTS_BUCKET", value = aws_s3_bucket.artifacts.bucket }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.backend.name
-          awslogs-region        = var.aws_region
-          awslogs-stream-prefix = "backend"
-        }
+dnf update -y
+dnf install -y docker awscli amazon-cloudwatch-agent
+systemctl enable --now docker
+usermod -aG docker ec2-user
+
+mkdir -p /opt/case-inteligente /var/log/case-inteligente
+
+cat >/opt/case-inteligente/backend.env <<'ENVVARS'
+APP_ENV=production
+DATABASE_URL=postgresql+psycopg://${var.database_username}:${var.database_password}@${aws_db_instance.postgres.address}:5432/${var.database_name}
+JWT_SECRET_KEY=${var.jwt_secret_key}
+CORS_ORIGINS=https://${var.frontend_domain}
+ALLOWED_HOSTS=*
+AWS_REGION=${var.aws_region}
+S3_ARTIFACTS_BUCKET=${aws_s3_bucket.artifacts.bucket}
+ENVVARS
+
+aws ecr get-login-password --region ${var.aws_region} | docker login --username AWS --password-stdin ${split("/", var.backend_image)[0]}
+docker pull ${var.backend_image}
+docker rm -f case-inteligente-backend || true
+docker run -d \
+  --name case-inteligente-backend \
+  --restart unless-stopped \
+  --env-file /opt/case-inteligente/backend.env \
+  -p 8000:8000 \
+  -v case_generated_artifacts:/storage/generated \
+  ${var.backend_image}
+
+cat >/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'CWCONFIG'
+{
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/cloud-init-output.log",
+            "log_group_name": "${aws_cloudwatch_log_group.backend.name}",
+            "log_stream_name": "{instance_id}/cloud-init"
+          }
+        ]
       }
     }
-  ])
+  }
+}
+CWCONFIG
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+EOF
 }
 
-resource "aws_ecs_service" "backend" {
-  name            = "${local.name}-backend"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.backend.arn
-  desired_count   = var.desired_backend_count
-  launch_type     = "FARGATE"
+resource "aws_instance" "backend" {
+  ami                         = data.aws_ami.amazon_linux.id
+  instance_type               = var.ec2_instance_type
+  subnet_id                   = aws_subnet.public[0].id
+  vpc_security_group_ids      = [aws_security_group.backend.id]
+  iam_instance_profile        = aws_iam_instance_profile.backend.name
+  associate_public_ip_address = true
+  key_name                    = var.ec2_key_name
+  user_data_replace_on_change = true
+  user_data                   = local.backend_user_data
 
-  network_configuration {
-    subnets          = aws_subnet.private[*].id
-    security_groups  = [aws_security_group.backend.id]
-    assign_public_ip = false
+  root_block_device {
+    encrypted   = true
+    volume_size = 30
+    volume_type = "gp3"
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.backend.arn
-    container_name   = "backend"
-    container_port   = 8000
+  tags = {
+    Name = "${local.name}-backend-ec2"
   }
+
+  depends_on = [
+    aws_db_instance.postgres,
+    aws_cloudwatch_log_group.backend,
+    aws_iam_role_policy.backend_runtime,
+    aws_iam_role_policy_attachment.backend_ecr_readonly,
+    aws_iam_role_policy_attachment.backend_ssm
+  ]
+}
+
+resource "aws_lb_target_group_attachment" "backend" {
+  target_group_arn = aws_lb_target_group.backend.arn
+  target_id        = aws_instance.backend.id
+  port             = 8000
 
   depends_on = [aws_lb_listener.https]
 }

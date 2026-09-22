@@ -2,11 +2,11 @@ flowchart TB
     U[Usuarios] --> CF[CloudFront HTTPS]
     CF --> S3F[S3 Frontend privado]
     U --> ALB[Application Load Balancer HTTPS]
-    ALB --> ECS[ECS Fargate Backend FastAPI]
-    ECS --> RDS[RDS PostgreSQL privado]
-    ECS --> S3A[S3 Artefactos versionado]
-    ECS --> AI[AI Engine local offline]
-    ECS --> WS[WebSocket colaborativo]
+    ALB --> EC2[EC2 Docker Backend FastAPI]
+    EC2 --> RDS[RDS PostgreSQL privado]
+    EC2 --> S3A[S3 Artefactos versionado]
+    EC2 --> AI[AI Engine local offline]
+    EC2 --> WS[WebSocket colaborativo]
     R53[Route53 dominio propio] --> CF
     R53 --> ALB
-    CW[CloudWatch Logs] <-- ECS
+    CW[CloudWatch Logs] <-- EC2

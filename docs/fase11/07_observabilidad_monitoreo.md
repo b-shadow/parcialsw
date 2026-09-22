@@ -19,7 +19,7 @@ Endpoints:
 
 ## AWS
 
-Terraform configura CloudWatch Logs para ECS backend con retencion de 30 dias.
+Terraform configura CloudWatch Logs para el arranque de EC2/backend con retencion de 30 dias.
 
 ## Operacion
 

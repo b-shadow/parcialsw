@@ -7,7 +7,7 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
 }
 
 resource "aws_acm_certificate" "frontend" {
-  provider          = aws
+  provider          = aws.us_east_1
   domain_name       = var.frontend_domain
   validation_method = "DNS"
 }
@@ -29,6 +29,7 @@ resource "aws_route53_record" "frontend_cert_validation" {
 }
 
 resource "aws_acm_certificate_validation" "frontend" {
+  provider                = aws.us_east_1
   certificate_arn         = aws_acm_certificate.frontend.arn
   validation_record_fqdns = [for record in aws_route53_record.frontend_cert_validation : record.fqdn]
 }

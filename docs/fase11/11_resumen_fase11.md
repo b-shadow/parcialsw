@@ -11,7 +11,7 @@ Se completo la integracion operacional y despliegue productivo:
 - compose productivo.
 - Terraform AWS para dominio propio.
 - S3/CloudFront para frontend.
-- ECS Fargate/ALB/RDS para backend y base de datos.
+- EC2 con Docker/ALB/RDS para backend y base de datos.
 - S3 versionado para artefactos.
 - scripts de deploy, backups, restore y smoke test.
 - GitHub Actions CI/CD.
@@ -43,7 +43,7 @@ Se completo la integracion operacional y despliegue productivo:
 
 ## Decisiones tecnicas
 
-- ECS Fargate para backend por operacion administrada y escalabilidad.
+- EC2 con Docker para backend por despliegue directo, control operativo y menor complejidad inicial.
 - RDS PostgreSQL para persistencia cifrada y backups administrados.
 - S3 + CloudFront para frontend por bajo costo, HTTPS y cache global.
 - S3 versionado para artefactos generados.

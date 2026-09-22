@@ -30,7 +30,7 @@ variable "route53_zone_id" {
 
 variable "backend_image" {
   type        = string
-  description = "URI ECR de la imagen backend."
+  description = "URI ECR completa de la imagen backend, por ejemplo 123456789012.dkr.ecr.us-east-1.amazonaws.com/case-inteligente-backend:latest."
 }
 
 variable "frontend_bucket_name" {
@@ -65,7 +65,26 @@ variable "jwt_secret_key" {
   description = "Secreto JWT de produccion."
 }
 
-variable "desired_backend_count" {
-  type    = number
-  default = 2
+variable "ec2_instance_type" {
+  type        = string
+  default     = "t3.small"
+  description = "Tipo de instancia EC2 para ejecutar el backend Docker."
+}
+
+variable "ec2_key_name" {
+  type        = string
+  default     = null
+  description = "Nombre de key pair EC2 para SSH. Puede quedar null si se usa Session Manager."
+}
+
+variable "admin_ssh_cidr" {
+  type        = string
+  default     = "0.0.0.0/0"
+  description = "CIDR autorizado para SSH si se habilita el puerto 22."
+}
+
+variable "enable_ssh" {
+  type        = bool
+  default     = false
+  description = "Habilita acceso SSH a la instancia EC2. Recomendado false y usar SSM Session Manager."
 }

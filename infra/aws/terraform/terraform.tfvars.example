@@ -11,3 +11,7 @@ database_name         = "case_inteligente"
 database_username     = "case_user"
 database_password     = "replace-with-strong-database-password"
 jwt_secret_key        = "replace-with-64-byte-random-secret"
+ec2_instance_type     = "t3.small"
+ec2_key_name          = null
+enable_ssh            = false
+admin_ssh_cidr        = "TU_IP_PUBLICA/32"

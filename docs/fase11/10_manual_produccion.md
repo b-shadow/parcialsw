@@ -17,11 +17,11 @@ Valores clave:
 
 ## Despliegue AWS
 
-1. Crear repositorios ECR para backend y frontend.
-2. Publicar imagenes:
+1. Crear repositorio ECR para backend.
+2. Publicar imagen backend:
 
 ```powershell
-.\scripts\aws-deploy.ps1 -AwsAccountId 123456789012 -Region us-east-1 -BackendRepository 123456789012.dkr.ecr.us-east-1.amazonaws.com/case-inteligente-backend -FrontendRepository 123456789012.dkr.ecr.us-east-1.amazonaws.com/case-inteligente-frontend
+.\scripts\aws-deploy.ps1 -AwsAccountId 123456789012 -Region us-east-1 -BackendRepository 123456789012.dkr.ecr.us-east-1.amazonaws.com/case-inteligente-backend -Tag latest
 ```
 
 3. Configurar `infra/aws/terraform/terraform.tfvars`.
@@ -32,6 +32,8 @@ cd infra/aws/terraform
 terraform init
 terraform apply
 ```
+
+Terraform crea EC2 con Docker, descarga la imagen backend desde ECR y ejecuta el contenedor detras del ALB.
 
 5. Publicar frontend:
 

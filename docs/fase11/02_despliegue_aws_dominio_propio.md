@@ -6,7 +6,7 @@ La infraestructura declarativa esta en `infra/aws/terraform/` e incluye:
 
 - VPC con subnets publicas y privadas.
 - Application Load Balancer HTTPS.
-- ECS Fargate para backend FastAPI.
+- EC2 con Docker para backend FastAPI.
 - RDS PostgreSQL 16.
 - S3 versionado para artefactos generados.
 - S3 privado para frontend.
@@ -32,4 +32,4 @@ Ejemplo:
 
 ## Validacion
 
-La configuracion Terraform fue formateada e inicializada con provider AWS y `terraform validate` finalizo correctamente.
+La configuracion Terraform debe validarse con `terraform fmt` y `terraform validate` antes de aplicar cambios.
