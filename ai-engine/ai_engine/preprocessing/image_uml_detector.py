@@ -83,9 +83,11 @@ def analyze_uml_image(image_base64: str | None) -> ImageUmlDetection:
     signature = _detect_signature(boxes_with_text)
     classes = [_parse_class_box(box) for box in boxes_with_text]
     classes = [uml_class for uml_class in classes if uml_class.name]
-    if not classes and signature == "association_class_triangular":
-        classes = _build_academic_association_profile(boxes_with_text)
-        observations.append("Perfil visual de inscripcion academica aplicado a cajas UML manuscritas.")
+    if not classes and boxes_with_text:
+        classes = _build_generic_visual_classes(boxes_with_text)
+        observations.append(
+            "No se leyo texto confiable por OCR; se generaron clases genericas desde las cajas detectadas."
+        )
     relationships = _detect_relationships(classes, boxes_with_text, signature)
     return ImageUmlDetection(
         classes=classes,
@@ -185,7 +187,7 @@ def _read_box_text(image, box: DetectedBox) -> DetectedBox:
     )
     try:
         text = pytesseract.image_to_string(threshold, lang="eng+spa", config="--psm 6")
-    except Exception:
+    except (pytesseract.TesseractError, pytesseract.TesseractNotFoundError):
         text = ""
     return DetectedBox(x=box.x, y=box.y, width=box.width, height=box.height, text=text)
 
@@ -277,49 +279,18 @@ def _detect_signature(boxes: list[DetectedBox]) -> str | None:
     return None
 
 
-def _build_academic_association_profile(boxes: list[DetectedBox]) -> list[DetectedUmlClass]:
-    top_boxes = sorted(boxes[:2], key=lambda box: box.x)
-    bottom_box = boxes[2]
+def _build_generic_visual_classes(boxes: list[DetectedBox]) -> list[DetectedUmlClass]:
     return [
         DetectedUmlClass(
-            name="Estudiante",
+            name=f"Clase{index + 1}",
             attributes=[
                 DetectedUmlAttribute(name="id", data_type="UUID"),
                 DetectedUmlAttribute(name="nombre", data_type="String"),
-                DetectedUmlAttribute(name="correo", data_type="String"),
-                DetectedUmlAttribute(name="fechaRegistro", data_type="Date"),
             ],
-            methods=[
-                DetectedUmlMethod(name="inscribirse", return_type="void"),
-                DetectedUmlMethod(name="actualizarPerfil", return_type="void"),
-            ],
-            box=top_boxes[0],
-        ),
-        DetectedUmlClass(
-            name="Curso",
-            attributes=[
-                DetectedUmlAttribute(name="id", data_type="UUID"),
-                DetectedUmlAttribute(name="nombre", data_type="String"),
-                DetectedUmlAttribute(name="descripcion", data_type="String"),
-                DetectedUmlAttribute(name="duracionHoras", data_type="Integer"),
-            ],
-            methods=[
-                DetectedUmlMethod(name="agregarTema", return_type="void"),
-                DetectedUmlMethod(name="obtenerDetalle", return_type="void"),
-            ],
-            box=top_boxes[1],
-        ),
-        DetectedUmlClass(
-            name="Inscripcion",
-            attributes=[
-                DetectedUmlAttribute(name="id", data_type="UUID"),
-                DetectedUmlAttribute(name="fecha", data_type="Date"),
-                DetectedUmlAttribute(name="estado", data_type="String"),
-                DetectedUmlAttribute(name="notaFinal", data_type="Double"),
-            ],
-            methods=[DetectedUmlMethod(name="obtenerDetalle", return_type="void")],
-            box=bottom_box,
-        ),
+            methods=[],
+            box=box,
+        )
+        for index, box in enumerate(boxes)
     ]
 
 

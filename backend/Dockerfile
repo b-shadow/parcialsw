@@ -5,6 +5,10 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY ai-engine /tmp/ai-engine
 COPY backend/pyproject.toml backend/alembic.ini ./
 COPY backend/app ./app

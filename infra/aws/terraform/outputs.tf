@@ -3,7 +3,7 @@ output "api_url" {
 }
 
 output "frontend_url" {
-  value = "https://${var.frontend_domain}"
+  value = local.frontend_origin
 }
 
 output "rds_endpoint" {
@@ -19,7 +19,7 @@ output "frontend_bucket" {
 }
 
 output "cloudfront_distribution_id" {
-  value = aws_cloudfront_distribution.frontend.id
+  value = var.enable_cloudfront ? aws_cloudfront_distribution.frontend[0].id : null
 }
 
 output "backend_ec2_instance_id" {

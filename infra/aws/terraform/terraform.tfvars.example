@@ -3,6 +3,12 @@ project_name          = "case-inteligente"
 domain_name           = "tu-dominio.com"
 frontend_domain       = "app.tu-dominio.com"
 api_domain            = "api.tu-dominio.com"
+frontend_external_url = "https://case-inteligente.vercel.app"
+frontend_allowed_origins = [
+  "https://case-inteligente.vercel.app",
+  "https://case-inteligente-v2.vercel.app",
+]
+enable_cloudfront     = false
 route53_zone_id       = "ZXXXXXXXXXXXXX"
 backend_image         = "123456789012.dkr.ecr.us-east-1.amazonaws.com/case-inteligente-backend:latest"
 frontend_bucket_name  = "case-inteligente-frontend-tu-dominio"
@@ -11,6 +17,7 @@ database_name         = "case_inteligente"
 database_username     = "case_user"
 database_password     = "replace-with-strong-database-password"
 jwt_secret_key        = "replace-with-64-byte-random-secret"
+rds_backup_retention_period = 0
 ec2_instance_type     = "t3.small"
 ec2_key_name          = null
 enable_ssh            = false

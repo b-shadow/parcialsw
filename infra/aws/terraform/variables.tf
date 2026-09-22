@@ -38,6 +38,27 @@ variable "frontend_bucket_name" {
   description = "Nombre global unico del bucket S3 del frontend."
 }
 
+variable "frontend_external_url" {
+  type        = string
+  default     = "https://case-inteligente.vercel.app"
+  description = "URL externa del frontend cuando CloudFront esta deshabilitado, por ejemplo Vercel."
+}
+
+variable "frontend_allowed_origins" {
+  type = list(string)
+  default = [
+    "https://case-inteligente.vercel.app",
+    "https://case-inteligente-v2.vercel.app",
+  ]
+  description = "Origins adicionales permitidos para CORS en el backend."
+}
+
+variable "enable_cloudfront" {
+  type        = bool
+  default     = false
+  description = "Habilita S3 + CloudFront para el frontend. Requiere cuenta AWS verificada para CloudFront."
+}
+
 variable "artifacts_bucket_name" {
   type        = string
   description = "Nombre global unico del bucket S3 de artefactos generados."
@@ -63,6 +84,12 @@ variable "jwt_secret_key" {
   type        = string
   sensitive   = true
   description = "Secreto JWT de produccion."
+}
+
+variable "rds_backup_retention_period" {
+  type        = number
+  default     = 0
+  description = "Dias de retencion de backups RDS. Use 0 en cuentas free tier restringidas."
 }
 
 variable "ec2_instance_type" {

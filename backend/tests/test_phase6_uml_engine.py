@@ -120,6 +120,19 @@ def test_text_prompt_generates_internal_uml_model() -> None:
     assert model.relationships
 
 
+def test_text_prompt_generates_single_class_with_explicit_attributes() -> None:
+    model = build_uml_from_text(
+        "generar una clase con atributos id que es UUID y nombre que es string"
+    )
+
+    assert [uml_class.name for uml_class in model.classes] == ["Entidad"]
+    assert [(attribute.name, attribute.data_type) for attribute in model.classes[0].attributes] == [
+        ("id", "UUID"),
+        ("nombre", "String"),
+    ]
+    assert model.relationships == []
+
+
 def test_internal_uml_validator_detects_design_findings() -> None:
     model = UmlDiagramModel(
         name="Duplicados",

@@ -1,3 +1,5 @@
+import re
+
 from ai_engine.datasets import get_seed_dataset
 from ai_engine.embedding import LocalVectorStore
 from ai_engine.evaluation import evaluate_generation
@@ -57,13 +59,7 @@ class LocalAIEngine:
             detection = analyze_uml_image(request.image_base64)
             if detection.classes:
                 return self._build_response_from_image_detection(detection)
-            if detection.signature == "association_class_triangular":
-                response = self._build_hand_drawn_uml_response()
-                response.observations[:0] = detection.observations
-                return response
         description = normalize_image_description(request.description, request.image_base64, request.file_name)
-        if request.image_base64 and self._is_generic_image_description(description):
-            return self._build_hand_drawn_uml_response()
         return self._build_response(description, "image", True)
 
     def validate_uml(self, request: UmlValidationRequest) -> UmlValidationResponse:
@@ -188,6 +184,10 @@ class LocalAIEngine:
         return EvaluationResponse(**evaluate_generation(dataset, outputs).model_dump())
 
     def _build_response(self, text: str, source_type: str, use_rag: bool) -> UmlGenerationResponse:
+        explicit_class = self._try_build_explicit_single_class(text, source_type)
+        if explicit_class:
+            return explicit_class
+
         if self._matches_academic_enrollment_prompt(text):
             response = self._build_hand_drawn_uml_response()
             response.confidence = 0.9 if source_type == "text" else 0.84
@@ -260,15 +260,100 @@ class LocalAIEngine:
             knowledge_context=[item.topic for item in knowledge],
         )
 
-    def _is_generic_image_description(self, description: str) -> bool:
-        generic_markers = {
-            "diagrama uml de clases dibujado en imagen",
-            "whatsapp image",
-            "imagen",
+    def _try_build_explicit_single_class(
+        self,
+        text: str,
+        source_type: str,
+    ) -> UmlGenerationResponse | None:
+        normalized = normalize_text(text)
+        if "clase" not in normalized or "atributo" not in normalized:
+            return None
+
+        class_name = self._extract_requested_class_name(normalized)
+        attributes = self._extract_requested_attributes(normalized)
+        if not attributes:
+            return None
+
+        return UmlGenerationResponse(
+            classes=[
+                UmlClass(
+                    name=class_name,
+                    stereotype="entity",
+                    attributes=attributes,
+                    methods=[],
+                )
+            ],
+            relationships=[],
+            confidence=0.9,
+            observations=[
+                f"Procesado localmente en modo {source_type}.",
+                "Solicitud explicita de una clase con atributos detectada.",
+                "Salida estructurada compatible con el motor UML.",
+            ],
+            knowledge_context=[],
+        )
+
+    def _extract_requested_class_name(self, normalized: str) -> str:
+        match = re.search(
+            r"\bclase\s+(?:llamada|nombrada|denominada|con\s+nombre)?\s*([a-zA-Z][a-zA-Z0-9_]*)",
+            normalized,
+        )
+        if match:
+            candidate = match.group(1)
+            if candidate not in {"con", "que", "para", "atributo", "atributos"}:
+                return self._to_pascal_case(candidate)
+        return "Entidad"
+
+    def _extract_requested_attributes(self, normalized: str) -> list[UmlAttribute]:
+        attributes_section = normalized.split("atributos", maxsplit=1)[-1]
+        pattern = re.compile(
+            r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::|que\s+es|de\s+tipo|tipo|es)\s*([a-zA-Z_][a-zA-Z0-9_]*)"
+        )
+        attributes: list[UmlAttribute] = []
+        seen: set[str] = set()
+        for raw_name, raw_type in pattern.findall(attributes_section):
+            if raw_name in {"atributo", "atributos", "tipo", "es"}:
+                continue
+            name = self._to_camel_case(raw_name)
+            if not name or name.lower() in seen:
+                continue
+            attributes.append(
+                UmlAttribute(
+                    name=name,
+                    data_type=self._normalize_uml_type(raw_type),
+                    is_required=name == "id",
+                )
+            )
+            seen.add(name.lower())
+        return attributes
+
+    def _normalize_uml_type(self, raw_type: str) -> str:
+        type_map = {
+            "uuid": "UUID",
+            "string": "String",
+            "str": "String",
+            "texto": "String",
+            "integer": "Integer",
+            "int": "Integer",
+            "entero": "Integer",
+            "long": "Long",
+            "double": "Double",
+            "decimal": "Double",
+            "date": "Date",
+            "fecha": "Date",
+            "boolean": "Boolean",
+            "bool": "Boolean",
         }
-        normalized = description.lower().strip()
-        terms = [term for term in extract_domain_terms(normalized) if any(character.isalpha() for character in term)]
-        return normalized in generic_markers or len(terms) < 2
+        normalized = normalize_text(raw_type).replace(" ", "")
+        return type_map.get(normalized, self._to_pascal_case(normalized) or "String")
+
+    def _to_pascal_case(self, value: str) -> str:
+        words = [word for word in re.findall(r"[a-zA-Z0-9_]+", value) if word]
+        return "".join(word[:1].upper() + word[1:] for word in words)
+
+    def _to_camel_case(self, value: str) -> str:
+        pascal = self._to_pascal_case(value)
+        return pascal[:1].lower() + pascal[1:] if pascal else ""
 
     def _matches_academic_enrollment_prompt(self, text: str) -> bool:
         normalized = normalize_text(text)

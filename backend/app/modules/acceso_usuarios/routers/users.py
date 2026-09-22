@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.database.session import get_db
 from app.core.security.dependencies import get_current_user, require_admin
 from app.modules.acceso_usuarios.models import AuditLog, Role, User
+from app.modules.acceso_usuarios.repositories.role_repository import RoleRepository
 from app.modules.acceso_usuarios.schemas.user import (
     AdminUserUpdateRequest,
     AuditLogResponse,
@@ -14,7 +15,6 @@ from app.modules.acceso_usuarios.schemas.user import (
     RoleResponse,
     UserResponse,
 )
-from app.modules.acceso_usuarios.repositories.role_repository import RoleRepository
 from app.modules.acceso_usuarios.services.audit_service import AuditService
 from app.modules.acceso_usuarios.services.user_service import UserService
 

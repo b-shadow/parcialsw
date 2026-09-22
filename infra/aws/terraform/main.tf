@@ -7,6 +7,11 @@ locals {
   public_subnets     = ["10.20.1.0/24", "10.20.2.0/24"]
   private_subnets    = ["10.20.11.0/24", "10.20.12.0/24"]
   availability_zones = slice(data.aws_availability_zones.available.names, 0, 2)
+  frontend_origin    = var.enable_cloudfront ? "https://${var.frontend_domain}" : var.frontend_external_url
+  backend_cors_origins = join(",", distinct(concat(
+    [local.frontend_origin],
+    var.frontend_allowed_origins,
+  )))
 }
 
 resource "aws_vpc" "main" {
@@ -156,7 +161,7 @@ resource "aws_db_instance" "postgres" {
   db_subnet_group_name    = aws_db_subnet_group.main.name
   vpc_security_group_ids  = [aws_security_group.rds.id]
   storage_encrypted       = true
-  backup_retention_period = 7
+  backup_retention_period = var.rds_backup_retention_period
   skip_final_snapshot     = false
   deletion_protection     = true
 }
@@ -373,7 +378,7 @@ cat >/opt/case-inteligente/backend.env <<'ENVVARS'
 APP_ENV=production
 DATABASE_URL=postgresql+psycopg://${var.database_username}:${var.database_password}@${aws_db_instance.postgres.address}:5432/${var.database_name}
 JWT_SECRET_KEY=${var.jwt_secret_key}
-CORS_ORIGINS=https://${var.frontend_domain}
+CORS_ORIGINS=${local.backend_cors_origins}
 ALLOWED_HOSTS=*
 AWS_REGION=${var.aws_region}
 S3_ARTIFACTS_BUCKET=${aws_s3_bucket.artifacts.bucket}

@@ -58,19 +58,34 @@ def test_image_detector_identifies_association_class_geometry() -> None:
     assert len(detection.boxes) == 3
     assert detection.signature == "association_class_triangular"
     assert [uml_class.name for uml_class in detection.classes] == [
-        "Estudiante",
-        "Curso",
-        "Inscripcion",
+        "Clase1",
+        "Clase2",
+        "Clase3",
     ]
-    assert [attribute.name for attribute in detection.classes[0].attributes] == [
-        "id",
-        "nombre",
-        "correo",
-        "fechaRegistro",
+    assert [attribute.name for attribute in detection.classes[0].attributes] == ["id", "nombre"]
+    assert detection.relationships[0].source == "Clase1"
+    assert detection.relationships[0].target == "Clase2"
+    assert detection.relationships[0].association_class_name == "Clase3"
+    assert not {"Estudiante", "Curso", "Inscripcion"}.intersection(
+        {uml_class.name for uml_class in detection.classes}
+    )
+
+
+def test_text_generates_single_class_with_requested_attributes() -> None:
+    service = LocalAIService()
+
+    response = service.text_to_uml(
+        UmlGenerationRequest(
+            prompt="generar una clase con atributos id que es UUID y nombre que es string"
+        )
+    )
+
+    assert [uml_class.name for uml_class in response.classes] == ["Entidad"]
+    assert [(attribute.name, attribute.data_type) for attribute in response.classes[0].attributes] == [
+        ("id", "UUID"),
+        ("nombre", "String"),
     ]
-    assert detection.relationships[0].source == "Estudiante"
-    assert detection.relationships[0].target == "Curso"
-    assert detection.relationships[0].association_class_name == "Inscripcion"
+    assert response.relationships == []
 
 
 def test_text_and_voice_generate_academic_association_class() -> None:

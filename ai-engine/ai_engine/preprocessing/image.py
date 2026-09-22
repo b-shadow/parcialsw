@@ -1,6 +1,5 @@
 from ai_engine.preprocessing.text import normalize_text
 
-
 GENERIC_IMAGE_NAME_MARKERS = (
     "whatsapp image",
     "img ",
