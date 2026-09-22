@@ -162,6 +162,10 @@ def render_run_script_sh(project: SpringBootProject) -> str:
     return """#!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
+
 if command -v docker >/dev/null 2>&1; then
   docker compose up -d postgres
 fi
@@ -203,6 +207,9 @@ fi
 
 def render_run_script_ps1(project: SpringBootProject) -> str:
     return """$ErrorActionPreference = "Stop"
+
+$projectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+Set-Location $projectRoot
 
 if (Get-Command docker -ErrorAction SilentlyContinue) {
     docker compose up -d postgres
