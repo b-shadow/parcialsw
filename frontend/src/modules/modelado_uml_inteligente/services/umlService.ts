@@ -224,6 +224,109 @@ export const umlService = {
     }
     return diagram;
   },
+  async applyAiModificationToDiagram(payload: {
+    diagramId: string;
+    classes: UmlClassDetail[];
+    relationships: UmlRelationship[];
+    result: AiUmlResponse;
+  }) {
+    const associationClassNames = new Set(
+      payload.result.relationships
+        .map((relationship) => relationship.metadata_json?.association_class_name)
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .map((value) => value.toLowerCase())
+    );
+    const classByName = new Map<string, UmlClass | UmlClassDetail>(
+      payload.classes.map((umlClass) => [umlClass.name.toLowerCase(), umlClass])
+    );
+
+    for (const [index, aiClass] of payload.result.classes.entries()) {
+      let targetClass = classByName.get(aiClass.name.toLowerCase());
+      if (!targetClass) {
+        targetClass = await this.createClass(payload.diagramId, {
+          name: aiClass.name,
+          stereotype: aiClass.stereotype,
+          ...positionForClass(payload.classes.length + index, payload.classes.length + payload.result.classes.length, aiClass.name, associationClassNames)
+        });
+        classByName.set(aiClass.name.toLowerCase(), targetClass);
+      }
+
+      const existingAttributes =
+        "attributes" in targetClass ? new Set(targetClass.attributes.map((attribute) => attribute.name.toLowerCase())) : new Set<string>();
+      for (const [attributeIndex, attribute] of (aiClass.attributes ?? []).entries()) {
+        if (existingAttributes.has(attribute.name.toLowerCase())) {
+          continue;
+        }
+        await this.addAttribute(targetClass.id, {
+          name: attribute.name,
+          data_type: attribute.data_type || "String",
+          visibility: attribute.visibility ?? "private",
+          is_required: Boolean(attribute.is_required),
+          order_index: existingAttributes.size + attributeIndex
+        });
+        existingAttributes.add(attribute.name.toLowerCase());
+      }
+
+      const existingMethods =
+        "methods" in targetClass ? new Set(targetClass.methods.map((method) => method.name.toLowerCase())) : new Set<string>();
+      for (const [methodIndex, method] of (aiClass.methods ?? []).entries()) {
+        if (existingMethods.has(method.name.toLowerCase())) {
+          continue;
+        }
+        await this.addMethod(targetClass.id, {
+          name: method.name,
+          return_type: method.return_type || "void",
+          visibility: method.visibility ?? "public",
+          order_index: existingMethods.size + methodIndex
+        });
+        existingMethods.add(method.name.toLowerCase());
+      }
+    }
+
+    for (const relationship of payload.result.relationships) {
+      const source = classByName.get(relationship.source.toLowerCase());
+      const target = classByName.get(relationship.target.toLowerCase());
+      if (!source || !target) {
+        continue;
+      }
+      const metadata = { ...(relationship.metadata_json ?? {}) };
+      const associationClassName = metadata.association_class_name;
+      if (typeof associationClassName === "string") {
+        const associationClass = classByName.get(associationClassName.toLowerCase());
+        if (associationClass) {
+          metadata.association_class_id = associationClass.id;
+        }
+        delete metadata.association_class_name;
+      }
+
+      const existingRelationship = payload.relationships.find((item) => {
+        const sameDirection = item.source_class_id === source.id && item.target_class_id === target.id;
+        const reverseDirection = item.source_class_id === target.id && item.target_class_id === source.id;
+        return (sameDirection || reverseDirection) && normalizeRelationshipType(item.relationship_type) === normalizeRelationshipType(relationship.relationship_type);
+      });
+
+      if (existingRelationship) {
+        await this.updateRelationship(existingRelationship.id, {
+          relationship_type: normalizeRelationshipType(relationship.relationship_type),
+          label: relationship.label ?? existingRelationship.label,
+          source_cardinality: relationship.source_cardinality ?? existingRelationship.source_cardinality,
+          target_cardinality: relationship.target_cardinality ?? existingRelationship.target_cardinality,
+          metadata_json: { ...existingRelationship.metadata_json, ...metadata }
+        });
+        continue;
+      }
+
+      await this.createRelationship(payload.diagramId, {
+        source_class_id: source.id,
+        target_class_id: target.id,
+        relationship_type: normalizeRelationshipType(relationship.relationship_type),
+        label: relationship.label ?? undefined,
+        source_cardinality: relationship.source_cardinality ?? null,
+        target_cardinality: relationship.target_cardinality ?? null,
+        metadata_json: metadata
+      });
+    }
+  },
   async importXmi(payload: { project_id: string; name: string; content: string; file_name: string }) {
     const response = await apiClient.post<UmlDiagram>("/uml/xmi/import", payload);
     return response.data;

@@ -103,6 +103,10 @@ class LocalAIEngine:
         )
 
     def modify_uml(self, request: UmlModificationRequest) -> UmlModificationResponse:
+        association_class_change = self._try_modify_association_class(request)
+        if association_class_change:
+            return association_class_change
+
         generated = self._build_response(request.instruction, "text", True)
         existing_names = {uml_class.name.lower() for uml_class in request.classes}
         classes = [*request.classes]
@@ -138,6 +142,103 @@ class LocalAIEngine:
             changes=changes or ["Modelo revisado sin cambios estructurales necesarios"],
             confidence=0.82,
         )
+
+    def _try_modify_association_class(
+        self,
+        request: UmlModificationRequest,
+    ) -> UmlModificationResponse | None:
+        normalized = normalize_text(request.instruction)
+        association_markers = (
+            "association class",
+            "asociation class",
+            "clase asociativa",
+            "clase de asociacion",
+        )
+        if not any(marker in normalized for marker in association_markers):
+            return None
+
+        endpoints = self._extract_existing_endpoint_classes(normalized, request.classes)
+        if len(endpoints) < 2:
+            return None
+
+        association_class_name = self._extract_association_class_name(normalized)
+        attributes = self._extract_requested_attributes(normalized)
+        if not attributes:
+            attributes = [
+                UmlAttribute(name="id", data_type="UUID", is_required=True),
+                UmlAttribute(name="nombre", data_type="String"),
+            ]
+
+        existing_by_name = {uml_class.name.lower(): uml_class for uml_class in request.classes}
+        classes = [*request.classes]
+        if association_class_name.lower() not in existing_by_name:
+            classes.append(
+                UmlClass(
+                    name=association_class_name,
+                    stereotype="association",
+                    attributes=attributes,
+                    methods=[],
+                )
+            )
+
+        source, target = endpoints[:2]
+        relationships = [*request.relationships]
+        relation_exists = any(
+            relationship.source.lower() == source.name.lower()
+            and relationship.target.lower() == target.name.lower()
+            and relationship.metadata_json.get("association_class_name", "").lower()
+            == association_class_name.lower()
+            for relationship in relationships
+        )
+        if not relation_exists:
+            relationships.append(
+                UmlRelationship(
+                    source=source.name,
+                    target=target.name,
+                    relationship_type="association",
+                    label=association_class_name[:1].lower() + association_class_name[1:],
+                    source_cardinality="*",
+                    target_cardinality="*",
+                    metadata_json={"association_class_name": association_class_name},
+                )
+            )
+
+        return UmlModificationResponse(
+            classes=classes,
+            relationships=relationships,
+            changes=[
+                f"Clase asociativa {association_class_name} conectada entre {source.name} y {target.name}."
+            ],
+            confidence=0.88,
+        )
+
+    def _extract_existing_endpoint_classes(
+        self,
+        normalized: str,
+        classes: list[UmlClass],
+    ) -> list[UmlClass]:
+        matches: list[tuple[int, UmlClass]] = []
+        for uml_class in classes:
+            class_name = normalize_text(uml_class.name)
+            position = normalized.find(class_name)
+            if position >= 0:
+                matches.append((position, uml_class))
+        matches.sort(key=lambda item: item[0])
+        return [uml_class for _, uml_class in matches]
+
+    def _extract_association_class_name(self, normalized: str) -> str:
+        patterns = (
+            r"\bresultante\s+(?:sera|sea|es)?\s*(?:la\s+)?clase\s+([a-zA-Z][a-zA-Z0-9_]*)",
+            r"\bclase\s+(?:asociativa|de\s+asociacion)\s+(?:llamada|nombrada|denominada)?\s*([a-zA-Z][a-zA-Z0-9_]*)",
+            r"\b(?:llamada|nombrada|denominada)\s+([a-zA-Z][a-zA-Z0-9_]*)",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, normalized)
+            if match:
+                candidate = match.group(1)
+                if candidate not in {"con", "entre", "atributo", "atributos"}:
+                    return self._to_pascal_case(candidate)
+        return "Detalle"
 
     def generate_code_guidance(self, request: CodeGenerationRequest) -> CodeGenerationResponse:
         plan = self.plan_software(SoftwarePlanRequest(**request.model_dump()))
@@ -314,6 +415,28 @@ class LocalAIEngine:
         for raw_name, raw_type in pattern.findall(attributes_section):
             if raw_name in {"atributo", "atributos", "tipo", "es"}:
                 continue
+            name = self._to_camel_case(raw_name)
+            if not name or name.lower() in seen:
+                continue
+            attributes.append(
+                UmlAttribute(
+                    name=name,
+                    data_type=self._normalize_uml_type(raw_type),
+                    is_required=name == "id",
+                )
+            )
+            seen.add(name.lower())
+        if attributes:
+            return attributes
+
+        tokens = [
+            token
+            for token in re.findall(r"[a-zA-Z_][a-zA-Z0-9_]*", attributes_section)
+            if token not in {"con", "y", "e", "atributo", "atributos", "que", "es", "tipo"}
+        ]
+        for index in range(0, len(tokens) - 1, 2):
+            raw_name = tokens[index]
+            raw_type = tokens[index + 1]
             name = self._to_camel_case(raw_name)
             if not name or name.lower() in seen:
                 continue

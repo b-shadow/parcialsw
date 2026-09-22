@@ -4,7 +4,11 @@ from ai_engine.services import LocalAIService
 from ai_engine.services.contracts import (
     ImageProcessingRequest,
     SoftwarePlanRequest,
+    UmlAttribute,
+    UmlClass,
     UmlGenerationRequest,
+    UmlModificationRequest,
+    UmlRelationship,
     UmlValidationRequest,
     VoiceProcessingRequest,
 )
@@ -117,6 +121,36 @@ def test_text_and_voice_generate_academic_association_class() -> None:
         assert response.relationships[0].source_cardinality == "*"
         assert response.relationships[0].target_cardinality == "*"
         assert response.relationships[0].metadata_json["association_class_name"] == "Inscripcion"
+
+
+def test_modify_existing_uml_adds_association_class() -> None:
+    service = LocalAIService()
+
+    response = service.modify_uml(
+        UmlModificationRequest(
+            instruction=(
+                "entre la clase Estudiante y Curso haz una association class y en la "
+                "resultante sera clase Detalle con atributos nombre string y id UUID"
+            ),
+            classes=[
+                UmlClass(name="Estudiante", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                UmlClass(name="Curso", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+            ],
+            relationships=[
+                UmlRelationship(source="Estudiante", target="Curso", relationship_type="association")
+            ],
+        )
+    )
+
+    detalle = next(uml_class for uml_class in response.classes if uml_class.name == "Detalle")
+    assert detalle.stereotype == "association"
+    assert [(attribute.name, attribute.data_type) for attribute in detalle.attributes] == [
+        ("nombre", "String"),
+        ("id", "UUID"),
+    ]
+    assert response.relationships[-1].metadata_json["association_class_name"] == "Detalle"
+    assert response.relationships[-1].source == "Estudiante"
+    assert response.relationships[-1].target == "Curso"
 
 
 def test_ai_validation_and_software_plan() -> None:

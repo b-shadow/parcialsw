@@ -5,7 +5,6 @@ import { Image, Mic, Plus, Save, Trash2, X } from "lucide-react";
 import { createProjectSocket, sendProjectEvent } from "../../../core/websocket/projectSocket";
 import { useThemeStore } from "../../../core/theme/themeStore";
 import { Button } from "../../../shared/components/Button";
-import { Input } from "../../../shared/components/Input";
 import { Panel } from "../../../shared/components/Panel";
 import { StatusBadge } from "../../../shared/components/StatusBadge";
 import { cn } from "../../../shared/utils/cn";
@@ -17,15 +16,6 @@ import { useUmlStore } from "../store/umlStore";
 import type { UmlAttribute, UmlMethod } from "../types/uml";
 
 type UmlTool = "select" | "class" | "association" | "inheritance" | "associationClass";
-
-const relationshipOptions = [
-  { value: "association", label: "Asociacion", line: "Linea continua" },
-  { value: "inheritance", label: "Herencia", line: "Generalizacion" },
-  { value: "implementation", label: "Implementacion", line: "Realizacion" },
-  { value: "dependency", label: "Dependencia", line: "Linea punteada" },
-  { value: "aggregation", label: "Agregacion", line: "Todo-parte debil" },
-  { value: "composition", label: "Composicion", line: "Todo-parte fuerte" }
-];
 
 const visibilityOptions = [
   { value: "public", label: "Publico", symbol: "+" },
@@ -127,7 +117,6 @@ export function UmlEditorPage() {
   const setRelationships = useUmlStore((state) => state.setRelationships);
   const setValidation = useUmlStore((state) => state.setValidation);
   const setSelectedClassId = useUmlStore((state) => state.setSelectedClassId);
-  const [className, setClassName] = useState("Cliente");
   const [sourcePrompt, setSourcePrompt] = useState("Crear sistema de biblioteca con libros, usuarios y prestamos");
   const [aiObservation, setAiObservation] = useState("Motor IA local listo.");
   const [xmiContent, setXmiContent] = useState("");
@@ -135,8 +124,6 @@ export function UmlEditorPage() {
   const [attributeType, setAttributeType] = useState("String");
   const [methodName, setMethodName] = useState("calcular");
   const [methodReturnType, setMethodReturnType] = useState("void");
-  const [relationshipSourceId, setRelationshipSourceId] = useState("");
-  const [relationshipTargetId, setRelationshipTargetId] = useState("");
   const [relationshipType, setRelationshipType] = useState("association");
   const [relationshipLabel, setRelationshipLabel] = useState("usa");
   const [sourceMultiplicity, setSourceMultiplicity] = useState("1");
@@ -187,34 +174,11 @@ export function UmlEditorPage() {
   const selectedRelationship = relationships.find((relationship) => relationship.id === selectedRelationshipId) ?? null;
 
   useEffect(() => {
-    if (classes.length === 0) {
-      setRelationshipSourceId("");
-      setRelationshipTargetId("");
-      return;
-    }
-    setRelationshipSourceId((current) => (classes.some((umlClass) => umlClass.id === current) ? current : classes[0].id));
-    setRelationshipTargetId((current) => {
-      if (classes.some((umlClass) => umlClass.id === current) && current !== relationshipSourceId) {
-        return current;
-      }
-      return classes.find((umlClass) => umlClass.id !== relationshipSourceId)?.id ?? classes[0].id;
-    });
-  }, [classes, relationshipSourceId]);
-
-  useEffect(() => {
-    if (selectedClass) {
-      setClassName(selectedClass.name);
-    }
-  }, [selectedClass?.id, selectedClass?.name]);
-
-  useEffect(() => {
     if (selectedRelationship) {
       setRelationshipLabel(selectedRelationship.label ?? "");
       setSourceMultiplicity(selectedRelationship.source_cardinality ?? "");
       setTargetMultiplicity(selectedRelationship.target_cardinality ?? "");
       setRelationshipType(selectedRelationship.relationship_type);
-      setRelationshipSourceId(selectedRelationship.source_class_id);
-      setRelationshipTargetId(selectedRelationship.target_class_id);
     }
   }, [selectedRelationship]);
 
@@ -281,7 +245,6 @@ export function UmlEditorPage() {
       setSelectedClassId(created.id);
       setSelectedRelationshipId(null);
       setActiveTool("select");
-      setClassName(created.name);
       sendProjectEvent(socketRef.current, { action: "CREATE_CLASS", class_id: created.id });
     } catch {
       setAiObservation("No se pudo crear la clase. Revise la sesion o la conexion con el backend.");
@@ -302,9 +265,6 @@ export function UmlEditorPage() {
       return;
     }
     updateClass({ ...umlClass, name });
-    if (selectedClassId === classId) {
-      setClassName(name);
-    }
     if (name.trim().length > 0) {
       void umlService.updateClass(classId, { name: name.trim() }).then((updated) => {
         const current = useUmlStore.getState().classes.find((item) => item.id === classId);
@@ -313,22 +273,6 @@ export function UmlEditorPage() {
         }
       });
     }
-  }
-
-  async function handleCreateRelationship() {
-    if (classes.length < 2 || !relationshipSourceId || !relationshipTargetId || relationshipSourceId === relationshipTargetId) {
-      return;
-    }
-    const created = await umlService.createRelationship(diagramId, {
-      source_class_id: relationshipSourceId,
-      target_class_id: relationshipTargetId,
-      relationship_type: relationshipType,
-      label: relationshipLabel.trim() || relationshipType,
-      source_cardinality: sourceMultiplicity.trim() || null,
-      target_cardinality: targetMultiplicity.trim() || null
-    });
-    addRelationship(created);
-    sendProjectEvent(socketRef.current, { action: "CREATE_RELATIONSHIP", relationship_id: created.id });
   }
 
   async function createRelationshipBetween(sourceId: string, targetId: string, tool: UmlTool) {
@@ -413,8 +357,6 @@ export function UmlEditorPage() {
       }
       setSelectedClassId(classId);
       setSelectedRelationshipId(null);
-      setRelationshipSourceId(classId);
-      setRelationshipTargetId((current) => (current && current !== classId ? current : classes.find((umlClass) => umlClass.id !== classId)?.id ?? ""));
     },
     [activeTool, classes, pendingSourceId, setSelectedClassId]
   );
@@ -467,15 +409,6 @@ export function UmlEditorPage() {
     },
     [classes, diagramId, updateClass]
   );
-
-  async function saveSelectedClass() {
-    if (!selectedClass) {
-      return;
-    }
-    const updated = await umlService.updateClass(selectedClass.id, { name: className });
-    updateClass({ ...selectedClass, ...updated });
-    sendProjectEvent(socketRef.current, { action: "UPDATE_CLASS", class_id: updated.id });
-  }
 
   async function deleteSelectedClass() {
     if (!selectedClass) {
@@ -664,6 +597,81 @@ export function UmlEditorPage() {
     window.location.href = `/proyectos/${projectId}/uml/${generated.id}`;
   }
 
+  async function modifyCurrentDiagramFromPrompt(promptOverride?: string) {
+    const instruction = promptOverride?.trim() || sourcePrompt.trim();
+    if (!instruction) {
+      setAiObservation("Escriba una instruccion para editar el diagrama actual.");
+      return;
+    }
+    if (classes.length === 0) {
+      setAiObservation("No hay clases en el diagrama actual para editar con IA.");
+      return;
+    }
+    const classNameById = new Map(classes.map((umlClass) => [umlClass.id, umlClass.name]));
+    const aiResult = await aiService.modifyUml({
+      instruction,
+      classes: classes.map((umlClass) => ({
+        name: umlClass.name,
+        stereotype: umlClass.stereotype,
+        attributes: umlClass.attributes.map((attribute) => ({
+          name: attribute.name,
+          data_type: attribute.data_type,
+          visibility: attribute.visibility,
+          is_required: attribute.is_required
+        })),
+        methods: umlClass.methods.map((method) => ({
+          name: method.name,
+          return_type: method.return_type,
+          visibility: method.visibility
+        }))
+      })),
+      relationships: relationships
+        .map((relationship) => {
+          const source = classNameById.get(relationship.source_class_id);
+          const target = classNameById.get(relationship.target_class_id);
+          if (!source || !target) {
+            return null;
+          }
+          const associationClassId =
+            typeof relationship.metadata_json?.association_class_id === "string"
+              ? relationship.metadata_json.association_class_id
+              : null;
+          const associationClassName = associationClassId ? classNameById.get(associationClassId) : null;
+          return {
+            source,
+            target,
+            relationship_type: relationship.relationship_type,
+            label: relationship.label,
+            source_cardinality: relationship.source_cardinality,
+            target_cardinality: relationship.target_cardinality,
+            metadata_json: associationClassName
+              ? { ...relationship.metadata_json, association_class_name: associationClassName }
+              : relationship.metadata_json
+          };
+        })
+        .filter((relationship): relationship is NonNullable<typeof relationship> => relationship !== null)
+    });
+    await umlService.applyAiModificationToDiagram({
+      diagramId,
+      classes,
+      relationships,
+      result: aiResult
+    });
+    await refreshDiagramModel();
+    setCanvasRevision((current) => current + 1);
+    setSelectedClassId(null);
+    setSelectedRelationshipId(null);
+    setPendingSourceId("");
+    setActiveTool("select");
+    setAiObservation(
+      `${aiResult.engine} edito el diagrama actual: ${
+        "changes" in aiResult && aiResult.changes.length > 0
+          ? aiResult.changes.join(" ")
+          : aiResult.classes.map((umlClass) => umlClass.name).join(", ")
+      }`
+    );
+  }
+
   async function importXmi(content = xmiContent, fileName = "modelo-importado.xml") {
     const trimmedContent = content.trim();
     if (!trimmedContent) {
@@ -767,36 +775,6 @@ export function UmlEditorPage() {
     xmiInputRef.current.click();
   }
 
-  function startSpeechCapture() {
-    const browserWindow = window as Window & {
-      SpeechRecognition?: new () => BrowserSpeechRecognition;
-      webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
-    };
-    const SpeechRecognition = browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setAiObservation("El navegador no expone dictado. Escriba o pegue la transcripcion y use Voz.");
-      return;
-    }
-    const recognition = new SpeechRecognition();
-    recognition.lang = "es-ES";
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map((result) => result[0].transcript)
-        .join(" ");
-      setSourcePrompt(transcript);
-      setAiObservation("Transcripcion capturada. Use Voz para generar el modelo UML.");
-    };
-    recognition.onerror = () => {
-      setIsListening(false);
-      setAiObservation("No se pudo capturar audio desde el navegador.");
-    };
-    recognition.onend = () => setIsListening(false);
-    setIsListening(true);
-    recognition.start();
-  }
-
   function generateFromVoiceCapture() {
     const browserWindow = window as Window & {
       SpeechRecognition?: new () => BrowserSpeechRecognition;
@@ -847,16 +825,6 @@ export function UmlEditorPage() {
         const detail = error instanceof Error && error.message.trim().length > 0 ? error.message : "No se pudo generar el XML.";
         setAiObservation(`No se pudo exportar el XML. ${detail}`);
       });
-  }
-
-  function exportJsonSnapshot() {
-    const blob = new Blob([JSON.stringify({ classes, relationships }, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "modelo-uml.json";
-    anchor.click();
-    URL.revokeObjectURL(url);
   }
 
   return (
@@ -983,8 +951,9 @@ export function UmlEditorPage() {
                   value={sourcePrompt}
                   onChange={(event) => setSourcePrompt(event.target.value)}
                 />
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <Button onClick={() => generateFromSource("text")} variant="secondary">Texto</Button>
+                  <Button onClick={() => modifyCurrentDiagramFromPrompt()} variant="secondary">Editar</Button>
                   <Button icon={<Mic size={16} aria-hidden="true" />} onClick={generateFromVoiceCapture} variant="secondary">
                     {isListening ? "Escuchando" : "Voz"}
                   </Button>
