@@ -44,21 +44,32 @@ def _scaffold_flutter_platforms(project: FlutterProject, output_dir: Path) -> li
     if flutter is None:
         return []
 
-    subprocess.run(
-        [
-            flutter,
-            "create",
-            "--platforms=android,web",
-            "--project-name",
-            project.package_name,
-            ".",
-        ],
-        cwd=output_dir,
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=180,
-    )
+    command = [
+        flutter,
+        "create",
+        "--platforms=android,web",
+        "--no-pub",
+        "--project-name",
+        project.package_name,
+        ".",
+    ]
+    try:
+        subprocess.run(
+            command,
+            cwd=output_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=180,
+        )
+    except subprocess.CalledProcessError as exc:
+        output = "\n".join(part for part in [exc.stdout, exc.stderr] if part).strip()
+        detail = output or f"Flutter create fallo con codigo {exc.returncode}."
+        raise ValueError(detail) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError("Flutter create excedio el tiempo maximo de 180 segundos.") from exc
     return ["android", "web"]
 
 

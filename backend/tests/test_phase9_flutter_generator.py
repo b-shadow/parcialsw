@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 from uuid import uuid4
 
 from app.main import app
@@ -126,9 +127,12 @@ def test_flutter_generator_writes_complete_project(tmp_path: Path, monkeypatch) 
 
 
 def test_flutter_generator_scaffolds_android_when_flutter_cli_exists(tmp_path: Path, monkeypatch) -> None:
-    def fake_run(args, cwd, check, capture_output, text, timeout):
+    def fake_run(args, cwd, check, capture_output, text, encoding, errors, timeout):
         assert "create" in args
         assert "--platforms=android,web" in args
+        assert "--no-pub" in args
+        assert encoding == "utf-8"
+        assert errors == "replace"
         (Path(cwd) / "android" / "app" / "build.gradle.kts").parent.mkdir(parents=True)
         (Path(cwd) / "android" / "app" / "build.gradle.kts").write_text("// android", encoding="utf-8")
         (Path(cwd) / "web").mkdir(exist_ok=True)
@@ -152,6 +156,38 @@ def test_flutter_generator_scaffolds_android_when_flutter_cli_exists(tmp_path: P
     assert (result.project_dir / "android/app/build.gradle.kts").exists()
     assert result.manifest["platforms"] == ["android", "web"]
     assert "android/app/build.gradle.kts" in result.manifest["checksums"]
+
+
+def test_flutter_generator_reports_flutter_cli_failures(tmp_path: Path, monkeypatch) -> None:
+    def fake_run(args, cwd, check, capture_output, text, encoding, errors, timeout):
+        raise subprocess.CalledProcessError(
+            returncode=69,
+            cmd=args,
+            output="Error al crear proyecto Flutter",
+            stderr="Detalle del fallo",
+        )
+
+    monkeypatch.setattr(
+        "app.modules.generacion_software.flutter_generator.generator.project_writer.which",
+        lambda _: "flutter",
+    )
+    monkeypatch.setattr(
+        "app.modules.generacion_software.flutter_generator.generator.project_writer.subprocess.run",
+        fake_run,
+    )
+
+    try:
+        FlutterGeneratorService(storage_root=tmp_path).generate(
+            _intermediate_model(),
+            "Sistema Ventas Mobile",
+            str(uuid4()),
+            api_base_url="http://localhost:8080",
+        )
+    except ValueError as exc:
+        assert "Error al crear proyecto Flutter" in str(exc)
+        assert "Detalle del fallo" in str(exc)
+    else:
+        raise AssertionError("Se esperaba ValueError cuando flutter create falla")
 
 
 def test_flutter_generator_renders_dropdowns_for_association_class_foreign_keys(tmp_path: Path, monkeypatch) -> None:
