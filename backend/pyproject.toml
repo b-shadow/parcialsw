@@ -19,7 +19,8 @@ dependencies = [
   "numpy>=2.0.0",
   "opencv-python-headless>=4.10.0",
   "pillow>=10.0.0",
-  "pytesseract>=0.3.13"
+  "pytesseract>=0.3.13",
+  "pywebpush>=2.0.3,<3.0.0"
 ]
 
 [project.optional-dependencies]

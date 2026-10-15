@@ -17,6 +17,7 @@ from app.modules.modelado_uml.models import (
     UmlVisualElement,
     XmiExchange,
 )
+from app.modules.notificaciones.models import PushSubscription
 from app.modules.proyectos_colaboracion.models import (
     CollaborationEvent,
     Project,
@@ -39,6 +40,7 @@ __all__ = [
     "ProjectMember",
     "ProjectPermission",
     "ProjectVersion",
+    "PushSubscription",
     "Role",
     "UmlAttribute",
     "UmlClass",

@@ -60,3 +60,11 @@ infra/aws/terraform/crash.log
 infra/aws/terraform/crash.*.log
 infra/aws/terraform/*.tfplan
 !infra/aws/terraform/terraform.tfvars.example
+
+# Material privado de trabajo y automatizacion local.
+/scripts/
+/docs/documentar/
+/docs/ejemplos/
+/docs/pruebas/
+/docs/guias_comandos/
+/docs/segundo parcial/

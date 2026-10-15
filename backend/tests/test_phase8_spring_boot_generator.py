@@ -126,6 +126,72 @@ def test_spring_boot_generator_uses_multiplicity_and_association_class_foreign_k
     assert "private Estudiante estudiante;" in inscripcion_entity
 
 
+def test_spring_boot_generator_applies_multiplicity_owner_rules(tmp_path: Path) -> None:
+    model = {
+        "classes": [
+            {"id": "cliente", "name": "Cliente", "attributes": [{"name": "nombre", "data_type": "String"}]},
+            {"id": "pedido", "name": "Pedido", "attributes": [{"name": "total", "data_type": "Double"}]},
+            {"id": "perfil", "name": "Perfil", "attributes": [{"name": "bio", "data_type": "String"}]},
+            {"id": "usuario", "name": "Usuario", "attributes": [{"name": "correo", "data_type": "String"}]},
+            {"id": "autor", "name": "Autor", "attributes": [{"name": "nombre", "data_type": "String"}]},
+            {"id": "libro", "name": "Libro", "attributes": [{"name": "titulo", "data_type": "String"}]},
+        ],
+        "relationships": [
+            {
+                "source_class_id": "cliente",
+                "target_class_id": "pedido",
+                "type": "association",
+                "source_cardinality": "1",
+                "target_cardinality": "*",
+            },
+            {
+                "source_class_id": "perfil",
+                "target_class_id": "usuario",
+                "type": "association",
+                "source_cardinality": "1",
+                "target_cardinality": "1",
+            },
+            {
+                "source_class_id": "autor",
+                "target_class_id": "libro",
+                "type": "association",
+                "source_cardinality": "*",
+                "target_cardinality": "*",
+            },
+        ],
+    }
+
+    result = SpringBootGeneratorService(storage_root=tmp_path).generate(model, "Biblioteca", str(uuid4()))
+
+    pedido_request = (
+        result.project_dir / "src/main/java/com/caseinteligente/generated/biblioteca/dto/PedidoRequest.java"
+    ).read_text(encoding="utf-8")
+    cliente_request = (
+        result.project_dir / "src/main/java/com/caseinteligente/generated/biblioteca/dto/ClienteRequest.java"
+    ).read_text(encoding="utf-8")
+    perfil_request = (
+        result.project_dir / "src/main/java/com/caseinteligente/generated/biblioteca/dto/PerfilRequest.java"
+    ).read_text(encoding="utf-8")
+    usuario_request = (
+        result.project_dir / "src/main/java/com/caseinteligente/generated/biblioteca/dto/UsuarioRequest.java"
+    ).read_text(encoding="utf-8")
+    join_request = (
+        result.project_dir / "src/main/java/com/caseinteligente/generated/biblioteca/dto/AutorLibroRequest.java"
+    ).read_text(encoding="utf-8")
+    join_entity = (
+        result.project_dir / "src/main/java/com/caseinteligente/generated/biblioteca/entity/AutorLibro.java"
+    ).read_text(encoding="utf-8")
+
+    assert "private UUID clienteId;" in pedido_request
+    assert "pedidoId" not in cliente_request
+    assert "private UUID usuarioId;" in perfil_request
+    assert "perfilId" not in usuario_request
+    assert "private UUID autorId;" in join_request
+    assert "private UUID libroId;" in join_request
+    assert "private Autor autor;" in join_entity
+    assert "private Libro libro;" in join_entity
+
+
 def test_phase8_openapi_contracts_are_registered() -> None:
     paths = app.openapi()["paths"]
     assert "/api/v1/generation/spring-boot" in paths

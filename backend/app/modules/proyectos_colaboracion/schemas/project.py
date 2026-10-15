@@ -69,5 +69,28 @@ class VersionResponse(BaseModel):
     snapshot: dict
     status: str
     created_at: datetime
+    created_by_name: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class VersionRestoreResponse(BaseModel):
+    restored_version: VersionResponse
+    backup_version: VersionResponse
+    restored_diagram_ids: list[UUID]
+
+
+class CollaborationEventResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    diagram_id: UUID | None
+    user_id: UUID
+    user_name: str
+    client_event_id: UUID
+    sequence_number: int
+    event_type: str
+    element_type: str | None
+    element_id: UUID | None
+    base_version: int | None
+    payload: dict
+    created_at: datetime

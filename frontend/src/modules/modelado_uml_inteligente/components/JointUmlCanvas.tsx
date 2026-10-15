@@ -45,10 +45,10 @@ function classHeight(umlClass: UmlClassDetail) {
 }
 
 function classAttrs(umlClass: UmlClassDetail, isDark: boolean, selected: boolean) {
-  const attributeText = (umlClass.attributes.length > 0 ? umlClass.attributes : [{ visibility: "private", name: "id", data_type: "Long" }])
+  const attributeText = umlClass.attributes
     .map((attribute) => `${visibilitySymbol(attribute.visibility)}  ${attribute.name}: ${attribute.data_type}`)
     .join("\n");
-  const methodText = (umlClass.methods.length > 0 ? umlClass.methods : [{ visibility: "public", name: "validar", return_type: "boolean" }])
+  const methodText = umlClass.methods
     .map((method) => `${visibilitySymbol(method.visibility)}  ${method.name}(): ${method.return_type ?? "void"}`)
     .join("\n");
   const attributeRows = Math.max(1, umlClass.attributes.length);
@@ -710,10 +710,6 @@ export function JointUmlCanvas({
         {classes.map((umlClass, index) => {
           const position = classPosition(umlClass, index, transientPositions);
           const selected = selectedClassId === umlClass.id || pendingSourceId === umlClass.id;
-          const attributes =
-            umlClass.attributes.length > 0 ? umlClass.attributes : [{ visibility: "private", name: "id", data_type: "Long" }];
-          const methods =
-            umlClass.methods.length > 0 ? umlClass.methods : [{ visibility: "public", name: "validar", return_type: "boolean" }];
           return (
             <div
               className={`pointer-events-auto absolute select-none overflow-hidden rounded-sm border font-mono text-sm shadow-sm ${
@@ -743,14 +739,14 @@ export function JointUmlCanvas({
                 value={umlClass.name}
               />
               <div className={`min-h-[46px] whitespace-pre-line border-b px-5 py-3 ${isDark ? "border-slate-700" : "border-slate-300"}`}>
-                {attributes.map((attribute, itemIndex) => (
+                {umlClass.attributes.map((attribute, itemIndex) => (
                   <div className={isDark ? "text-slate-200" : "text-orange-900"} key={`${attribute.name}-${itemIndex}`}>
                     {visibilitySymbol(attribute.visibility)}&nbsp; {attribute.name}: {attribute.data_type}
                   </div>
                 ))}
               </div>
               <div className="min-h-[46px] whitespace-pre-line px-5 py-3">
-                {methods.map((method, itemIndex) => (
+                {umlClass.methods.map((method, itemIndex) => (
                   <div className={isDark ? "text-slate-200" : "text-green-800"} key={`${method.name}-${itemIndex}`}>
                     {visibilitySymbol(method.visibility)}&nbsp; {method.name}(): {method.return_type ?? "void"}
                   </div>

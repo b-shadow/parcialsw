@@ -6,6 +6,7 @@ import { useAuthStore } from "../../core/auth/authStore";
 import { useThemeStore } from "../../core/theme/themeStore";
 import { authService } from "../../modules/gestion_acceso_usuarios/services/authService";
 import { AssistantWidget } from "../components/AssistantWidget";
+import { PushNotificationButton } from "../components/PushNotificationButton";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { cn } from "../utils/cn";
 
@@ -176,6 +177,7 @@ export function AppLayout() {
             <p className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>{user?.email ?? "Sesion activa"}</p>
           </div>
           <div className="flex items-center gap-5">
+            <PushNotificationButton />
             <ThemeToggle />
             <div className={cn("hidden h-7 w-px sm:block", isDark ? "bg-slate-700" : "bg-slate-200")} />
             <button

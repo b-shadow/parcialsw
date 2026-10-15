@@ -79,13 +79,30 @@ def map_java_type(raw_type: str | None) -> str:
 
 def _is_many(multiplicity: str | None) -> bool:
     value = (multiplicity or "").strip().lower()
-    return "*" in value or value.endswith("n") or value in {"many", "m"}
+    return (
+        "*" in value
+        or value.endswith("n")
+        or value in {"many", "m", "muchos", "muchas", "varios", "varias"}
+    )
 
 
 def _association_class_id(relation: dict) -> str | None:
     metadata = relation.get("metadata_json") if isinstance(relation.get("metadata_json"), dict) else {}
     raw = metadata.get("association_class_id") or relation.get("association_class_id")
     return str(raw) if raw else None
+
+
+def _join_entity_name(source: str, target: str, existing_names: set[str]) -> str:
+    base_name = f"{to_pascal_case(source)}{to_pascal_case(target)}"
+    if base_name not in existing_names:
+        return base_name
+    fallback_name = f"{base_name}Relacion"
+    suffix = 2
+    candidate = fallback_name
+    while candidate in existing_names:
+        candidate = f"{fallback_name}{suffix}"
+        suffix += 1
+    return candidate
 
 
 def analyze_model(intermediate_model: dict, name: str) -> SpringBootProject:
@@ -111,6 +128,7 @@ def analyze_model(intermediate_model: dict, name: str) -> SpringBootProject:
         entities.append(JavaEntity(name=entity_name, package_name=base_package, fields=fields))
 
     relationships = []
+    entity_names = {entity.name for entity in entities}
     for relation in intermediate_model.get("relationships", []):
         source = class_by_id.get(
             str(relation.get("source_class_id")),
@@ -146,6 +164,28 @@ def analyze_model(intermediate_model: dict, name: str) -> SpringBootProject:
 
         source_multiplicity = relation.get("source_cardinality")
         target_multiplicity = relation.get("target_cardinality")
+        source_is_many = _is_many(source_multiplicity)
+        target_is_many = _is_many(target_multiplicity)
+        if source_is_many and target_is_many:
+            join_entity = _join_entity_name(source, target, entity_names)
+            if join_entity not in entity_names:
+                entities.append(JavaEntity(name=join_entity, package_name=base_package, fields=[]))
+                entity_names.add(join_entity)
+            for endpoint in (source, target):
+                relationships.append(
+                    JavaRelationship(
+                        owner=join_entity,
+                        source=join_entity,
+                        target=to_pascal_case(endpoint),
+                        relationship_type="implicit_join",
+                        annotation="ManyToOne",
+                        label=relation.get("label"),
+                        source_multiplicity=source_multiplicity,
+                        target_multiplicity=target_multiplicity,
+                    )
+                )
+            continue
+
         if _is_many(target_multiplicity) and not _is_many(source_multiplicity):
             owner, related = target, source
         else:

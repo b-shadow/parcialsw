@@ -57,7 +57,12 @@ export const aiService = {
     const response = await apiClient.post<AiValidationResponse>("/ai/validate-model", payload);
     return response.data;
   },
-  async modifyUml(payload: { instruction: string; classes: AiUmlResponse["classes"]; relationships: AiUmlResponse["relationships"] }) {
+  async modifyUml(payload: {
+    instruction: string;
+    classes: AiUmlResponse["classes"];
+    relationships: AiUmlResponse["relationships"];
+    selected_class_name?: string | null;
+  }) {
     const response = await apiClient.post<AiUmlResponse & { changes: string[] }>("/ai/uml/modify", payload);
     return response.data;
   },

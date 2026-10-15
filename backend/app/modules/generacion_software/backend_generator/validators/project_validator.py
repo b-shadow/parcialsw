@@ -11,6 +11,7 @@ def validate_project(project: SpringBootProject) -> list[str]:
     if len(names) != len(set(names)):
         errors.append("Existen entidades duplicadas en el modelo generado.")
     for entity in project.entities:
-        if not entity.fields:
+        owns_relationships = any(relationship.owner == entity.name for relationship in project.relationships)
+        if not entity.fields and not owns_relationships:
             errors.append(f"La entidad {entity.name} no contiene campos generables.")
     return errors

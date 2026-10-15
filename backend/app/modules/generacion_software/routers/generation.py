@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,7 @@ from app.modules.generacion_software.schemas.generation import (
     TransformationResponse,
 )
 from app.modules.generacion_software.services.generation_service import GenerationService
+from app.modules.notificaciones.services import send_user_push
 
 router = APIRouter(prefix="/generation", tags=["generacion-software"])
 
@@ -38,10 +39,22 @@ def transform(
 @router.post("/spring-boot", response_model=GeneratedBackendResponse, status_code=status.HTTP_201_CREATED)
 def generate_backend(
     payload: BackendGenerationRequest,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> GeneratedBackend:
-    return GenerationService(db).generate_backend(payload, current_user.id)
+    generated = GenerationService(db).generate_backend(payload, current_user.id)
+    background_tasks.add_task(
+        send_user_push,
+        current_user.id,
+        {
+            "title": "Backend generado",
+            "body": f"El proyecto Spring Boot {generated.name} esta listo para descargar.",
+            "url": "/generacion",
+            "tag": f"generation-backend-{generated.id}",
+        },
+    )
+    return generated
 
 
 @router.get("/spring-boot/{backend_id}/download")
@@ -61,10 +74,22 @@ def download_backend(
 @router.post("/flutter", response_model=GeneratedFrontendResponse, status_code=status.HTTP_201_CREATED)
 def generate_frontend(
     payload: FrontendGenerationRequest,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> GeneratedFrontend:
-    return GenerationService(db).generate_frontend(payload, current_user.id)
+    generated = GenerationService(db).generate_frontend(payload, current_user.id)
+    background_tasks.add_task(
+        send_user_push,
+        current_user.id,
+        {
+            "title": "Frontend generado",
+            "body": f"La aplicacion Flutter {generated.name} esta lista para descargar.",
+            "url": "/generacion",
+            "tag": f"generation-frontend-{generated.id}",
+        },
+    )
+    return generated
 
 
 @router.get("/flutter/{frontend_id}/download")

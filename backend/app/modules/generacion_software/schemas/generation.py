@@ -30,12 +30,25 @@ class BackendGenerationRequest(BaseModel):
     version_label: str = "v1"
 
 
+class FlutterThemeConfig(BaseModel):
+    primary_color: str = Field(default="#0F766E", pattern=r"^#[0-9A-Fa-f]{6}$")
+    secondary_color: str = Field(default="#14B8A6", pattern=r"^#[0-9A-Fa-f]{6}$")
+    background_color: str = Field(default="#F8FAFC", pattern=r"^#[0-9A-Fa-f]{6}$")
+    surface_color: str = Field(default="#FFFFFF", pattern=r"^#[0-9A-Fa-f]{6}$")
+    button_color: str = Field(default="#0F766E", pattern=r"^#[0-9A-Fa-f]{6}$")
+    font_family: str = Field(default="Roboto", max_length=80)
+    border_radius: int = Field(default=12, ge=0, le=32)
+    button_style: str = Field(default="filled", pattern="^(filled|outline|tonal)$")
+    density: str = Field(default="normal", pattern="^(compact|normal|comfortable)$")
+
+
 class FrontendGenerationRequest(BaseModel):
     transformation_id: UUID
     name: str = Field(min_length=2, max_length=160)
     version_label: str = "v1"
     backend_id: UUID | None = None
     api_base_url: str | None = Field(default=None, max_length=255)
+    theme_config: FlutterThemeConfig | None = None
 
 
 class GeneratedBackendResponse(BaseModel):

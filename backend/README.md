@@ -46,6 +46,26 @@ Proyectos y colaboracion:
 - `GET /api/v1/projects/{project_id}/members`
 - `POST /api/v1/projects/{project_id}/members/{member_id}/permissions`
 - `POST /api/v1/projects/{project_id}/versions`
+- `GET /api/v1/projects/{project_id}/versions`
+- `POST /api/v1/projects/{project_id}/versions/{version_id}/restore`
+- `GET /api/v1/projects/{project_id}/changes`
+
+### Colaboracion WebSocket
+
+El canal `WS /ws/projects/{project_id}` aplica las siguientes garantias:
+
+- autentica el JWT durante el handshake mediante el subprotocolo `case-auth.*`;
+- valida origen, usuario activo y membresia del proyecto;
+- revalida sesion y membresia con el latido `PING/PONG`;
+- confirma cada cambio con `EVENT_ACK` y `client_event_id`;
+- evita duplicados despues de una reconexion;
+- asigna `sequence_number` por proyecto para detectar mensajes perdidos;
+- limita conexiones y aplica timeout de envio a clientes lentos;
+- desconecta inmediatamente a un usuario retirado del proyecto.
+
+El despliegue actual ejecuta un solo worker de Uvicorn. Si se aumenta a varios workers o varias
+instancias, debe agregarse un bus compartido (por ejemplo Redis Pub/Sub) antes de escalar, porque
+las conexiones activas viven en memoria del proceso.
 
 Modelado UML:
 

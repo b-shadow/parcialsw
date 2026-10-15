@@ -189,19 +189,96 @@ def render_android_manifest(project: FlutterProject) -> str:
 """
 
 
-def render_app_theme() -> str:
-    return """import 'package:flutter/material.dart';
+def _dart_color(hex_color: str) -> str:
+    value = hex_color.strip().lstrip("#").upper()
+    if len(value) != 6:
+        value = "0F766E"
+    return f"0xFF{value}"
 
-class AppTheme {
-  static ThemeData get light {
+
+def render_app_theme(project: FlutterProject) -> str:
+    theme = project.theme_config
+    visual_density = {
+        "compact": "VisualDensity.compact",
+        "comfortable": "VisualDensity.comfortable",
+    }.get(theme.density, "VisualDensity.standard")
+    return f"""import 'package:flutter/material.dart';
+
+class AppTheme {{
+  static const Color primaryColor = Color({_dart_color(theme.primary_color)});
+  static const Color secondaryColor = Color({_dart_color(theme.secondary_color)});
+  static const Color backgroundColor = Color({_dart_color(theme.background_color)});
+  static const Color surfaceColor = Color({_dart_color(theme.surface_color)});
+  static const Color buttonColor = Color({_dart_color(theme.button_color)});
+  static const String fontFamily = '{theme.font_family}';
+  static const double borderRadius = {float(theme.border_radius):.1f};
+
+  static ThemeData get light {{
     return ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0F766E)),
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: primaryColor,
+        primary: primaryColor,
+        secondary: secondaryColor,
+        surface: surfaceColor,
+      ),
+      scaffoldBackgroundColor: backgroundColor,
+      fontFamily: fontFamily,
       useMaterial3: true,
-      inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
-      cardTheme: const CardThemeData(margin: EdgeInsets.all(8)),
+      visualDensity: {visual_density},
+      appBarTheme: const AppBarTheme(
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        centerTitle: false,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: surfaceColor,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(borderRadius)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(borderRadius),
+          borderSide: BorderSide(color: primaryColor.withOpacity(0.25)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(borderRadius),
+          borderSide: const BorderSide(color: primaryColor, width: 1.4),
+        ),
+      ),
+      cardTheme: CardThemeData(
+        color: surfaceColor,
+        margin: const EdgeInsets.all(8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(borderRadius)),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: buttonColor,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(borderRadius)),
+          minimumSize: const Size.fromHeight(48),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: buttonColor,
+          side: const BorderSide(color: buttonColor),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(borderRadius)),
+          minimumSize: const Size.fromHeight(48),
+        ),
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: buttonColor,
+        foregroundColor: Colors.white,
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? buttonColor : null,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? buttonColor.withOpacity(0.35) : null,
+        ),
+      ),
     );
-  }
-}
+  }}
+}}
 """
 
 
@@ -307,6 +384,7 @@ def render_entity_service(entity: DartEntity) -> str:
     endpoint = endpoint_for_entity(entity)
     module = entity.module_name
     return f"""import '../../core/network/api_client.dart';
+import '../../shared/widgets/primary_action_button.dart';
 import '{module}_model.dart';
 
 class {entity.name}Service {{
@@ -539,9 +617,9 @@ class _{entity.name}FormScreenState extends State<{entity.name}FormScreen> {{
           children: [
 {form_fields}
             const SizedBox(height: 16),
-            FilledButton(
+            PrimaryActionButton(
               onPressed: _save,
-              child: const Text('Guardar'),
+              label: 'Guardar',
             ),
           ],
         ),
@@ -567,20 +645,24 @@ class _{entity.name}FormScreenState extends State<{entity.name}FormScreen> {{
 """
 
 
-def render_shared_button() -> str:
-    return """import 'package:flutter/material.dart';
+def render_shared_button(project: FlutterProject) -> str:
+    button_widget = {
+        "outline": "OutlinedButton",
+        "tonal": "FilledButton.tonal",
+    }.get(project.theme_config.button_style, "FilledButton")
+    return f"""import 'package:flutter/material.dart';
 
-class PrimaryActionButton extends StatelessWidget {
-  const PrimaryActionButton({super.key, required this.label, required this.onPressed});
+class PrimaryActionButton extends StatelessWidget {{
+  const PrimaryActionButton({{super.key, required this.label, required this.onPressed}});
 
   final String label;
   final VoidCallback? onPressed;
 
   @override
-  Widget build(BuildContext context) {
-    return FilledButton(onPressed: onPressed, child: Text(label));
-  }
-}
+  Widget build(BuildContext context) {{
+    return {button_widget}(onPressed: onPressed, child: Text(label));
+  }}
+}}
 """
 
 
@@ -601,6 +683,17 @@ flutter run
 ## Backend esperado
 
 `{project.api_base_url}`
+
+## Estilo visual
+
+- Color primario: `{project.theme_config.primary_color}`
+- Color secundario: `{project.theme_config.secondary_color}`
+- Fondo: `{project.theme_config.background_color}`
+- Botones: `{project.theme_config.button_color}`
+- Fuente: `{project.theme_config.font_family}`
+- Bordes: `{project.theme_config.border_radius}px`
+- Boton principal: `{project.theme_config.button_style}`
+- Densidad: `{project.theme_config.density}`
 
 ## Modulos generados
 

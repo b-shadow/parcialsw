@@ -1,8 +1,12 @@
 ﻿import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Image, Mic, Plus, Save, Trash2, X } from "lucide-react";
 
-import { createProjectSocket, sendProjectEvent } from "../../../core/websocket/projectSocket";
+import {
+  createProjectSocket,
+  sendProjectEvent,
+  type ProjectSocketEvent
+} from "../../../core/websocket/projectSocket";
 import { useThemeStore } from "../../../core/theme/themeStore";
 import { Button } from "../../../shared/components/Button";
 import { Panel } from "../../../shared/components/Panel";
@@ -10,10 +14,11 @@ import { StatusBadge } from "../../../shared/components/StatusBadge";
 import { cn } from "../../../shared/utils/cn";
 import { JointUmlCanvas } from "../components/JointUmlCanvas";
 import { UmlToolbar } from "../components/UmlToolbar";
+import { ProjectHistoryPanel } from "../../gestion_proyectos_colaboracion/components/ProjectHistoryPanel";
 import { aiService } from "../services/aiService";
 import { umlService } from "../services/umlService";
 import { useUmlStore } from "../store/umlStore";
-import type { UmlAttribute, UmlMethod } from "../types/uml";
+import type { DiagramModel, UmlAttribute, UmlMethod } from "../types/uml";
 
 type UmlTool = "select" | "class" | "association" | "inheritance" | "associationClass";
 
@@ -85,6 +90,24 @@ function fileToText(file: File) {
   });
 }
 
+function createClientEventId() {
+  if (typeof window.crypto.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  if (typeof window.crypto.getRandomValues === "function") {
+    window.crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hexadecimal = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  return `${hexadecimal.slice(0, 8)}-${hexadecimal.slice(8, 12)}-${hexadecimal.slice(12, 16)}-${hexadecimal.slice(16, 20)}-${hexadecimal.slice(20)}`;
+}
+
 function promptFromAiResult(result: AiUmlResult, fallback: string) {
   const classNames = result.classes.map((umlClass) => umlClass.name).filter(Boolean);
   const relations = result.relationships
@@ -101,7 +124,11 @@ function promptFromAiResult(result: AiUmlResult, fallback: string) {
 
 export function UmlEditorPage() {
   const { projectId = "", diagramId = "" } = useParams();
+  const navigate = useNavigate();
   const socketRef = useRef<WebSocket | null>(null);
+  const remoteRefreshTimerRef = useRef<number | null>(null);
+  const pendingSocketEventsRef = useRef<Record<string, unknown>[]>([]);
+  const lastEventSequenceRef = useRef<number | null>(null);
   const isDark = useThemeStore((state) => state.mode === "dark");
   const classes = useUmlStore((state) => state.classes);
   const relationships = useUmlStore((state) => state.relationships);
@@ -161,14 +188,151 @@ export function UmlEditorPage() {
     if (!projectId) {
       return;
     }
-    const socket = createProjectSocket(projectId);
-    socketRef.current = socket;
-    socket.onopen = () => setConnectionStatus("conectado");
-    socket.onclose = () => setConnectionStatus("desconectado");
-    socket.onerror = () => setConnectionStatus("error");
-    socket.onmessage = () => undefined;
-    return () => socket.close();
-  }, [projectId]);
+    let disposed = false;
+    let retryCount = 0;
+    let reconnectTimer: number | null = null;
+    let lastServerMessageAt = Date.now();
+    const heartbeatTimer = window.setInterval(() => {
+      const activeSocket = socketRef.current;
+      if (activeSocket?.readyState !== WebSocket.OPEN) return;
+      if (Date.now() - lastServerMessageAt > 45000) {
+        activeSocket.close(4000, "Servidor sin respuesta");
+        return;
+      }
+      activeSocket.send(JSON.stringify({ type: "PING" }));
+    }, 15000);
+
+    function connect() {
+      if (disposed) return;
+      setConnectionStatus(retryCount > 0 ? "reconectando" : "conectando");
+      const socket = createProjectSocket(projectId);
+      socketRef.current = socket;
+      socket.onopen = () => {
+        const wasReconnecting = retryCount > 0;
+        lastServerMessageAt = Date.now();
+        retryCount = 0;
+        setConnectionStatus("conectado");
+        if (wasReconnecting) {
+          void refreshDiagramModel().then(() => {
+            setSelectedClassId(null);
+            setSelectedRelationshipId(null);
+            setCanvasRevision((current) => current + 1);
+          });
+        }
+        pendingSocketEventsRef.current.forEach((payload) => sendProjectEvent(socket, payload));
+      };
+      socket.onclose = (event) => {
+        if (socketRef.current === socket) socketRef.current = null;
+        if (disposed) return;
+        if (event.code === 1008) {
+          setConnectionStatus("sin acceso");
+          return;
+        }
+        setConnectionStatus("reconectando");
+        const delay = Math.min(1000 * 2 ** retryCount, 10000);
+        retryCount += 1;
+        reconnectTimer = window.setTimeout(connect, delay);
+      };
+      socket.onerror = () => setConnectionStatus("error");
+      socket.onmessage = (message) => {
+        lastServerMessageAt = Date.now();
+        let event: ProjectSocketEvent;
+        try {
+          event = JSON.parse(String(message.data)) as ProjectSocketEvent;
+        } catch {
+          return;
+        }
+        if (event.type === "EVENT_ACK" && event.client_event_id) {
+          pendingSocketEventsRef.current = pendingSocketEventsRef.current.filter(
+            (pending) => pending.client_event_id !== event.client_event_id
+          );
+          if (typeof event.sequence_number === "number") {
+            lastEventSequenceRef.current = Math.max(
+              lastEventSequenceRef.current ?? 0,
+              event.sequence_number
+            );
+          }
+          return;
+        }
+        if (event.type === "EVENT_REJECTED") {
+          if (event.client_event_id) {
+            pendingSocketEventsRef.current = pendingSocketEventsRef.current.filter(
+              (pending) => pending.client_event_id !== event.client_event_id
+            );
+          }
+          setAiObservation(event.reason ?? "El servidor rechazo un cambio colaborativo.");
+          return;
+        }
+        if (event.type === "PONG") return;
+        const sequence = event.sequence_number;
+        const previousSequence = lastEventSequenceRef.current;
+        const sequenceGap =
+          typeof sequence === "number" &&
+          previousSequence !== null &&
+          sequence > previousSequence + 1;
+        if (typeof sequence === "number") {
+          lastEventSequenceRef.current = Math.max(previousSequence ?? 0, sequence);
+        }
+        const affectsCurrentDiagram =
+          event.type === "UML_EVENT" &&
+          (event.diagram_id === diagramId || event.event_type === "RESTORE_VERSION" || sequenceGap);
+        if (!affectsCurrentDiagram) return;
+        if (event.event_type === "RESTORE_VERSION") {
+          const restoredIds = Array.isArray(event.payload?.restored_diagram_ids)
+            ? event.payload.restored_diagram_ids.filter((value): value is string => typeof value === "string")
+            : [];
+          if (!restoredIds.includes(diagramId)) {
+            navigate(
+              restoredIds[0]
+                ? `/proyectos/${projectId}/uml/${restoredIds[0]}`
+                : `/proyectos/${projectId}/colaborativo`,
+              { replace: true }
+            );
+            return;
+          }
+        }
+        if (remoteRefreshTimerRef.current !== null) {
+          window.clearTimeout(remoteRefreshTimerRef.current);
+        }
+        remoteRefreshTimerRef.current = window.setTimeout(() => {
+          void refreshDiagramModel().then(() => {
+            setSelectedClassId(null);
+            setSelectedRelationshipId(null);
+            setCanvasRevision((current) => current + 1);
+            setAiObservation(`${event.user_name ?? "Otro colaborador"} actualizo el diagrama.`);
+          });
+        }, 120);
+      };
+    }
+
+    connect();
+    return () => {
+      disposed = true;
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+      }
+      window.clearInterval(heartbeatTimer);
+      if (remoteRefreshTimerRef.current !== null) {
+        window.clearTimeout(remoteRefreshTimerRef.current);
+      }
+      socketRef.current?.close();
+      socketRef.current = null;
+      pendingSocketEventsRef.current = [];
+    };
+  }, [diagramId, projectId]);
+
+  function publishChange(payload: Record<string, unknown>) {
+    const clientEventId = createClientEventId();
+    const event = {
+      ...payload,
+      diagram_id: diagramId,
+      client_event_id: clientEventId
+    };
+    pendingSocketEventsRef.current = [...pendingSocketEventsRef.current, event].slice(-100);
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      sendProjectEvent(socketRef.current, event);
+    }
+  }
 
   const selectedClass = classes.find((umlClass) => umlClass.id === selectedClassId) ?? null;
   const selectedRelationship = relationships.find((relationship) => relationship.id === selectedRelationshipId) ?? null;
@@ -245,7 +409,7 @@ export function UmlEditorPage() {
       setSelectedClassId(created.id);
       setSelectedRelationshipId(null);
       setActiveTool("select");
-      sendProjectEvent(socketRef.current, { action: "CREATE_CLASS", class_id: created.id });
+      publishChange({ action: "CREATE_CLASS", class_id: created.id });
     } catch {
       setAiObservation("No se pudo crear la clase. Revise la sesion o la conexion con el backend.");
     } finally {
@@ -271,6 +435,7 @@ export function UmlEditorPage() {
         if (current) {
           updateClass({ ...current, ...updated });
         }
+        publishChange({ action: "UPDATE_CLASS", class_id: classId });
       });
     }
   }
@@ -323,6 +488,11 @@ export function UmlEditorPage() {
       setSelectedRelationshipId(null);
       setPendingSourceId("");
       setActiveTool("select");
+      publishChange({
+        action: "CREATE_RELATIONSHIP",
+        relationship_id: association.id,
+        class_id: associationClass.id
+      });
       return;
     }
     const type = tool === "inheritance" ? "inheritance" : "association";
@@ -339,7 +509,7 @@ export function UmlEditorPage() {
     setSelectedClassId(null);
     setPendingSourceId("");
     setActiveTool("select");
-    sendProjectEvent(socketRef.current, { action: "CREATE_RELATIONSHIP", relationship_id: created.id });
+    publishChange({ action: "CREATE_RELATIONSHIP", relationship_id: created.id });
   }
 
   const handleClassClick = useCallback(
@@ -405,7 +575,7 @@ export function UmlEditorPage() {
           updateClass({ ...movedClass, visual });
         }
       });
-      sendProjectEvent(socketRef.current, { action: "MOVE_ELEMENT", class_id: classId, position });
+      publishChange({ action: "MOVE_ELEMENT", class_id: classId, position });
     },
     [classes, diagramId, updateClass]
   );
@@ -428,7 +598,7 @@ export function UmlEditorPage() {
     setSelectedClassId(null);
     setSelectedRelationshipId(null);
     await refreshDiagramModel();
-    sendProjectEvent(socketRef.current, { action: "DELETE_CLASS", class_id: selectedClass.id });
+    publishChange({ action: "DELETE_CLASS", class_id: selectedClass.id });
   }
 
   async function saveSelectedRelationship() {
@@ -442,7 +612,7 @@ export function UmlEditorPage() {
       relationship_type: relationshipType
     });
     updateRelationship(updated);
-    sendProjectEvent(socketRef.current, { action: "UPDATE_RELATIONSHIP", relationship_id: updated.id });
+    publishChange({ action: "UPDATE_RELATIONSHIP", relationship_id: updated.id });
   }
 
   async function deleteSelectedRelationship() {
@@ -453,7 +623,7 @@ export function UmlEditorPage() {
     removeRelationship(selectedRelationship.id);
     setSelectedRelationshipId(null);
     await refreshDiagramModel();
-    sendProjectEvent(socketRef.current, { action: "DELETE_RELATIONSHIP", relationship_id: selectedRelationship.id });
+    publishChange({ action: "DELETE_RELATIONSHIP", relationship_id: selectedRelationship.id });
   }
 
   async function addAttributeToSelectedClass() {
@@ -466,7 +636,7 @@ export function UmlEditorPage() {
     });
     updateClass({ ...selectedClass, attributes: [...selectedClass.attributes, created] });
     setAttributeName("");
-    sendProjectEvent(socketRef.current, { action: "CREATE_ATTRIBUTE", attribute_id: created.id });
+    publishChange({ action: "CREATE_ATTRIBUTE", attribute_id: created.id });
   }
 
   async function saveAttribute(attributeId: string) {
@@ -491,7 +661,7 @@ export function UmlEditorPage() {
       ...selectedClass,
       attributes: selectedClass.attributes.map((item) => (item.id === attributeId ? updated : item))
     });
-    sendProjectEvent(socketRef.current, { action: "UPDATE_ATTRIBUTE", attribute_id: attributeId });
+    publishChange({ action: "UPDATE_ATTRIBUTE", attribute_id: attributeId });
   }
 
   async function deleteAttribute(attributeId: string) {
@@ -500,7 +670,7 @@ export function UmlEditorPage() {
     }
     await umlService.deleteAttribute(attributeId);
     updateClass({ ...selectedClass, attributes: selectedClass.attributes.filter((item) => item.id !== attributeId) });
-    sendProjectEvent(socketRef.current, { action: "DELETE_ATTRIBUTE", attribute_id: attributeId });
+    publishChange({ action: "DELETE_ATTRIBUTE", attribute_id: attributeId });
   }
 
   function updateAttributeDraft(attributeId: string, patch: Partial<UmlAttribute>) {
@@ -523,7 +693,7 @@ export function UmlEditorPage() {
     });
     updateClass({ ...selectedClass, methods: [...selectedClass.methods, created] });
     setMethodName("");
-    sendProjectEvent(socketRef.current, { action: "CREATE_METHOD", method_id: created.id });
+    publishChange({ action: "CREATE_METHOD", method_id: created.id });
   }
 
   async function saveMethod(methodId: string) {
@@ -545,7 +715,7 @@ export function UmlEditorPage() {
       ...selectedClass,
       methods: selectedClass.methods.map((item) => (item.id === methodId ? updated : item))
     });
-    sendProjectEvent(socketRef.current, { action: "UPDATE_METHOD", method_id: methodId });
+    publishChange({ action: "UPDATE_METHOD", method_id: methodId });
   }
 
   async function deleteMethod(methodId: string) {
@@ -554,7 +724,7 @@ export function UmlEditorPage() {
     }
     await umlService.deleteMethod(methodId);
     updateClass({ ...selectedClass, methods: selectedClass.methods.filter((item) => item.id !== methodId) });
-    sendProjectEvent(socketRef.current, { action: "DELETE_METHOD", method_id: methodId });
+    publishChange({ action: "DELETE_METHOD", method_id: methodId });
   }
 
   function updateMethodDraft(methodId: string, patch: Partial<UmlMethod>) {
@@ -567,50 +737,83 @@ export function UmlEditorPage() {
     });
   }
 
+  async function applyAiResultToCurrentDiagram(
+    aiResult: AiUmlResult,
+    sourceType: "text" | "voice" | "image",
+    fallbackDescription: string,
+    currentModel?: DiagramModel | null
+  ) {
+    const model = currentModel ?? await refreshDiagramModel();
+    const currentClasses = model?.classes ?? useUmlStore.getState().classes;
+    const currentRelationships = model?.relationships ?? useUmlStore.getState().relationships;
+
+    await umlService.applyAiModificationToDiagram({
+      diagramId,
+      classes: currentClasses,
+      relationships: currentRelationships,
+      result: aiResult
+    });
+    const updatedModel = await refreshDiagramModel();
+    setCanvasRevision((current) => current + 1);
+    setSelectedClassId(null);
+    setSelectedRelationshipId(null);
+    setPendingSourceId("");
+    setActiveTool("select");
+    publishChange({
+      action: "AI_UPDATE_DIAGRAM",
+      diagram_id: diagramId,
+      source_type: sourceType
+    });
+    setAiObservation(
+      `${aiResult.engine} actualizo este diagrama: ${promptFromAiResult(aiResult, fallbackDescription)}`
+    );
+    return updatedModel;
+  }
+
   async function generateFromSource(sourceType: "text" | "voice" | "image", file?: File, promptOverride?: string) {
     const basePrompt = promptOverride?.trim() || sourcePrompt.trim() || "Modelo UML generado por IA local";
+    if (sourceType === "text" || sourceType === "voice") {
+      await modifyCurrentDiagramFromPrompt(basePrompt, sourceType);
+      return;
+    }
     const aiResult =
-      sourceType === "text"
-        ? await aiService.textToUml(basePrompt)
-        : sourceType === "voice"
-          ? await aiService.voiceToUml({ transcript: basePrompt })
-          : await aiService.imageToUml({
-              description: promptOverride?.trim() || undefined,
-              image_base64: file ? await fileToBase64(file) : undefined,
-              file_name: file?.name
-            });
+      await aiService.imageToUml({
+        description: promptOverride?.trim() || undefined,
+        image_base64: file ? await fileToBase64(file) : undefined,
+        file_name: file?.name
+      });
     setAiObservation(
       `${aiResult.engine} confianza ${Math.round(aiResult.confidence * 100)}%: ${aiResult.classes
         .map((umlClass) => umlClass.name)
         .join(", ")}`
     );
-    const generated = await umlService.createDiagramFromAiResult({
-      project_id: projectId,
-      name: `UML generado ${sourceType}`,
-      description: promptFromAiResult(
-        aiResult,
-        sourceType === "image" ? "Modelo UML generado desde imagen" : basePrompt
-      ),
-      source_type: sourceType,
-      result: aiResult
-    });
-    window.location.href = `/proyectos/${projectId}/uml/${generated.id}`;
+    await applyAiResultToCurrentDiagram(aiResult, sourceType, "Modelo UML generado desde imagen");
   }
 
-  async function modifyCurrentDiagramFromPrompt(promptOverride?: string) {
+  async function modifyCurrentDiagramFromPrompt(promptOverride?: string, sourceType: "text" | "voice" = "text") {
     const instruction = promptOverride?.trim() || sourcePrompt.trim();
     if (!instruction) {
       setAiObservation("Escriba una instruccion para editar el diagrama actual.");
       return;
     }
-    if (classes.length === 0) {
-      setAiObservation("No hay clases en el diagrama actual para editar con IA.");
+    const model = await refreshDiagramModel();
+    const currentClasses = model?.classes ?? useUmlStore.getState().classes;
+    const currentRelationships = model?.relationships ?? useUmlStore.getState().relationships;
+    const selectedClassName =
+      currentClasses.find((umlClass) => umlClass.id === selectedClassId)?.name ?? null;
+    if (currentClasses.length === 0) {
+      const generatedResult =
+        sourceType === "voice"
+          ? await aiService.voiceToUml({ transcript: instruction })
+          : await aiService.textToUml(instruction);
+      await applyAiResultToCurrentDiagram(generatedResult, sourceType, instruction, model);
       return;
     }
-    const classNameById = new Map(classes.map((umlClass) => [umlClass.id, umlClass.name]));
+    const classNameById = new Map(currentClasses.map((umlClass) => [umlClass.id, umlClass.name]));
     const aiResult = await aiService.modifyUml({
       instruction,
-      classes: classes.map((umlClass) => ({
+      selected_class_name: selectedClassName,
+      classes: currentClasses.map((umlClass) => ({
         name: umlClass.name,
         stereotype: umlClass.stereotype,
         attributes: umlClass.attributes.map((attribute) => ({
@@ -625,7 +828,7 @@ export function UmlEditorPage() {
           visibility: method.visibility
         }))
       })),
-      relationships: relationships
+      relationships: currentRelationships
         .map((relationship) => {
           const source = classNameById.get(relationship.source_class_id);
           const target = classNameById.get(relationship.target_class_id);
@@ -651,18 +854,7 @@ export function UmlEditorPage() {
         })
         .filter((relationship): relationship is NonNullable<typeof relationship> => relationship !== null)
     });
-    await umlService.applyAiModificationToDiagram({
-      diagramId,
-      classes,
-      relationships,
-      result: aiResult
-    });
-    await refreshDiagramModel();
-    setCanvasRevision((current) => current + 1);
-    setSelectedClassId(null);
-    setSelectedRelationshipId(null);
-    setPendingSourceId("");
-    setActiveTool("select");
+    await applyAiResultToCurrentDiagram(aiResult, sourceType, instruction, model);
     setAiObservation(
       `${aiResult.engine} edito el diagrama actual: ${
         "changes" in aiResult && aiResult.changes.length > 0
@@ -1350,6 +1542,23 @@ export function UmlEditorPage() {
           </div>
         </div>
       )}
+      <ProjectHistoryPanel
+        projectId={projectId}
+        onVersionRestored={async (result) => {
+          if (!result.restored_diagram_ids.includes(diagramId)) {
+            const destination = result.restored_diagram_ids[0];
+            navigate(
+              destination
+                ? `/proyectos/${projectId}/uml/${destination}`
+                : `/proyectos/${projectId}/colaborativo`,
+              { replace: true }
+            );
+            return;
+          }
+          await refreshDiagramModel();
+          setCanvasRevision((current) => current + 1);
+        }}
+      />
     </section>
   );
 }

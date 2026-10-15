@@ -215,6 +215,7 @@ class GenerationService:
                 payload.name,
                 str(generated.id),
                 api_base_url=api_base_url,
+                theme_config=payload.theme_config.model_dump() if payload.theme_config else None,
             )
         except ValueError as exc:
             generated.status = "failed"

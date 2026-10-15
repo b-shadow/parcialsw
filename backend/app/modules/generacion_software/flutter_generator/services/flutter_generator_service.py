@@ -30,8 +30,9 @@ class FlutterGeneratorService:
         name: str,
         generation_id: str,
         api_base_url: str = "http://localhost:8080",
+        theme_config: dict | None = None,
     ) -> FlutterGenerationResult:
-        project = analyze_uml_for_flutter(intermediate_model, name, api_base_url)
+        project = analyze_uml_for_flutter(intermediate_model, name, api_base_url, theme_config)
         errors = validate_project(project)
         if errors:
             raise ValueError("; ".join(errors))
@@ -49,6 +50,17 @@ class FlutterGeneratorService:
             "project_name": project.name,
             "package_name": project.package_name,
             "api_base_url": project.api_base_url,
+            "theme_config": {
+                "primary_color": project.theme_config.primary_color,
+                "secondary_color": project.theme_config.secondary_color,
+                "background_color": project.theme_config.background_color,
+                "surface_color": project.theme_config.surface_color,
+                "button_color": project.theme_config.button_color,
+                "font_family": project.theme_config.font_family,
+                "border_radius": project.theme_config.border_radius,
+                "button_style": project.theme_config.button_style,
+                "density": project.theme_config.density,
+            },
             "state_management": "Provider",
             "platforms": write_result.scaffolded_platforms or ["source"],
             "generated_layers": ["models", "services", "providers", "screens", "forms", "routes", "network"],

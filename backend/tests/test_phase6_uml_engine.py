@@ -6,8 +6,10 @@ from xml.etree import ElementTree
 
 from app.main import app
 from app.modules.modelado_uml.engine.internal_model import (
+    UmlAttributeModel,
     UmlClassModel,
     UmlDiagramModel,
+    UmlMethodModel,
     UmlRelationshipModel,
 )
 from app.modules.modelado_uml.engine.text_parser import build_uml_from_text
@@ -152,6 +154,65 @@ def test_internal_uml_validator_detects_design_findings() -> None:
     assert any("duplicados" in warning for warning in warnings)
     assert any("relacion reflexiva" in warning for warning in warnings)
     assert recommendations
+
+
+def test_internal_uml_validator_allows_classes_without_methods() -> None:
+    model = UmlDiagramModel(
+        name="Modelo de datos",
+        classes=[
+            UmlClassModel(
+                name="Cliente",
+                attributes=[UmlAttributeModel(name="id", data_type="UUID")],
+                methods=[],
+            )
+        ],
+    )
+
+    errors, warnings, recommendations = validate_internal_model(model)
+
+    assert errors == []
+    assert warnings == []
+    assert not any("metodo" in recommendation.lower() for recommendation in recommendations)
+
+
+def test_internal_uml_validator_detects_invalid_members_multiplicity_and_inheritance_cycle() -> None:
+    model = UmlDiagramModel(
+        name="Invalido",
+        classes=[
+            UmlClassModel(
+                name="Cliente",
+                attributes=[
+                    UmlAttributeModel(name="correo", data_type="String"),
+                    UmlAttributeModel(name="CORREO", data_type="String"),
+                ],
+                methods=[
+                    UmlMethodModel(name="guardar", return_type="void"),
+                    UmlMethodModel(name="GUARDAR", return_type="void"),
+                ],
+            ),
+            UmlClassModel(name="Pedido"),
+        ],
+        relationships=[
+            UmlRelationshipModel(
+                source_class_id="Cliente",
+                target_class_id="Pedido",
+                relationship_type="inheritance",
+                source_cardinality="muchos",
+            ),
+            UmlRelationshipModel(
+                source_class_id="Pedido",
+                target_class_id="Cliente",
+                relationship_type="inheritance",
+            ),
+        ],
+    )
+
+    errors, warnings, _ = validate_internal_model(model)
+
+    assert any("Multiplicidad invalida" in error for error in errors)
+    assert any("herencia contiene un ciclo" in error for error in errors)
+    assert any("Atributos duplicados" in warning for warning in warnings)
+    assert any("Metodos duplicados" in warning for warning in warnings)
 
 
 def test_xmi_export_import_roundtrip_keeps_classes() -> None:

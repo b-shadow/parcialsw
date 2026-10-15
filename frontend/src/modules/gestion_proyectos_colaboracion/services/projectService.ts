@@ -1,5 +1,11 @@
 import { apiClient } from "../../../core/api/client";
-import type { Project, ProjectMember, ProjectVersion } from "../types/project";
+import type {
+  CollaborationChange,
+  Project,
+  ProjectMember,
+  ProjectVersion,
+  VersionRestoreResult
+} from "../types/project";
 
 export const projectService = {
   async list() {
@@ -41,8 +47,24 @@ export const projectService = {
   async removeMember(projectId: string, memberId: string) {
     await apiClient.delete(`/projects/${projectId}/members/${memberId}`);
   },
-  async saveVersion(projectId: string, payload: { name: string; description?: string; snapshot: Record<string, unknown> }) {
+  async saveVersion(projectId: string, payload: { name: string; description?: string }) {
     const response = await apiClient.post<ProjectVersion>(`/projects/${projectId}/versions`, payload);
+    return response.data;
+  },
+  async versions(projectId: string) {
+    const response = await apiClient.get<ProjectVersion[]>(`/projects/${projectId}/versions`);
+    return response.data;
+  },
+  async restoreVersion(projectId: string, versionId: string) {
+    const response = await apiClient.post<VersionRestoreResult>(
+      `/projects/${projectId}/versions/${versionId}/restore`
+    );
+    return response.data;
+  },
+  async changes(projectId: string, limit = 100) {
+    const response = await apiClient.get<CollaborationChange[]>(`/projects/${projectId}/changes`, {
+      params: { limit }
+    });
     return response.data;
   }
 };

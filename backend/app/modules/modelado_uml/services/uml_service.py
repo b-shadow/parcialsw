@@ -1,5 +1,8 @@
 from uuid import UUID
 
+from fastapi import HTTPException, status
+from pydantic import ValidationError
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.modules.acceso_usuarios.services.audit_service import AuditService
@@ -51,6 +54,7 @@ from app.modules.modelado_uml.validators.uml_validator import (
     ensure_class_exists,
     ensure_diagram_exists,
 )
+from app.modules.proyectos_colaboracion.models import CollaborationEvent
 from app.modules.proyectos_colaboracion.repositories.member_repository import MemberRepository
 from app.modules.proyectos_colaboracion.validators.project_validator import ensure_membership
 
@@ -98,6 +102,7 @@ class UmlService:
         self.uml.delete_relationships_by_diagram(diagram_id)
         self.uml.delete_classes_by_diagram(diagram_id)
         self.uml.delete_xmi_exchanges_by_diagram(diagram_id)
+        self._detach_collaboration_events(diagram_id)
         self.uml.delete_diagram(diagram)
         self.audit.record(
             module="modelado_uml",
@@ -580,6 +585,85 @@ class UmlService:
         self.db.commit()
         self.db.refresh(diagram)
         return diagram
+
+    def restore_project_snapshot(
+        self, project_id: UUID, snapshot: dict, user_id: UUID
+    ) -> list[UUID]:
+        ensure_membership(self.members.get_membership(project_id, user_id))
+        try:
+            snapshot_models = [
+                UmlDiagramModel.model_validate(item) for item in snapshot.get("diagrams", [])
+            ]
+            desired_ids = [UUID(model.id) for model in snapshot_models if model.id]
+            if len(desired_ids) != len(snapshot_models):
+                raise ValueError("Todos los diagramas del snapshot deben tener identificador")
+            if len(set(desired_ids)) != len(desired_ids):
+                raise ValueError("El snapshot contiene diagramas duplicados")
+            if any(model.project_id and UUID(model.project_id) != project_id for model in snapshot_models):
+                raise ValueError("El snapshot pertenece a otro proyecto")
+        except (TypeError, ValueError, ValidationError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="El snapshot de la version no es valido",
+            ) from exc
+
+        current_diagrams = {
+            str(diagram.id): diagram for diagram in self.uml.list_diagrams_by_project(project_id)
+        }
+        snapshot_ids = {str(diagram_id) for diagram_id in desired_ids}
+
+        for diagram_id, diagram in current_diagrams.items():
+            self.generations.delete_generation_tree_by_diagram(diagram.id)
+            if diagram_id not in snapshot_ids:
+                self.uml.delete_visual_elements_by_diagram(diagram.id)
+                self.uml.delete_relationships_by_diagram(diagram.id)
+                self.uml.delete_classes_by_diagram(diagram.id)
+                self.uml.delete_xmi_exchanges_by_diagram(diagram.id)
+                self._detach_collaboration_events(diagram.id)
+                self.uml.delete_diagram(diagram)
+
+        self.db.flush()
+        restored_ids: list[UUID] = []
+        for model, desired_id in zip(snapshot_models, desired_ids, strict=True):
+            diagram = current_diagrams.get(str(desired_id))
+            if diagram is None:
+                diagram = self.uml.add_diagram(
+                    UmlDiagram(
+                        id=desired_id,
+                        project_id=project_id,
+                        created_by_user_id=user_id,
+                        name=model.name,
+                        diagram_type=model.diagram_type,
+                        status=model.status,
+                        current_version=model.current_version + 1,
+                        description=model.description,
+                        metadata_json=model.metadata_json,
+                    )
+                )
+            else:
+                previous_revision = diagram.current_version
+                self.uml.delete_visual_elements_by_diagram(diagram.id)
+                self.uml.delete_relationships_by_diagram(diagram.id)
+                self.uml.delete_classes_by_diagram(diagram.id)
+                self.db.flush()
+                diagram.name = model.name
+                diagram.diagram_type = model.diagram_type
+                diagram.status = model.status
+                diagram.current_version = previous_revision + 1
+                diagram.description = model.description
+                diagram.metadata_json = model.metadata_json
+
+            self._populate_existing_diagram_from_model(diagram, model)
+            restored_ids.append(diagram.id)
+
+        return restored_ids
+
+    def _detach_collaboration_events(self, diagram_id: UUID) -> None:
+        self.db.execute(
+            update(CollaborationEvent)
+            .where(CollaborationEvent.diagram_id == diagram_id)
+            .values(diagram_id=None)
+        )
 
     def _build_internal_model(self, diagram: UmlDiagram) -> UmlDiagramModel:
         visuals = {

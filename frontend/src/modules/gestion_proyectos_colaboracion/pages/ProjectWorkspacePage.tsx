@@ -22,9 +22,11 @@ import {
 } from "lucide-react";
 
 import { cn } from "../../../shared/utils/cn";
+import { useAuthStore } from "../../../core/auth/authStore";
 import { aiService } from "../../modelado_uml_inteligente/services/aiService";
 import { umlService } from "../../modelado_uml_inteligente/services/umlService";
 import type { UmlDiagram } from "../../modelado_uml_inteligente/types/uml";
+import { ProjectHistoryPanel } from "../components/ProjectHistoryPanel";
 import { projectService } from "../services/projectService";
 import { useProjectStore } from "../store/projectStore";
 import type { ProjectMember } from "../types/project";
@@ -90,6 +92,7 @@ function statusClassName(status: string) {
 export function ProjectWorkspacePage() {
   const { projectId = "" } = useParams();
   const navigate = useNavigate();
+  const currentUser = useAuthStore((state) => state.user);
   const activeProject = useProjectStore((state) => state.activeProject);
   const setActiveProject = useProjectStore((state) => state.setActiveProject);
   const [diagrams, setDiagrams] = useState<UmlDiagram[]>([]);
@@ -99,6 +102,7 @@ export function ProjectWorkspacePage() {
   const [xmiContent, setXmiContent] = useState("");
   const [operationMessage, setOperationMessage] = useState("Motor IA local listo.");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSavingVersion, setIsSavingVersion] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -125,6 +129,9 @@ export function ProjectWorkspacePage() {
         return matchesSearch && matchesType;
       }),
     [diagrams, searchTerm, typeFilter]
+  );
+  const isOrganizer = members.some(
+    (member) => member.user_id === currentUser?.id && member.project_role === "ORGANIZADOR"
   );
 
   async function createDiagram(event: FormEvent) {
@@ -158,12 +165,19 @@ export function ProjectWorkspacePage() {
   }
 
   async function saveVersion() {
-    await projectService.saveVersion(projectId, {
-      name: `Version ${new Date().toLocaleDateString()}`,
-      description: "Snapshot creado desde frontend",
-      snapshot: { diagrams: diagrams.map((diagram) => diagram.id) },
-    });
-    setOperationMessage("Version del proyecto guardada.");
+    if (isSavingVersion) return;
+    setIsSavingVersion(true);
+    try {
+      const version = await projectService.saveVersion(projectId, {
+        name: `Version ${new Date().toLocaleString()}`,
+        description: "Snapshot completo guardado manualmente",
+      });
+      setOperationMessage(`Version ${version.version_number} del proyecto guardada.`);
+    } catch {
+      setOperationMessage("No se pudo guardar la version del proyecto.");
+    } finally {
+      setIsSavingVersion(false);
+    }
   }
 
   async function createFromAi(sourceType: "text" | "voice" | "image", file?: File) {
@@ -280,10 +294,17 @@ export function ProjectWorkspacePage() {
             <Settings size={18} aria-hidden="true" />
             Gestion
           </Link>
-          <button className={cn(buttonBase, "collab-btn-primary h-12 px-6")} onClick={saveVersion} type="button">
-            <Save size={18} aria-hidden="true" />
-            Guardar version
-          </button>
+          {isOrganizer ? (
+            <button
+              className={cn(buttonBase, "collab-btn-primary h-12 px-6")}
+              disabled={isSavingVersion}
+              onClick={saveVersion}
+              type="button"
+            >
+              <Save size={18} aria-hidden="true" />
+              Guardar version
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -476,6 +497,10 @@ export function ProjectWorkspacePage() {
           ) : null}
         </section>
       </div>
+      <ProjectHistoryPanel
+        projectId={projectId}
+        onVersionRestored={async () => setDiagrams(await umlService.listDiagrams(projectId))}
+      />
     </section>
   );
 }

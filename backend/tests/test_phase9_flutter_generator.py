@@ -118,12 +118,54 @@ def test_flutter_generator_writes_complete_project(tmp_path: Path, monkeypatch) 
     assert "ChangeNotifier" in provider.read_text(encoding="utf-8")
     assert "TextFormField" in form.read_text(encoding="utf-8")
     assert "SwitchListTile" in form.read_text(encoding="utf-8")
+    assert "PrimaryActionButton" in form.read_text(encoding="utf-8")
     assert "'/cliente'" in router.read_text(encoding="utf-8")
     assert "Card(" in router.read_text(encoding="utf-8")
     assert "showDatePicker" in pedido_form.read_text(encoding="utf-8")
     assert "readOnly: true" in pedido_form.read_text(encoding="utf-8")
     assert "toIso8601String" not in pedido_model.read_text(encoding="utf-8")
     assert "padLeft(2, '0')" in pedido_model.read_text(encoding="utf-8")
+
+
+def test_flutter_generator_applies_theme_config(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.modules.generacion_software.flutter_generator.generator.project_writer.which",
+        lambda _: None,
+    )
+
+    result = FlutterGeneratorService(storage_root=tmp_path).generate(
+        _intermediate_model(),
+        "Sistema Ventas Mobile",
+        str(uuid4()),
+        api_base_url="http://localhost:8080",
+        theme_config={
+            "primary_color": "#1D4ED8",
+            "secondary_color": "#F59E0B",
+            "background_color": "#F8FAFC",
+            "surface_color": "#FFFFFF",
+            "button_color": "#DC2626",
+            "font_family": "Inter",
+            "border_radius": 18,
+            "button_style": "outline",
+            "density": "comfortable",
+        },
+    )
+
+    app_theme = result.project_dir / "lib/shared/themes/app_theme.dart"
+    shared_button = result.project_dir / "lib/shared/widgets/primary_action_button.dart"
+    theme_text = app_theme.read_text(encoding="utf-8")
+    button_text = shared_button.read_text(encoding="utf-8")
+
+    assert "Color(0xFF1D4ED8)" in theme_text
+    assert "Color(0xFFDC2626)" in theme_text
+    assert "fontFamily: fontFamily" in theme_text
+    assert "borderRadius = 18.0" in theme_text
+    assert "VisualDensity.comfortable" in theme_text
+    assert "FloatingActionButtonThemeData" in theme_text
+    assert "switchTheme: SwitchThemeData" in theme_text
+    assert "OutlinedButton(onPressed: onPressed" in button_text
+    assert result.manifest["theme_config"]["font_family"] == "Inter"
+    assert result.manifest["theme_config"]["button_style"] == "outline"
 
 
 def test_flutter_generator_scaffolds_android_when_flutter_cli_exists(tmp_path: Path, monkeypatch) -> None:
@@ -216,6 +258,45 @@ def test_flutter_generator_renders_dropdowns_for_association_class_foreign_keys(
     assert "EstudianteService().findAll()" in form_text
     assert "CursoService().findAll()" in form_text
     assert "_displayLabel(item.toJson())" in form_text
+
+
+def test_flutter_generator_creates_join_screen_for_many_to_many_without_association_class(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.modules.generacion_software.flutter_generator.generator.project_writer.which",
+        lambda _: None,
+    )
+    model = {
+        "classes": [
+            {"id": "autor", "name": "Autor", "attributes": [{"name": "nombre", "data_type": "String"}]},
+            {"id": "libro", "name": "Libro", "attributes": [{"name": "titulo", "data_type": "String"}]},
+        ],
+        "relationships": [
+            {
+                "source_class_id": "autor",
+                "target_class_id": "libro",
+                "relationship_type": "association",
+                "source_cardinality": "*",
+                "target_cardinality": "*",
+            }
+        ],
+    }
+
+    result = FlutterGeneratorService(storage_root=tmp_path).generate(
+        model,
+        "Biblioteca Mobile",
+        str(uuid4()),
+        api_base_url="http://localhost:8080",
+    )
+
+    model_text = (result.project_dir / "lib/modules/autor_libro/autor_libro_model.dart").read_text(encoding="utf-8")
+    form_text = (result.project_dir / "lib/modules/autor_libro/autor_libro_form_screen.dart").read_text(encoding="utf-8")
+    router_text = (result.project_dir / "lib/core/routes/app_router.dart").read_text(encoding="utf-8")
+
+    assert "final String? autorId;" in model_text
+    assert "final String? libroId;" in model_text
+    assert "AutorService().findAll()" in form_text
+    assert "LibroService().findAll()" in form_text
+    assert "'/autor_libro'" in router_text
 
 
 def test_phase9_openapi_contracts_are_registered() -> None:

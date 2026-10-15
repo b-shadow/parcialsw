@@ -85,8 +85,8 @@ def build_file_set(project: FlutterProject) -> list[GeneratedFlutterFile]:
         GeneratedFlutterFile("lib/main.dart", render_main(project)),
         GeneratedFlutterFile("lib/core/network/api_client.dart", render_api_client(project)),
         GeneratedFlutterFile("lib/core/routes/app_router.dart", render_app_router(project)),
-        GeneratedFlutterFile("lib/shared/themes/app_theme.dart", render_app_theme()),
-        GeneratedFlutterFile("lib/shared/widgets/primary_action_button.dart", render_shared_button()),
+        GeneratedFlutterFile("lib/shared/themes/app_theme.dart", render_app_theme(project)),
+        GeneratedFlutterFile("lib/shared/widgets/primary_action_button.dart", render_shared_button(project)),
     ]
     for entity in project.entities:
         module = entity.module_name

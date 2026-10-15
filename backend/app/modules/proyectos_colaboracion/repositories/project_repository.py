@@ -1,9 +1,15 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.modules.proyectos_colaboracion.models import Project, ProjectMember, ProjectVersion
+from app.modules.acceso_usuarios.models import User
+from app.modules.proyectos_colaboracion.models import (
+    CollaborationEvent,
+    Project,
+    ProjectMember,
+    ProjectVersion,
+)
 
 
 class ProjectRepository:
@@ -18,6 +24,11 @@ class ProjectRepository:
 
     def get(self, project_id: UUID) -> Project | None:
         return self.db.get(Project, project_id)
+
+    def get_for_update(self, project_id: UUID) -> Project | None:
+        return self.db.scalar(
+            select(Project).where(Project.id == project_id).with_for_update()
+        )
 
     def list_for_user(self, user_id: UUID) -> list[Project]:
         statement = (
@@ -36,4 +47,47 @@ class ProjectRepository:
             .limit(1)
         ).first()
         return (versions or 0) + 1
+
+    def get_version(self, version_id: UUID) -> ProjectVersion | None:
+        return self.db.get(ProjectVersion, version_id)
+
+    def list_versions(self, project_id: UUID) -> list[tuple[ProjectVersion, str]]:
+        statement = (
+            select(ProjectVersion, User.full_name)
+            .join(User, User.id == ProjectVersion.created_by_user_id)
+            .where(ProjectVersion.project_id == project_id)
+            .order_by(ProjectVersion.version_number.desc())
+        )
+        return list(self.db.execute(statement).tuples())
+
+    def list_changes(
+        self, project_id: UUID, limit: int = 100
+    ) -> list[tuple[CollaborationEvent, str]]:
+        statement = (
+            select(CollaborationEvent, User.full_name)
+            .join(User, User.id == CollaborationEvent.user_id)
+            .where(CollaborationEvent.project_id == project_id)
+            .order_by(CollaborationEvent.sequence_number.desc())
+            .limit(max(1, min(limit, 250)))
+        )
+        return list(self.db.execute(statement).tuples())
+
+    def get_event_by_client_id(
+        self, project_id: UUID, user_id: UUID, client_event_id: UUID
+    ) -> CollaborationEvent | None:
+        return self.db.scalar(
+            select(CollaborationEvent).where(
+                CollaborationEvent.project_id == project_id,
+                CollaborationEvent.user_id == user_id,
+                CollaborationEvent.client_event_id == client_event_id,
+            )
+        )
+
+    def next_event_sequence(self, project_id: UUID) -> int:
+        current = self.db.scalar(
+            select(func.max(CollaborationEvent.sequence_number)).where(
+                CollaborationEvent.project_id == project_id
+            )
+        )
+        return (current or 0) + 1
 

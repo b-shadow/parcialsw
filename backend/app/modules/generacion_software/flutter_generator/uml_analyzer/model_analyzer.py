@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass, field
 
 
@@ -24,6 +25,20 @@ class FlutterProject:
     package_name: str
     entities: list[DartEntity]
     api_base_url: str
+    theme_config: "FlutterThemeConfig"
+
+
+@dataclass(frozen=True)
+class FlutterThemeConfig:
+    primary_color: str = "#0F766E"
+    secondary_color: str = "#14B8A6"
+    background_color: str = "#F8FAFC"
+    surface_color: str = "#FFFFFF"
+    button_color: str = "#0F766E"
+    font_family: str = "Roboto"
+    border_radius: int = 12
+    button_style: str = "filled"
+    density: str = "normal"
 
 
 TYPE_MAPPING = {
@@ -71,6 +86,41 @@ def map_dart_type(raw_type: str | None) -> str:
     return TYPE_MAPPING.get(raw_type.lower(), "String")
 
 
+def _safe_hex(value: object, fallback: str) -> str:
+    text = str(value or "").strip()
+    return text if re.fullmatch(r"#[0-9A-Fa-f]{6}", text) else fallback
+
+
+def _safe_choice(value: object, fallback: str, allowed: set[str]) -> str:
+    text = str(value or "").strip().lower()
+    return text if text in allowed else fallback
+
+
+def _safe_border_radius(value: object, fallback: int) -> int:
+    try:
+        numeric = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return min(32, max(0, numeric))
+
+
+def normalize_theme_config(raw_theme: dict | None = None) -> FlutterThemeConfig:
+    if not raw_theme:
+        return FlutterThemeConfig()
+    defaults = FlutterThemeConfig()
+    return FlutterThemeConfig(
+        primary_color=_safe_hex(raw_theme.get("primary_color"), defaults.primary_color),
+        secondary_color=_safe_hex(raw_theme.get("secondary_color"), defaults.secondary_color),
+        background_color=_safe_hex(raw_theme.get("background_color"), defaults.background_color),
+        surface_color=_safe_hex(raw_theme.get("surface_color"), defaults.surface_color),
+        button_color=_safe_hex(raw_theme.get("button_color"), defaults.button_color),
+        font_family=str(raw_theme.get("font_family") or defaults.font_family).strip()[:80] or defaults.font_family,
+        border_radius=_safe_border_radius(raw_theme.get("border_radius"), defaults.border_radius),
+        button_style=_safe_choice(raw_theme.get("button_style"), defaults.button_style, {"filled", "outline", "tonal"}),
+        density=_safe_choice(raw_theme.get("density"), defaults.density, {"compact", "normal", "comfortable"}),
+    )
+
+
 def input_type_for(field_name: str, dart_type: str) -> str:
     normalized = field_name.lower()
     if dart_type == "bool":
@@ -86,7 +136,11 @@ def input_type_for(field_name: str, dart_type: str) -> str:
 
 def _is_many(multiplicity: str | None) -> bool:
     value = (multiplicity or "").strip().lower()
-    return "*" in value or value.endswith("n") or value in {"many", "m"}
+    return (
+        "*" in value
+        or value.endswith("n")
+        or value in {"many", "m", "muchos", "muchas", "varios", "varias"}
+    )
 
 
 def _association_class_id(relation: dict) -> str | None:
@@ -105,10 +159,24 @@ def _relation_field(target_entity: str) -> DartField:
     )
 
 
+def _join_entity_name(source: str, target: str, existing_names: set[str]) -> str:
+    base_name = f"{to_pascal_case(source)}{to_pascal_case(target)}"
+    if base_name not in existing_names:
+        return base_name
+    fallback_name = f"{base_name}Relacion"
+    suffix = 2
+    candidate = fallback_name
+    while candidate in existing_names:
+        candidate = f"{fallback_name}{suffix}"
+        suffix += 1
+    return candidate
+
+
 def analyze_uml_for_flutter(
     intermediate_model: dict,
     name: str,
     api_base_url: str = "http://localhost:8080",
+    theme_config: dict | None = None,
 ) -> FlutterProject:
     entities_by_name: dict[str, DartEntity] = {}
     class_by_id: dict[str, str] = {}
@@ -161,6 +229,19 @@ def analyze_uml_for_flutter(
 
         source_multiplicity = relation.get("source_cardinality")
         target_multiplicity = relation.get("target_cardinality")
+        source_is_many = _is_many(source_multiplicity)
+        target_is_many = _is_many(target_multiplicity)
+        if source_is_many and target_is_many:
+            existing_names = set(entities_by_name)
+            join_entity = _join_entity_name(source, target, existing_names)
+            relation_fields = [_relation_field(source), _relation_field(target)]
+            entities_by_name[join_entity] = DartEntity(
+                name=join_entity,
+                module_name=to_snake_case(join_entity),
+                fields=relation_fields,
+            )
+            continue
+
         owner = target if _is_many(target_multiplicity) and not _is_many(source_multiplicity) else source
         related = source if owner == target else target
         if owner in entities_by_name:
@@ -179,4 +260,5 @@ def analyze_uml_for_flutter(
         package_name=to_package_name(name),
         entities=entities,
         api_base_url=api_base_url,
+        theme_config=normalize_theme_config(theme_config),
     )

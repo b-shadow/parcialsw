@@ -93,6 +93,7 @@ class UmlModificationRequest(BaseModel):
     instruction: str = Field(min_length=1)
     classes: list[UmlClass]
     relationships: list[UmlRelationship] = Field(default_factory=list)
+    selected_class_name: str | None = None
 
 
 class UmlModificationResponse(BaseModel):

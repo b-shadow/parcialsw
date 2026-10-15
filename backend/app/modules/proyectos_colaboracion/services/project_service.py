@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.acceso_usuarios.services.audit_service import AuditService
 from app.modules.proyectos_colaboracion.models import (
+    CollaborationEvent,
     Project,
     ProjectMember,
     ProjectPermission,
@@ -174,7 +175,7 @@ class ProjectService:
         self.db.refresh(member)
         return member
 
-    def remove_member(self, project_id: UUID, member_id: UUID, user_id: UUID) -> None:
+    def remove_member(self, project_id: UUID, member_id: UUID, user_id: UUID) -> UUID:
         project = ensure_project_exists(self.projects.get(project_id))
         ensure_organizer(self.members.get_membership(project_id, user_id))
         member = self.members.get(member_id)
@@ -195,6 +196,7 @@ class ProjectService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="El proyecto debe conservar al menos un organizador",
                 )
+        removed_user_id = member.user_id
         self.members.delete(member)
         self.audit.record(
             module="proyectos_colaboracion",
@@ -204,6 +206,7 @@ class ProjectService:
             metadata={"member_id": str(member_id)},
         )
         self.db.commit()
+        return removed_user_id
 
     def set_permission(
         self, project_id: UUID, member_id: UUID, payload: PermissionRequest, user_id: UUID
@@ -244,27 +247,223 @@ class ProjectService:
     def create_version(
         self, project_id: UUID, payload: VersionCreateRequest, user_id: UUID
     ) -> ProjectVersion:
-        ensure_project_exists(self.projects.get(project_id))
-        self._require_member(project_id, user_id)
-        version = ProjectVersion(
+        ensure_project_exists(self.projects.get_for_update(project_id))
+        ensure_organizer(self.members.get_membership(project_id, user_id))
+        version = self._create_version_record(
             project_id=project_id,
-            created_by_user_id=user_id,
-            version_number=self.projects.next_version_number(project_id),
+            user_id=user_id,
             name=payload.name,
             description=payload.description,
-            snapshot=payload.snapshot,
-            status="saved",
+            snapshot=self._build_project_snapshot(project_id, user_id),
         )
-        self.db.add(version)
         self.audit.record(
             module="proyectos_colaboracion",
             action="CREATE_PROJECT_VERSION",
             user_id=user_id,
             project_id=project_id,
+            metadata={"version_number": version.version_number},
         )
         self.db.commit()
         self.db.refresh(version)
         return version
+
+    def list_versions(self, project_id: UUID, user_id: UUID) -> list[dict]:
+        ensure_project_exists(self.projects.get(project_id))
+        ensure_organizer(self.members.get_membership(project_id, user_id))
+        return [
+            {
+                **self._version_dict(version),
+                "created_by_name": user_name,
+            }
+            for version, user_name in self.projects.list_versions(project_id)
+        ]
+
+    def list_changes(self, project_id: UUID, user_id: UUID, limit: int) -> list[dict]:
+        ensure_project_exists(self.projects.get(project_id))
+        self._require_member(project_id, user_id)
+        return [
+            {
+                "id": event.id,
+                "project_id": event.project_id,
+                "diagram_id": event.diagram_id,
+                "user_id": event.user_id,
+                "user_name": user_name,
+                "client_event_id": event.client_event_id,
+                "sequence_number": event.sequence_number,
+                "event_type": event.event_type,
+                "element_type": event.element_type,
+                "element_id": event.element_id,
+                "base_version": event.base_version,
+                "payload": event.payload,
+                "created_at": event.created_at,
+            }
+            for event, user_name in self.projects.list_changes(project_id, limit)
+        ]
+
+    def restore_version(
+        self, project_id: UUID, version_id: UUID, user_id: UUID
+    ) -> dict:
+        project = ensure_project_exists(self.projects.get_for_update(project_id))
+        ensure_organizer(self.members.get_membership(project_id, user_id))
+        version = self.projects.get_version(version_id)
+        if version is None or version.project_id != project.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Version del proyecto no encontrada",
+            )
+        if version.snapshot.get("schema_version") != 1:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Esta version antigua no contiene un snapshot restaurable",
+            )
+
+        backup = self._create_version_record(
+            project_id=project_id,
+            user_id=user_id,
+            name=f"Respaldo antes de restaurar v{version.version_number}",
+            description="Snapshot automatico de seguridad previo a la restauracion.",
+            snapshot=self._build_project_snapshot(project_id, user_id),
+        )
+        from app.modules.modelado_uml.services.uml_service import UmlService
+
+        restored_ids = UmlService(self.db).restore_project_snapshot(
+            project_id, version.snapshot, user_id
+        )
+        version.status = "restored"
+        restore_event = CollaborationEvent(
+            project_id=project_id,
+            diagram_id=None,
+            user_id=user_id,
+            client_event_id=uuid4(),
+            sequence_number=self.projects.next_event_sequence(project_id),
+            event_type="RESTORE_VERSION",
+            element_type=None,
+            element_id=None,
+            base_version=None,
+            payload={
+                "restored_version": version.version_number,
+                "backup_version": backup.version_number,
+            },
+        )
+        self.db.add(restore_event)
+        self.audit.record(
+            module="proyectos_colaboracion",
+            action="RESTORE_PROJECT_VERSION",
+            user_id=user_id,
+            project_id=project_id,
+            metadata={
+                "restored_version": version.version_number,
+                "backup_version": backup.version_number,
+            },
+        )
+        self.db.commit()
+        self.db.refresh(version)
+        self.db.refresh(backup)
+        return {
+            "restored_version": self._version_dict(version),
+            "backup_version": self._version_dict(backup),
+            "restored_diagram_ids": restored_ids,
+            "event_sequence": restore_event.sequence_number,
+            "event_id": restore_event.id,
+            "client_event_id": restore_event.client_event_id,
+        }
+
+    def record_collaboration_event(
+        self,
+        *,
+        project_id: UUID,
+        diagram_id: UUID | None,
+        user_id: UUID,
+        client_event_id: UUID,
+        event_type: str,
+        element_type: str | None,
+        element_id: UUID | None,
+        base_version: int | None,
+        payload: dict,
+    ) -> tuple[CollaborationEvent, bool]:
+        self._require_member(project_id, user_id)
+        if diagram_id is not None:
+            from app.modules.modelado_uml.models import UmlDiagram
+
+            diagram = self.db.get(UmlDiagram, diagram_id)
+            if diagram is None or diagram.project_id != project_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="El diagrama no pertenece al proyecto colaborativo",
+                )
+        ensure_project_exists(self.projects.get_for_update(project_id))
+        existing = self.projects.get_event_by_client_id(
+            project_id, user_id, client_event_id
+        )
+        if existing is not None:
+            return existing, False
+        event = CollaborationEvent(
+            project_id=project_id,
+            diagram_id=diagram_id,
+            user_id=user_id,
+            client_event_id=client_event_id,
+            sequence_number=self.projects.next_event_sequence(project_id),
+            event_type=event_type,
+            element_type=element_type,
+            element_id=element_id,
+            base_version=base_version,
+            payload=payload,
+        )
+        self.db.add(event)
+        self.db.commit()
+        self.db.refresh(event)
+        return event, True
+
+    def _create_version_record(
+        self,
+        *,
+        project_id: UUID,
+        user_id: UUID,
+        name: str,
+        description: str | None,
+        snapshot: dict,
+    ) -> ProjectVersion:
+        version = ProjectVersion(
+            project_id=project_id,
+            created_by_user_id=user_id,
+            version_number=self.projects.next_version_number(project_id),
+            name=name,
+            description=description,
+            snapshot=snapshot,
+            status="saved",
+        )
+        self.db.add(version)
+        self.db.flush()
+        return version
+
+    def _build_project_snapshot(self, project_id: UUID, user_id: UUID) -> dict:
+        from app.modules.modelado_uml.services.uml_service import UmlService
+
+        uml_service = UmlService(self.db)
+        diagrams = uml_service.uml.list_diagrams_by_project(project_id)
+        return {
+            "schema_version": 1,
+            "project_id": str(project_id),
+            "diagrams": [
+                uml_service._build_internal_model(diagram).model_dump(mode="json")
+                for diagram in diagrams
+            ],
+        }
+
+    @staticmethod
+    def _version_dict(version: ProjectVersion) -> dict:
+        return {
+            "id": version.id,
+            "project_id": version.project_id,
+            "created_by_user_id": version.created_by_user_id,
+            "version_number": version.version_number,
+            "name": version.name,
+            "description": version.description,
+            "snapshot": version.snapshot,
+            "status": version.status,
+            "created_at": version.created_at,
+            "created_by_name": None,
+        }
 
     def _require_member(self, project_id: UUID, user_id: UUID) -> ProjectMember:
         from app.modules.proyectos_colaboracion.validators.project_validator import (

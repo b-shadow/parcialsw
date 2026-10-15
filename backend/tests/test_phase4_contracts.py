@@ -1,6 +1,8 @@
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from app.core.security.jwt import create_access_token, decode_access_token
 from app.core.security.password import hash_password, verify_password
@@ -36,6 +38,8 @@ def test_health_and_openapi_contracts() -> None:
         "/api/v1/projects/{project_id}",
         "/api/v1/projects/{project_id}/members",
         "/api/v1/projects/{project_id}/versions",
+        "/api/v1/projects/{project_id}/versions/{version_id}/restore",
+        "/api/v1/projects/{project_id}/changes",
         "/api/v1/uml/diagrams",
         "/api/v1/uml/projects/{project_id}/diagrams",
         "/api/v1/uml/diagrams/{diagram_id}/classes",
@@ -46,6 +50,9 @@ def test_health_and_openapi_contracts() -> None:
         "/api/v1/generation/transformations",
         "/api/v1/generation/spring-boot",
         "/api/v1/generation/flutter",
+        "/api/v1/notifications/push/config",
+        "/api/v1/notifications/push/subscriptions",
+        "/api/v1/notifications/push/test",
     }
     assert expected_paths.issubset(paths.keys())
 
@@ -54,12 +61,12 @@ def test_project_websocket_contract() -> None:
     client = TestClient(app)
     project_id = str(uuid4())
 
-    with client.websocket_connect(f"/ws/projects/{project_id}") as websocket:
-        assert websocket.receive_json()["type"] == "SESSION_CONNECTED"
-        websocket.send_json({"type": "CREATE_CLASS", "payload": {"name": "Usuario"}})
-        broadcast = websocket.receive_json()
-        ack = websocket.receive_json()
-        assert broadcast["type"] == "UML_EVENT"
-        assert broadcast["project_id"] == project_id
-        assert ack == {"type": "EVENT_ACK", "project_id": project_id}
+    with (
+        pytest.raises(WebSocketDisconnect) as rejected,
+        client.websocket_connect(f"/ws/projects/{project_id}"),
+    ):
+        pass
+
+    assert rejected.value.code == 1008
+    assert rejected.value.reason == "Credenciales invalidas"
 

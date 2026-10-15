@@ -7,6 +7,7 @@ from ai_engine.services.contracts import (
     UmlAttribute,
     UmlClass,
     UmlGenerationRequest,
+    UmlMethod,
     UmlModificationRequest,
     UmlRelationship,
     UmlValidationRequest,
@@ -153,6 +154,364 @@ def test_modify_existing_uml_adds_association_class() -> None:
     assert response.relationships[-1].target == "Curso"
 
 
+def test_modify_existing_uml_adds_attribute_to_named_class() -> None:
+    service = LocalAIService()
+
+    response = service.modify_uml(
+        UmlModificationRequest(
+            instruction="agrega atributo fecha Date a la clase Estudiante",
+            classes=[
+                UmlClass(name="Estudiante", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                UmlClass(name="Curso", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+            ],
+        )
+    )
+
+    estudiante = next(uml_class for uml_class in response.classes if uml_class.name == "Estudiante")
+    assert ("fecha", "Date") in [
+        (attribute.name, attribute.data_type) for attribute in estudiante.attributes
+    ]
+    assert not any(uml_class.name == "Entidad" for uml_class in response.classes)
+    assert response.changes == ["Atributo agregado en Estudiante: fecha"]
+
+
+def test_modify_existing_uml_creates_class_and_one_to_one_relationship_with_table() -> None:
+    service = LocalAIService()
+
+    response = service.modify_uml(
+        UmlModificationRequest(
+            instruction=(
+                "crea clase Perfil con los atributos id UUID y biografia String "
+                "que conecte de 1 a 1 con la tabla Usuario"
+            ),
+            classes=[
+                UmlClass(name="Usuario", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+            ],
+        )
+    )
+
+    perfil = next(uml_class for uml_class in response.classes if uml_class.name == "Perfil")
+    assert [(attribute.name, attribute.data_type) for attribute in perfil.attributes] == [
+        ("id", "UUID"),
+        ("biografia", "String"),
+    ]
+    assert response.relationships[-1].source == "Perfil"
+    assert response.relationships[-1].target == "Usuario"
+    assert response.relationships[-1].source_cardinality == "1"
+    assert response.relationships[-1].target_cardinality == "1"
+
+
+def test_modify_existing_uml_processes_multiple_operations_in_one_instruction() -> None:
+    service = LocalAIService()
+
+    response = service.modify_uml(
+        UmlModificationRequest(
+            instruction=(
+                "crea clase Perfil con los atributos id UUID y biografia String que conecte de 1 a 1 "
+                "con la tabla Usuario, agrega atributo activo Boolean a la clase Usuario y crea clase "
+                "Preferencia con los atributos id UUID y tema String que conecte de 1 a muchos con la tabla Perfil"
+            ),
+            classes=[
+                UmlClass(name="Usuario", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+            ],
+        )
+    )
+
+    usuario = next(uml_class for uml_class in response.classes if uml_class.name == "Usuario")
+    perfil = next(uml_class for uml_class in response.classes if uml_class.name == "Perfil")
+    preferencia = next(uml_class for uml_class in response.classes if uml_class.name == "Preferencia")
+
+    assert ("activo", "Boolean") in [
+        (attribute.name, attribute.data_type) for attribute in usuario.attributes
+    ]
+    assert [(attribute.name, attribute.data_type) for attribute in perfil.attributes] == [
+        ("id", "UUID"),
+        ("biografia", "String"),
+    ]
+    assert [(attribute.name, attribute.data_type) for attribute in preferencia.attributes] == [
+        ("id", "UUID"),
+        ("tema", "String"),
+    ]
+    assert [
+        (
+            relationship.source,
+            relationship.target,
+            relationship.source_cardinality,
+            relationship.target_cardinality,
+        )
+        for relationship in response.relationships
+    ] == [
+        ("Perfil", "Usuario", "1", "1"),
+        ("Preferencia", "Perfil", "1", "*"),
+    ]
+
+
+def test_modify_existing_uml_understands_voice_field_synonyms() -> None:
+    service = LocalAIService()
+
+    response = service.modify_uml(
+        UmlModificationRequest(
+            instruction="ponle el campo telefono String a la clase Cliente",
+            classes=[
+                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+            ],
+        )
+    )
+
+    cliente = next(uml_class for uml_class in response.classes if uml_class.name == "Cliente")
+    assert ("telefono", "String") in [
+        (attribute.name, attribute.data_type) for attribute in cliente.attributes
+    ]
+    assert response.changes == ["Atributo agregado en Cliente: telefono"]
+
+
+def test_modify_existing_uml_creates_relationship_from_voice_instruction() -> None:
+    service = LocalAIService()
+
+    response = service.modify_uml(
+        UmlModificationRequest(
+            instruction="conecta Cliente con Pedido de uno a muchos",
+            classes=[
+                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                UmlClass(name="Pedido", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+            ],
+        )
+    )
+
+    assert response.relationships[-1].source == "Cliente"
+    assert response.relationships[-1].target == "Pedido"
+    assert response.relationships[-1].source_cardinality == "1"
+    assert response.relationships[-1].target_cardinality == "*"
+
+
+def test_modify_existing_uml_creates_table_with_fields_and_relationship_synonyms() -> None:
+    service = LocalAIService()
+
+    response = service.modify_uml(
+        UmlModificationRequest(
+            instruction=(
+                "crea la tabla Factura que tenga id UUID y total Double "
+                "y conectala de uno a muchos con la entidad Cliente"
+            ),
+            classes=[
+                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+            ],
+        )
+    )
+
+    factura = next(uml_class for uml_class in response.classes if uml_class.name == "Factura")
+    assert [(attribute.name, attribute.data_type) for attribute in factura.attributes] == [
+        ("id", "UUID"),
+        ("total", "Double"),
+    ]
+    assert response.relationships[-1].source == "Factura"
+    assert response.relationships[-1].target == "Cliente"
+    assert response.relationships[-1].source_cardinality == "1"
+    assert response.relationships[-1].target_cardinality == "*"
+
+
+def test_modify_existing_uml_processes_mixed_voice_batch_instruction() -> None:
+    service = LocalAIService()
+
+    response = service.modify_uml(
+        UmlModificationRequest(
+            instruction=(
+                "ponle campo telefono String a Cliente, conecta Cliente con Pedido de uno a muchos "
+                "y crea tabla Pago con campos id UUID y monto Double que conecte de uno a uno con Pedido"
+            ),
+            classes=[
+                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                UmlClass(name="Pedido", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+            ],
+        )
+    )
+
+    cliente = next(uml_class for uml_class in response.classes if uml_class.name == "Cliente")
+    pago = next(uml_class for uml_class in response.classes if uml_class.name == "Pago")
+    assert ("telefono", "String") in [
+        (attribute.name, attribute.data_type) for attribute in cliente.attributes
+    ]
+    assert [(attribute.name, attribute.data_type) for attribute in pago.attributes] == [
+        ("id", "UUID"),
+        ("monto", "Double"),
+    ]
+    assert [
+        (
+            relationship.source,
+            relationship.target,
+            relationship.source_cardinality,
+            relationship.target_cardinality,
+        )
+        for relationship in response.relationships
+    ] == [
+        ("Cliente", "Pedido", "1", "*"),
+        ("Pago", "Pedido", "1", "1"),
+    ]
+
+
+def test_modify_existing_uml_renames_class_and_updates_relationships() -> None:
+    service = LocalAIService()
+
+    response = service.modify_uml(
+        UmlModificationRequest(
+            instruction="renombra la clase Cliente a Comprador",
+            classes=[
+                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                UmlClass(name="Pedido", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+            ],
+            relationships=[
+                UmlRelationship(source="Cliente", target="Pedido", relationship_type="association")
+            ],
+        )
+    )
+
+    assert any(uml_class.name == "Comprador" for uml_class in response.classes)
+    assert not any(uml_class.name == "Cliente" for uml_class in response.classes)
+    assert response.relationships[0].source == "Comprador"
+    assert response.relationships[0].target == "Pedido"
+
+
+def test_modify_existing_uml_removes_attribute_from_voice_instruction() -> None:
+    service = LocalAIService()
+
+    response = service.modify_uml(
+        UmlModificationRequest(
+            instruction="quita campo telefono de Cliente",
+            classes=[
+                UmlClass(
+                    name="Cliente",
+                    attributes=[
+                        UmlAttribute(name="id", data_type="UUID"),
+                        UmlAttribute(name="telefono", data_type="String"),
+                    ],
+                ),
+            ],
+        )
+    )
+
+    cliente = next(uml_class for uml_class in response.classes if uml_class.name == "Cliente")
+    assert ("telefono", "String") not in [
+        (attribute.name, attribute.data_type) for attribute in cliente.attributes
+    ]
+    assert response.changes == ["Atributo eliminado en Cliente: telefono"]
+
+
+def test_modify_existing_uml_uses_selected_class_for_implicit_attribute_edit() -> None:
+    service = LocalAIService()
+
+    response = service.modify_uml(
+        UmlModificationRequest(
+            instruction="ponle campo correo String",
+            selected_class_name="Cliente",
+            classes=[
+                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                UmlClass(name="Pedido", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+            ],
+        )
+    )
+
+    cliente = next(uml_class for uml_class in response.classes if uml_class.name == "Cliente")
+    pedido = next(uml_class for uml_class in response.classes if uml_class.name == "Pedido")
+    assert ("correo", "String") in [
+        (attribute.name, attribute.data_type) for attribute in cliente.attributes
+    ]
+    assert ("correo", "String") not in [
+        (attribute.name, attribute.data_type) for attribute in pedido.attributes
+    ]
+
+
+def test_modify_existing_uml_uses_selected_class_for_implicit_relationship() -> None:
+    service = LocalAIService()
+
+    response = service.modify_uml(
+        UmlModificationRequest(
+            instruction="conectala con Pedido de uno a varios",
+            selected_class_name="Cliente",
+            classes=[
+                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                UmlClass(name="Pedido", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+            ],
+        )
+    )
+
+    assert response.relationships == [
+        UmlRelationship(
+            source="Cliente",
+            target="Pedido",
+            relationship_type="association",
+            label="asocia",
+            source_cardinality="1",
+            target_cardinality="*",
+        )
+    ]
+
+
+def test_modify_existing_uml_matches_spoken_compound_class_names() -> None:
+    service = LocalAIService()
+
+    response = service.modify_uml(
+        UmlModificationRequest(
+            instruction="conecta detalle pedido con linea pago de uno a uno",
+            classes=[
+                UmlClass(name="DetallePedido", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                UmlClass(name="LineaPago", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+            ],
+        )
+    )
+
+    assert response.relationships[-1].source == "DetallePedido"
+    assert response.relationships[-1].target == "LineaPago"
+    assert response.relationships[-1].source_cardinality == "1"
+    assert response.relationships[-1].target_cardinality == "1"
+
+
+def test_modify_existing_uml_updates_existing_relationship_without_duplicate() -> None:
+    service = LocalAIService()
+
+    response = service.modify_uml(
+        UmlModificationRequest(
+            instruction="conecta Pedido con Cliente de muchos a uno",
+            classes=[
+                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                UmlClass(name="Pedido", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+            ],
+            relationships=[
+                UmlRelationship(
+                    source="Cliente",
+                    target="Pedido",
+                    relationship_type="association",
+                    source_cardinality="1",
+                    target_cardinality="*",
+                )
+            ],
+        )
+    )
+
+    assert len(response.relationships) == 1
+    assert response.relationships[0].source == "Pedido"
+    assert response.relationships[0].target == "Cliente"
+    assert response.relationships[0].source_cardinality == "*"
+    assert response.relationships[0].target_cardinality == "1"
+
+
+def test_modify_existing_uml_discards_relationships_to_missing_classes() -> None:
+    service = LocalAIService()
+
+    response = service.modify_uml(
+        UmlModificationRequest(
+            instruction="ponle campo correo String a Cliente",
+            classes=[
+                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+            ],
+            relationships=[
+                UmlRelationship(source="Cliente", target="Fantasma", relationship_type="association")
+            ],
+        )
+    )
+
+    assert response.relationships == []
+
+
 def test_ai_validation_and_software_plan() -> None:
     service = LocalAIService()
     uml = service.text_to_uml(UmlGenerationRequest(prompt="Crear sistema con cliente y pedido"))
@@ -170,3 +529,50 @@ def test_ai_validation_and_software_plan() -> None:
     assert validation.score > 0
     assert any(file.endswith(".java") for file in spring.files)
     assert any(file.endswith(".dart") for file in flutter.files)
+
+
+def test_ai_validation_allows_empty_methods_and_rejects_invalid_uml_details() -> None:
+    service = LocalAIService()
+    valid = service.validate_uml(
+        UmlValidationRequest(
+            classes=[
+                UmlClass(
+                    name="Cliente",
+                    attributes=[UmlAttribute(name="id", data_type="UUID")],
+                    methods=[],
+                )
+            ]
+        )
+    )
+    invalid = service.validate_uml(
+        UmlValidationRequest(
+            classes=[
+                UmlClass(
+                    name="Cliente",
+                    attributes=[
+                        UmlAttribute(name="correo", data_type="String"),
+                        UmlAttribute(name="CORREO", data_type="String"),
+                    ],
+                    methods=[
+                        UmlMethod(name="guardar", return_type="void"),
+                        UmlMethod(name="GUARDAR", return_type="void"),
+                    ],
+                )
+            ],
+            relationships=[
+                UmlRelationship(
+                    source="Cliente",
+                    target="Fantasma",
+                    relationship_type="association",
+                    source_cardinality="muchos",
+                )
+            ],
+        )
+    )
+
+    assert valid.errors == []
+    assert not any("metodo" in item.lower() for item in valid.recommendations)
+    assert any("Multiplicidad invalida" in error for error in invalid.errors)
+    assert any("destino inexistente" in error for error in invalid.errors)
+    assert any("Atributos duplicados" in warning for warning in invalid.warnings)
+    assert any("Metodos duplicados" in warning for warning in invalid.warnings)

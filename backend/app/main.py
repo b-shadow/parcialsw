@@ -16,6 +16,7 @@ from app.modules.generacion_software.routers.generation import router as generat
 from app.modules.generacion_software.routers.health import router as generacion_router
 from app.modules.modelado_uml.routers.health import router as uml_router
 from app.modules.modelado_uml.routers.uml import router as uml_functional_router
+from app.modules.notificaciones.routers import router as notifications_router
 from app.modules.proyectos_colaboracion.routers.health import router as proyectos_router
 from app.modules.proyectos_colaboracion.routers.projects import router as projects_router
 from app.websocket.router import router as websocket_router
@@ -51,6 +52,7 @@ def create_app() -> FastAPI:
     app.include_router(generacion_router, prefix=settings.api_prefix)
     app.include_router(ai_router, prefix=settings.api_prefix)
     app.include_router(generation_router, prefix=settings.api_prefix)
+    app.include_router(notifications_router, prefix=settings.api_prefix)
     app.include_router(websocket_router)
 
     @app.get("/health", tags=["health"])

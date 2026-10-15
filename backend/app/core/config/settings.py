@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     s3_artifacts_bucket: str | None = None
     aws_region: str = "us-east-1"
     log_level: str = "INFO"
+    vapid_public_key: str | None = None
+    vapid_private_key: str | None = None
+    vapid_subject: str = "mailto:admin@example.com"
 
     @property
     def cors_origins(self) -> list[str]:

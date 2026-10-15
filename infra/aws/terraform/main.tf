@@ -162,12 +162,13 @@ resource "aws_db_instance" "postgres" {
   vpc_security_group_ids  = [aws_security_group.rds.id]
   storage_encrypted       = true
   backup_retention_period = var.rds_backup_retention_period
-  skip_final_snapshot     = false
-  deletion_protection     = true
+  skip_final_snapshot     = true
+  deletion_protection     = false
 }
 
 resource "aws_s3_bucket" "artifacts" {
-  bucket = var.artifacts_bucket_name
+  bucket        = var.artifacts_bucket_name
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_versioning" "artifacts" {
@@ -187,7 +188,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "artifacts" {
 }
 
 resource "aws_s3_bucket" "frontend" {
-  bucket = var.frontend_bucket_name
+  bucket        = var.frontend_bucket_name
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_ownership_controls" "frontend" {

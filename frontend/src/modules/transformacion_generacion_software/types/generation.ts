@@ -54,10 +54,23 @@ export type GeneratedFrontend = {
   created_at: string;
 };
 
+export type FlutterThemeConfig = {
+  primary_color: string;
+  secondary_color: string;
+  background_color: string;
+  surface_color: string;
+  button_color: string;
+  font_family: string;
+  border_radius: number;
+  button_style: "filled" | "outline" | "tonal";
+  density: "compact" | "normal" | "comfortable";
+};
+
 export type FrontendGenerationPayload = {
   transformation_id: string;
   name: string;
   version_label: string;
   backend_id?: string;
   api_base_url?: string;
+  theme_config?: FlutterThemeConfig;
 };
