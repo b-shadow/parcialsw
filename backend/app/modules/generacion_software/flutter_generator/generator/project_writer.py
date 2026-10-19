@@ -18,6 +18,7 @@ from app.modules.generacion_software.flutter_generator.templates import (
     render_pubspec,
     render_readme,
     render_shared_button,
+    render_theme_golden_png,
     render_web_index,
     render_web_manifest,
     render_widget_test,
@@ -30,7 +31,7 @@ from app.modules.generacion_software.flutter_generator.uml_analyzer.model_analyz
 @dataclass(frozen=True)
 class GeneratedFlutterFile:
     relative_path: str
-    content: str
+    content: str | bytes
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,7 @@ def build_file_set(project: FlutterProject) -> list[GeneratedFlutterFile]:
         GeneratedFlutterFile("web/index.html", render_web_index(project)),
         GeneratedFlutterFile("web/manifest.json", render_web_manifest(project)),
         GeneratedFlutterFile("test/widget_test.dart", render_widget_test(project)),
+        GeneratedFlutterFile("test/goldens/theme_tokens.png", render_theme_golden_png(project)),
         GeneratedFlutterFile("lib/main.dart", render_main(project)),
         GeneratedFlutterFile("lib/core/network/api_client.dart", render_api_client(project)),
         GeneratedFlutterFile("lib/core/routes/app_router.dart", render_app_router(project)),
@@ -96,7 +98,7 @@ def build_file_set(project: FlutterProject) -> list[GeneratedFlutterFile]:
                 GeneratedFlutterFile(f"lib/modules/{module}/{module}_service.dart", render_entity_service(entity)),
                 GeneratedFlutterFile(f"lib/modules/{module}/{module}_provider.dart", render_entity_provider(entity)),
                 GeneratedFlutterFile(f"lib/modules/{module}/{module}_list_screen.dart", render_entity_list_screen(entity)),
-                GeneratedFlutterFile(f"lib/modules/{module}/{module}_form_screen.dart", render_entity_form_screen(entity)),
+                GeneratedFlutterFile(f"lib/modules/{module}/{module}_form_screen.dart", render_entity_form_screen(entity, project.theme_config.show_field_labels)),
             ]
         )
     return files
@@ -109,7 +111,10 @@ def write_flutter_project(project: FlutterProject, output_dir: Path) -> FlutterW
     for generated_file in build_file_set(project):
         target = output_dir / generated_file.relative_path
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(generated_file.content, encoding="utf-8")
+        if isinstance(generated_file.content, bytes):
+            target.write_bytes(generated_file.content)
+        else:
+            target.write_text(generated_file.content, encoding="utf-8")
         written.append(target)
     if scaffolded_platforms:
         for path in output_dir.rglob("*"):

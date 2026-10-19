@@ -37,6 +37,7 @@ def test_health_and_openapi_contracts() -> None:
         "/api/v1/projects",
         "/api/v1/projects/{project_id}",
         "/api/v1/projects/{project_id}/members",
+        "/api/v1/projects/{project_id}/member-candidates",
         "/api/v1/projects/{project_id}/versions",
         "/api/v1/projects/{project_id}/versions/{version_id}/restore",
         "/api/v1/projects/{project_id}/changes",

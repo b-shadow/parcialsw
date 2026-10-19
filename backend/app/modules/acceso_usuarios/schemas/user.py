@@ -31,7 +31,7 @@ class UserUpdateRequest(BaseModel):
 
 
 class AdminUserUpdateRequest(UserUpdateRequest):
-    role_name: str | None = Field(default=None, pattern="^(ADMINISTRADOR|EDITOR|ORGANIZADOR)$")
+    role_name: str | None = Field(default=None, pattern="^(ADMINISTRADOR|EDITOR)$")
 
 
 class ChangePasswordRequest(BaseModel):

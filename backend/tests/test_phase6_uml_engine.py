@@ -242,6 +242,85 @@ def test_xmi_export_import_roundtrip_keeps_classes() -> None:
     }
 
 
+def test_xmi_roundtrip_preserves_generalization_aggregation_and_composition() -> None:
+    source = UmlDiagramModel(
+        name="Relaciones UML",
+        classes=[
+            UmlClassModel(id="class-child", name="Detalle"),
+            UmlClassModel(id="class-parent", name="Entidad"),
+            UmlClassModel(id="class-whole", name="Pedido"),
+        ],
+        relationships=[
+            UmlRelationshipModel(
+                id="rel-generalization",
+                source_class_id="class-child",
+                target_class_id="class-parent",
+                relationship_type="inheritance",
+                source_cardinality="1",
+                target_cardinality="1",
+            ),
+            UmlRelationshipModel(
+                id="rel-aggregation",
+                source_class_id="class-child",
+                target_class_id="class-whole",
+                relationship_type="aggregation",
+                source_cardinality="0..*",
+                target_cardinality="1",
+            ),
+            UmlRelationshipModel(
+                id="rel-composition",
+                source_class_id="class-parent",
+                target_class_id="class-whole",
+                relationship_type="composition",
+                source_cardinality="1..*",
+                target_cardinality="1",
+            ),
+        ],
+    )
+
+    xmi = export_xmi(source)
+    imported = import_xmi(xmi, name="Importado")
+    relationships = {relationship.relationship_type: relationship for relationship in imported.relationships}
+
+    assert "<UML:Generalization" in xmi
+    assert 'aggregation="shared"' in xmi
+    assert 'aggregation="composite"' in xmi
+    assert set(relationships) == {"inheritance", "aggregation", "composition"}
+    assert relationships["inheritance"].source_cardinality == "1"
+    assert relationships["inheritance"].target_cardinality == "1"
+    assert relationships["aggregation"].source_class_id == "Detalle"
+    assert relationships["aggregation"].target_class_id == "Pedido"
+    assert relationships["aggregation"].source_cardinality == "0..*"
+    assert relationships["aggregation"].target_cardinality == "1"
+    assert relationships["composition"].source_class_id == "Entidad"
+    assert relationships["composition"].target_class_id == "Pedido"
+    assert relationships["composition"].source_cardinality == "1..*"
+    assert relationships["composition"].target_cardinality == "1"
+
+
+def test_xmi_import_normalizes_legacy_aggregation_end_to_target() -> None:
+    legacy_xmi = """<?xml version="1.0" encoding="windows-1252"?>
+<XMI xmi.version="1.1" xmlns:UML="omg.org/UML1.3">
+  <XMI.content><UML:Model name="EA Model"><UML:Namespace.ownedElement>
+    <UML:Class name="Parte" xmi.id="EAID_PART"/>
+    <UML:Class name="Todo" xmi.id="EAID_WHOLE"/>
+    <UML:Association xmi.id="EAID_REL"><UML:Association.connection>
+      <UML:AssociationEnd type="EAID_WHOLE" multiplicity="1" aggregation="shared"/>
+      <UML:AssociationEnd type="EAID_PART" multiplicity="0..*" aggregation="none"/>
+    </UML:Association.connection></UML:Association>
+  </UML:Namespace.ownedElement></UML:Model></XMI.content>
+</XMI>"""
+
+    imported = import_xmi(legacy_xmi, name="legacy")
+    relationship = imported.relationships[0]
+
+    assert relationship.relationship_type == "aggregation"
+    assert relationship.source_class_id == "Parte"
+    assert relationship.target_class_id == "Todo"
+    assert relationship.source_cardinality == "0..*"
+    assert relationship.target_cardinality == "1"
+
+
 def test_enterprise_architect_xml_import_reads_class_diagram() -> None:
     ea_xml = """<?xml version="1.0" encoding="windows-1252"?>
 <XMI xmi.version="1.1" xmlns:UML="omg.org/UML1.3">

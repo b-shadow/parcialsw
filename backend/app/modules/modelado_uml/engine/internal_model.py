@@ -37,6 +37,8 @@ class UmlMethodModel(BaseModel):
     order_index: int = 0
     parameters: list[UmlParameterModel] = Field(default_factory=list)
     metadata_json: dict = Field(default_factory=dict)
+    specification: dict | None = None
+    readiness: dict | None = None
 
 
 class UmlClassModel(BaseModel):

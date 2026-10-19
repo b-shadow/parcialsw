@@ -20,19 +20,19 @@ const topics: HelpTopic[] = [
     title: "Generar UML desde imagen",
     keywords: ["foto", "imagen", "image", "uml", "diagrama", "camara", "dibujo", "papel"],
     answer:
-      "Para generar un diagrama desde una foto: entra a Proyectos, abre un proyecto, ve a Colaborativo, crea o abre un diagrama UML y usa el boton Imagen a UML. Selecciona la foto y el sistema detectara clases, atributos, metodos y relaciones cuando el patron sea reconocido."
+      "Para incorporar una foto: abre el diagrama en Colaborativo y pulsa el icono de imagen en Herramientas de edicion. El sistema detectara clases, atributos, metodos y relaciones, y los fusionara con el contenido que ya existe en el lienzo."
   },
   {
     title: "Generar UML por texto",
     keywords: ["texto", "prompt", "escrito", "ia local", "crear diagrama", "generar diagrama"],
     answer:
-      "Para generar por texto: abre un diagrama en Colaborativo, escribe la descripcion en el panel IA local preparada y pulsa Texto. Puedes describir clases, atributos, metodos, relaciones y multiplicidades. Si quieres una clase asociativa, indica que una clase se usa como clase asociativa de una relacion."
+      "Para editar por texto: abre un diagrama en Colaborativo, escribe la instruccion en Herramientas de edicion y pulsa el icono de envio. Puedes describir clases, atributos, metodos, relaciones y multiplicidades."
   },
   {
     title: "Generar UML por voz",
     keywords: ["voz", "microfono", "hablar", "dictar", "audio"],
     answer:
-      "Para generar por voz: abre el editor UML y usa el boton Voz en el panel IA local preparada. Dicta la misma instruccion que escribirias en texto, por ejemplo: crea Estudiante, Curso e Inscripcion como clase asociativa con multiplicidad muchos a muchos."
+      "Para editar por voz: abre el editor UML y pulsa el icono de microfono en Herramientas de edicion. El dictado se transcribe en el cuadro; revisalo y pulsa el icono de envio para aplicarlo."
   },
   {
     title: "Importar o exportar Enterprise Architect",
@@ -50,7 +50,7 @@ const topics: HelpTopic[] = [
     title: "Generar backend y frontend",
     keywords: ["backend", "frontend", "spring", "flutter", "generacion", "codigo", "descargar zip"],
     answer:
-      "Para generar software entra a Generacion. Primero selecciona proyecto, luego diagrama. Transforma el UML a modelo intermedio, genera backend Spring Boot y despues se habilita Flutter. Cada salida puede descargarse como ZIP."
+      "En Proyectos pulsa Generacion sobre el proyecto que deseas construir. La pestaña Backend crea versiones Spring Boot consecutivas; en Frontend eliges para cual backend se genera Flutter. Todas las versiones quedan guardadas en su historial y pueden descargarse como ZIP."
   },
   {
     title: "Base de datos del backend generado",
@@ -74,7 +74,7 @@ const topics: HelpTopic[] = [
     title: "Flujo recomendado",
     keywords: ["como empiezo", "flujo", "pasos", "usar sistema", "guia", "ayuda"],
     answer:
-      "Flujo recomendado: 1. Crea un proyecto. 2. Abre Colaborativo. 3. Crea o importa/genera un diagrama UML. 4. Ajusta clases y relaciones. 5. Valida. 6. Exporta XML o ve a Generacion para producir backend y frontend."
+      "Flujo recomendado: 1. Crea un proyecto, que contiene su diagrama. 2. Abre Colaborativo. 3. Ajusta clases y relaciones. 4. Valida. 5. Vuelve a Proyectos y abre Generacion. 6. Genera primero una version del backend y luego Flutter para esa version."
   }
 ];
 

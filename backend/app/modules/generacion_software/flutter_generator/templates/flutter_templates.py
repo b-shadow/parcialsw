@@ -1,3 +1,6 @@
+import struct
+import zlib
+
 from app.modules.generacion_software.flutter_generator.api_analyzer import endpoint_for_entity
 from app.modules.generacion_software.flutter_generator.uml_analyzer.model_analyzer import (
     DartEntity,
@@ -74,6 +77,8 @@ class GeneratedCaseApp extends StatelessWidget {{
         title: '{project.name}',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: AppTheme.mode,
         routes: AppRouter.routes,
         initialRoute: AppRouter.home,
       ),
@@ -121,9 +126,43 @@ class ApiClient {{
     }}
   }}
 
+  Future<dynamic> request(
+    String method,
+    String path, {{
+    Map<String, dynamic>? body,
+    Map<String, String>? query,
+  }}) async {{
+    final baseUri = Uri.parse('$baseUrl$path');
+    final uri = query == null || query.isEmpty
+        ? baseUri
+        : baseUri.replace(queryParameters: query);
+    final encoded = body == null || body.isEmpty ? null : jsonEncode(body);
+    late final http.Response response;
+    switch (method.toUpperCase()) {{
+      case 'GET':
+        response = await http.get(uri, headers: _headers);
+        break;
+      case 'POST':
+        response = await http.post(uri, headers: _headers, body: encoded);
+        break;
+      case 'PUT':
+        response = await http.put(uri, headers: _headers, body: encoded);
+        break;
+      case 'PATCH':
+        response = await http.patch(uri, headers: _headers, body: encoded);
+        break;
+      case 'DELETE':
+        response = await http.delete(uri, headers: _headers, body: encoded);
+        break;
+      default:
+        throw ArgumentError.value(method, 'method', 'Metodo HTTP no soportado');
+    }}
+    return _decode(response);
+  }}
+
   dynamic _decode(http.Response response) {{
     if (response.statusCode >= 400) {{
-      throw Exception('Error HTTP ${{response.statusCode}}: ${{response.body}}');
+      throw ApiException(response.statusCode, response.body);
     }}
     if (response.body.isEmpty) {{
       return null;
@@ -131,19 +170,75 @@ class ApiClient {{
     return jsonDecode(response.body);
   }}
 }}
+
+class ApiException implements Exception {{
+  const ApiException(this.statusCode, this.message);
+
+  final int statusCode;
+  final String message;
+
+  @override
+  String toString() => 'ApiException($statusCode): $message';
+}}
 """
 
 
 def render_widget_test(project: FlutterProject) -> str:
+    mode = {"light": "ThemeMode.light", "dark": "ThemeMode.dark"}.get(project.theme_config.mode, "ThemeMode.system")
     return f"""import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
 
 import 'package:{project.package_name}/main.dart';
+import 'package:{project.package_name}/shared/themes/app_theme.dart';
 
 void main() {{
   testWidgets('renders generated app', (tester) async {{
     await tester.pumpWidget(const GeneratedCaseApp());
     expect(find.text('{project.name}'), findsWidgets);
   }});
+
+  test('theme contract is applied in light and dark modes', () {{
+    expect(AppTheme.mode, {mode});
+    expect(AppTheme.light.colorScheme.primary, const Color({_dart_color(project.theme_config.primary_color)}));
+    expect(AppTheme.dark.colorScheme.primary, const Color({_dart_color(project.theme_config.dark_primary_color)}));
+    expect(AppTheme.light.inputDecorationTheme.filled, {str(project.theme_config.input_style == 'filled').lower()});
+    expect(AppTheme.light.cardTheme.elevation, { {'flat': '0', 'outlined': '0', 'elevated': '2'}.get(project.theme_config.card_style, '0')});
+  }});
+
+  testWidgets('theme semantic tokens match the generated golden', (tester) async {{
+    const goldenKey = Key('theme-token-golden');
+    await tester.pumpWidget(
+      const Center(
+        child: RepaintBoundary(
+          key: goldenKey,
+          child: SizedBox(
+            width: 96,
+            height: 32,
+            child: CustomPaint(painter: _ThemeTokenPainter()),
+          ),
+        ),
+      ),
+    );
+    await expectLater(
+      find.byKey(goldenKey),
+      matchesGoldenFile('goldens/theme_tokens.png'),
+    );
+  }});
+}}
+
+class _ThemeTokenPainter extends CustomPainter {{
+  const _ThemeTokenPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {{
+    final width = size.width / 3;
+    canvas.drawRect(Rect.fromLTWH(0, 0, width, size.height), Paint()..color = AppTheme.light.colorScheme.primary);
+    canvas.drawRect(Rect.fromLTWH(width, 0, width, size.height), Paint()..color = AppTheme.dark.colorScheme.primary);
+    canvas.drawRect(Rect.fromLTWH(width * 2, 0, width, size.height), Paint()..color = AppTheme.light.colorScheme.error);
+  }}
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }}
 """
 
@@ -196,12 +291,40 @@ def _dart_color(hex_color: str) -> str:
     return f"0xFF{value}"
 
 
-def render_app_theme(project: FlutterProject) -> str:
+def _png_chunk(kind: bytes, data: bytes) -> bytes:
+    payload = kind + data
+    return struct.pack(">I", len(data)) + payload + struct.pack(">I", zlib.crc32(payload) & 0xFFFFFFFF)
+
+
+def render_theme_golden_png(project: FlutterProject) -> bytes:
+    light = project.theme_config.raw_v2.get("light", {})
+    colors = (
+        project.theme_config.primary_color,
+        project.theme_config.dark_primary_color,
+        str(light.get("error", "#B91C1C")),
+    )
+    pixels = []
+    for color in colors:
+        value = color.lstrip("#")
+        red, green, blue = (int(value[index:index + 2], 16) for index in (0, 2, 4))
+        pixels.extend([(red, green, blue, 255)] * 32)
+    row = b"\x00" + b"".join(bytes(pixel) for pixel in pixels)
+    raw = row * 32
+    header = struct.pack(">IIBBBBB", 96, 32, 8, 6, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + _png_chunk(b"IHDR", header) + _png_chunk(b"IDAT", zlib.compress(raw)) + _png_chunk(b"IEND", b"")
+
+
+def _render_app_theme_legacy(project: FlutterProject) -> str:
     theme = project.theme_config
     visual_density = {
         "compact": "VisualDensity.compact",
         "comfortable": "VisualDensity.comfortable",
     }.get(theme.density, "VisualDensity.standard")
+    theme_mode = {"light": "ThemeMode.light", "dark": "ThemeMode.dark"}.get(theme.mode, "ThemeMode.system")
+    input_filled = "true" if theme.input_style == "filled" else "false"
+    card_elevation = {"flat": "0", "outlined": "0", "elevated": "2"}.get(theme.card_style, "0")
+    font_scale = {"compact": 0.92, "large": 1.15}.get(theme.typography_scale, 1.0)
+    font_weight = "FontWeight.w500" if theme.typography_weight == "medium" else "FontWeight.w400"
     return f"""import 'package:flutter/material.dart';
 
 class AppTheme {{
@@ -212,6 +335,8 @@ class AppTheme {{
   static const Color buttonColor = Color({_dart_color(theme.button_color)});
   static const String fontFamily = '{theme.font_family}';
   static const double borderRadius = {float(theme.border_radius):.1f};
+  static const ThemeMode mode = {theme_mode};
+  static const Color onPrimaryColor = Color({_dart_color(theme.on_primary_color)});
 
   static ThemeData get light {{
     return ThemeData(
@@ -222,36 +347,41 @@ class AppTheme {{
         surface: surfaceColor,
       ),
       scaffoldBackgroundColor: backgroundColor,
-      fontFamily: fontFamily,
+      fontFamily: fontFamily == 'system' ? null : fontFamily,
       useMaterial3: true,
       visualDensity: {visual_density},
+      textTheme: ThemeData.light().textTheme.apply(
+        fontFamily: fontFamily == 'system' ? null : fontFamily,
+        fontSizeFactor: {font_scale},
+      ).copyWith(bodyMedium: ThemeData.light().textTheme.bodyMedium?.copyWith(fontWeight: {font_weight})),
       appBarTheme: const AppBarTheme(
         backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
+        foregroundColor: onPrimaryColor,
         centerTitle: false,
       ),
       inputDecorationTheme: InputDecorationTheme(
-        filled: true,
+        filled: {input_filled},
         fillColor: surfaceColor,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(borderRadius)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular({float(theme.input_radius):.1f})),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(borderRadius),
-          borderSide: BorderSide(color: primaryColor.withOpacity(0.25)),
+          borderRadius: BorderRadius.circular({float(theme.input_radius):.1f}),
+          borderSide: BorderSide(color: primaryColor.withValues(alpha: 0.25)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(borderRadius),
+          borderRadius: BorderRadius.circular({float(theme.input_radius):.1f}),
           borderSide: const BorderSide(color: primaryColor, width: 1.4),
         ),
       ),
       cardTheme: CardThemeData(
         color: surfaceColor,
         margin: const EdgeInsets.all(8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(borderRadius)),
+        elevation: {card_elevation},
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular({float(theme.card_radius):.1f})),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: buttonColor,
-          foregroundColor: Colors.white,
+          foregroundColor: onPrimaryColor,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(borderRadius)),
           minimumSize: const Size.fromHeight(48),
         ),
@@ -266,23 +396,210 @@ class AppTheme {{
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: buttonColor,
-        foregroundColor: Colors.white,
+        foregroundColor: onPrimaryColor,
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected) ? buttonColor : null,
         ),
         trackColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected) ? buttonColor.withOpacity(0.35) : null,
+          (states) => states.contains(WidgetState.selected) ? buttonColor.withValues(alpha: 0.35) : null,
         ),
       ),
+      dialogTheme: DialogThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular({float(theme.dialog_radius):.1f})),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        indicatorColor: secondaryColor.withValues(alpha: 0.2),
+        labelTextStyle: const WidgetStatePropertyAll(TextStyle(color: primaryColor)),
+      ),
+      drawerTheme: const DrawerThemeData(backgroundColor: surfaceColor),
+    );
+  }}
+
+  static ThemeData get dark {{
+    const darkPrimary = Color({_dart_color(theme.dark_primary_color)});
+    const darkSecondary = Color({_dart_color(theme.dark_secondary_color)});
+    const darkBackground = Color({_dart_color(theme.dark_background_color)});
+    const darkSurface = Color({_dart_color(theme.dark_surface_color)});
+    const darkOnPrimary = Color({_dart_color(theme.dark_on_primary_color)});
+    const darkOnSurface = Color({_dart_color(theme.dark_on_surface_color)});
+    return light.copyWith(
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: darkBackground,
+      colorScheme: const ColorScheme.dark(
+        primary: darkPrimary, onPrimary: darkOnPrimary,
+        secondary: darkSecondary, surface: darkSurface, onSurface: darkOnSurface,
+      ),
+      appBarTheme: const AppBarTheme(backgroundColor: darkSurface, foregroundColor: darkOnSurface),
+      cardTheme: light.cardTheme.copyWith(color: darkSurface),
     );
   }}
 }}
 """
 
 
-def render_app_router(project: FlutterProject) -> str:
+def render_app_theme(project: FlutterProject) -> str:
+    theme = project.theme_config
+    light = theme.raw_v2.get("light", {})
+    dark = theme.raw_v2.get("dark", {})
+    light_token = lambda name, fallback: str(light.get(name, fallback))
+    dark_token = lambda name, fallback: str(dark.get(name, fallback))
+    visual_density = {
+        "compact": "VisualDensity.compact",
+        "comfortable": "VisualDensity.comfortable",
+    }.get(theme.density, "VisualDensity.standard")
+    theme_mode = {"light": "ThemeMode.light", "dark": "ThemeMode.dark"}.get(theme.mode, "ThemeMode.system")
+    input_filled = "true" if theme.input_style == "filled" else "false"
+    card_elevation = {"flat": "0", "outlined": "0", "elevated": "2"}.get(theme.card_style, "0")
+    card_side = "BorderSide(color: colors.outline)" if theme.card_style == "outlined" else "BorderSide.none"
+    font_scale = {"compact": 0.92, "large": 1.15}.get(theme.typography_scale, 1.0)
+    font_weight = "FontWeight.w500" if theme.typography_weight == "medium" else "FontWeight.w400"
+    screen_padding, section_gap, field_height = {
+        "compact": (12, 8, 44), "comfortable": (20, 16, 52),
+    }.get(theme.density, (16, 12, 48))
+    return f"""import 'package:flutter/material.dart';
+
+class AppTheme {{
+  static const String fontFamily = '{theme.font_family}';
+  static const double borderRadius = {float(theme.border_radius):.1f};
+  static const double screenPadding = {float(screen_padding):.1f};
+  static const double sectionGap = {float(section_gap):.1f};
+  static const double fieldHeight = {float(field_height):.1f};
+  static const ThemeMode mode = {theme_mode};
+
+  static ThemeData _build(
+    ColorScheme colors,
+    Color background,
+    Color actionColor,
+    Color actionForeground,
+  ) {{
+    final baseTextTheme = colors.brightness == Brightness.dark
+        ? ThemeData.dark().textTheme
+        : ThemeData.light().textTheme;
+    return ThemeData(
+      colorScheme: colors,
+      scaffoldBackgroundColor: background,
+      fontFamily: fontFamily == 'system' ? null : fontFamily,
+      useMaterial3: true,
+      visualDensity: {visual_density},
+      textTheme: baseTextTheme.apply(
+        fontFamily: fontFamily == 'system' ? null : fontFamily,
+        fontSizeFactor: {font_scale},
+      ).copyWith(
+        bodyMedium: baseTextTheme.bodyMedium?.copyWith(fontWeight: {font_weight}),
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.primary,
+        foregroundColor: colors.onPrimary,
+        centerTitle: false,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: {input_filled},
+        fillColor: colors.surface,
+        constraints: const BoxConstraints(minHeight: fieldHeight),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular({float(theme.input_radius):.1f}),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular({float(theme.input_radius):.1f}),
+          borderSide: BorderSide(color: colors.outline),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular({float(theme.input_radius):.1f}),
+          borderSide: BorderSide(color: colors.primary, width: 1.4),
+        ),
+      ),
+      cardTheme: CardThemeData(
+        color: colors.surface,
+        margin: const EdgeInsets.all(sectionGap / 2),
+        elevation: {card_elevation},
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular({float(theme.card_radius):.1f}),
+          side: {card_side},
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: actionColor,
+          foregroundColor: actionForeground,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(borderRadius)),
+          minimumSize: const Size.fromHeight(fieldHeight),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: actionColor,
+          side: BorderSide(color: actionColor),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(borderRadius)),
+          minimumSize: const Size.fromHeight(fieldHeight),
+        ),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: actionColor,
+        foregroundColor: actionForeground,
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? actionColor : null,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? actionColor.withValues(alpha: 0.35)
+              : null,
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular({float(theme.dialog_radius):.1f}),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        indicatorColor: colors.secondary.withValues(alpha: 0.2),
+        labelTextStyle: WidgetStatePropertyAll(TextStyle(color: colors.primary)),
+      ),
+      drawerTheme: DrawerThemeData(backgroundColor: colors.surface),
+    );
+  }}
+
+  static ThemeData get light => _build(
+    const ColorScheme.light(
+      primary: Color({_dart_color(theme.primary_color)}),
+      onPrimary: Color({_dart_color(theme.on_primary_color)}),
+      secondary: Color({_dart_color(theme.secondary_color)}),
+      onSecondary: Color({_dart_color(light_token('on_secondary', '#FFFFFF'))}),
+      surface: Color({_dart_color(theme.surface_color)}),
+      onSurface: Color({_dart_color(theme.on_surface_color)}),
+      error: Color({_dart_color(light_token('error', '#B91C1C'))}),
+      onError: Color({_dart_color(light_token('on_error', '#FFFFFF'))}),
+      outline: Color({_dart_color(light_token('outline', '#64748B'))}),
+    ),
+    const Color({_dart_color(theme.background_color)}),
+    const Color({_dart_color(light_token('secondary', theme.button_color) if theme.button_style == 'tonal' else theme.button_color)}),
+    const Color({_dart_color(light_token('on_secondary', '#FFFFFF') if theme.button_style == 'tonal' else theme.on_primary_color)}),
+  );
+
+  static ThemeData get dark => _build(
+    const ColorScheme.dark(
+      primary: Color({_dart_color(theme.dark_primary_color)}),
+      onPrimary: Color({_dart_color(theme.dark_on_primary_color)}),
+      secondary: Color({_dart_color(theme.dark_secondary_color)}),
+      onSecondary: Color({_dart_color(dark_token('on_secondary', '#172554'))}),
+      surface: Color({_dart_color(theme.dark_surface_color)}),
+      onSurface: Color({_dart_color(theme.dark_on_surface_color)}),
+      error: Color({_dart_color(dark_token('error', '#FCA5A5'))}),
+      onError: Color({_dart_color(dark_token('on_error', '#450A0A'))}),
+      outline: Color({_dart_color(dark_token('outline', '#94A3B8'))}),
+    ),
+    const Color({_dart_color(theme.dark_background_color)}),
+    const Color({_dart_color(theme.dark_secondary_color if theme.button_style == 'tonal' else theme.dark_primary_color)}),
+    const Color({_dart_color(dark_token('on_secondary', '#172554') if theme.button_style == 'tonal' else theme.dark_on_primary_color)}),
+  );
+}}
+"""
+
+
+def _render_app_router_legacy(project: FlutterProject) -> str:
     imports = "\n".join(
         f"import '../../modules/{entity.module_name}/{entity.module_name}_list_screen.dart';"
         for entity in project.entities
@@ -331,6 +648,109 @@ class HomeScreen extends StatelessWidget {{
     );
   }}
 }}
+"""
+
+
+def render_app_router(project: FlutterProject) -> str:
+    imports = "\n".join(
+        f"import '../../modules/{entity.module_name}/{entity.module_name}_list_screen.dart';"
+        for entity in project.entities
+    )
+    routes = "\n".join(
+        f"    '/{entity.module_name}': (_) => const {entity.name}ListScreen(),"
+        for entity in project.entities
+    )
+    effective_navigation = project.theme_config.navigation_style
+    if effective_navigation == "automatic":
+        effective_navigation = "bottom_bar" if 2 <= len(project.entities) <= 4 else "navigation_drawer"
+    if effective_navigation == "bottom_bar" and len(project.entities) < 2:
+        effective_navigation = "navigation_drawer"
+    if effective_navigation == "navigation_drawer":
+        items = "\n".join(
+            f"""            ListTile(
+              leading: const Icon(Icons.table_chart_outlined),
+              title: const Text('{entity.name}', overflow: TextOverflow.ellipsis),
+              onTap: () => Navigator.pushNamed(context, '/{entity.module_name}'),
+            ),"""
+            for entity in project.entities
+        )
+        home = f"""class HomeScreen extends StatelessWidget {{
+  const HomeScreen({{super.key}});
+
+  @override
+  Widget build(BuildContext context) {{
+    return Scaffold(
+      appBar: AppBar(title: const Text('{project.name}')),
+      drawer: Drawer(
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(AppTheme.screenPadding),
+            children: [
+              const ListTile(title: Text('Modulos')),
+{items}
+            ],
+          ),
+        ),
+      ),
+      body: const Center(child: Text('Seleccione un modulo desde el menu.')),
+    );
+  }}
+}}"""
+    else:
+        destinations = "\n".join(
+            f"""          NavigationDestination(
+            icon: Icon(Icons.table_chart_outlined),
+            label: '{entity.name}',
+          ),"""
+            for entity in project.entities
+        ) or "          NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Inicio'),"
+        route_names = ", ".join(f"'/{entity.module_name}'" for entity in project.entities)
+        navigate = "" if not project.entities else f"""        final routes = <String>[{route_names}];
+        Navigator.pushNamed(context, routes[index]);"""
+        home = f"""class HomeScreen extends StatefulWidget {{
+  const HomeScreen({{super.key}});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}}
+
+class _HomeScreenState extends State<HomeScreen> {{
+  int _selectedIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {{
+    return Scaffold(
+      appBar: AppBar(title: const Text('{project.name}')),
+      body: const Center(child: Text('Seleccione un modulo de la barra inferior.')),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (index) {{
+          setState(() => _selectedIndex = index);
+{navigate}
+        }},
+        destinations: const [
+{destinations}
+        ],
+      ),
+    );
+  }}
+}}"""
+    theme_import = "import '../../shared/themes/app_theme.dart';" if effective_navigation == "navigation_drawer" else ""
+    return f"""import 'package:flutter/material.dart';
+
+{theme_import}
+{imports}
+
+class AppRouter {{
+  static const String home = '/';
+
+  static Map<String, WidgetBuilder> get routes => {{
+    home: (_) => const HomeScreen(),
+{routes}
+  }};
+}}
+
+{home}
 """
 
 
@@ -384,7 +804,6 @@ def render_entity_service(entity: DartEntity) -> str:
     endpoint = endpoint_for_entity(entity)
     module = entity.module_name
     return f"""import '../../core/network/api_client.dart';
-import '../../shared/widgets/primary_action_button.dart';
 import '{module}_model.dart';
 
 class {entity.name}Service {{
@@ -533,7 +952,7 @@ class _{entity.name}ListScreenState extends State<{entity.name}ListScreen> {{
 """
 
 
-def render_entity_form_screen(entity: DartEntity) -> str:
+def render_entity_form_screen(entity: DartEntity, show_field_labels: bool = True) -> str:
     module = entity.module_name
     relation_imports = _relation_imports(entity)
     controllers = "\n".join(
@@ -567,12 +986,14 @@ def render_entity_form_screen(entity: DartEntity) -> str:
         for field in entity.fields
         if field.input_type == "relation"
     )
-    form_fields = "\n".join(_render_form_field(field) for field in entity.fields)
+    form_fields = "\n".join(_render_form_field(field, show_field_labels) for field in entity.fields)
     model_args = "\n".join(_render_model_arg(field) for field in entity.fields)
     date_helper = _render_date_helper(entity)
     return f"""import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../shared/themes/app_theme.dart';
+import '../../shared/widgets/primary_action_button.dart';
 import '{module}_model.dart';
 import '{module}_provider.dart';
 {relation_imports}
@@ -613,10 +1034,10 @@ class _{entity.name}FormScreenState extends State<{entity.name}FormScreen> {{
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppTheme.screenPadding),
           children: [
 {form_fields}
-            const SizedBox(height: 16),
+            const SizedBox(height: AppTheme.sectionGap),
             PrimaryActionButton(
               onPressed: _save,
               label: 'Guardar',
@@ -774,10 +1195,11 @@ def _render_date_helper(entity: DartEntity) -> str:
 """
 
 
-def _render_form_field(field: DartField) -> str:
+def _render_form_field(field: DartField, show_label: bool = True) -> str:
+    label = field.name if show_label else ""
     if field.input_type == "switch":
         return f"""            SwitchListTile(
-              title: const Text('{field.name}'),
+              title: const Text('{label}'),
               value: _{field.name}Value,
               onChanged: (value) => setState(() => _{field.name}Value = value),
             ),"""
@@ -787,7 +1209,7 @@ def _render_form_field(field: DartField) -> str:
               controller: _{field.name}Controller,
               readOnly: true,
               decoration: const InputDecoration(
-                labelText: '{field.name}',
+                labelText: '{label}',
                 suffixIcon: Icon(Icons.calendar_today_outlined),
               ),
               onTap: () async {{
@@ -807,7 +1229,7 @@ def _render_form_field(field: DartField) -> str:
                 return null;
               }},
             ),
-            const SizedBox(height: 12),"""
+            const SizedBox(height: AppTheme.sectionGap),"""
     if field.input_type == "relation" and field.relation_target and field.relation_module:
         service_name = f"{field.relation_target}Service"
         return f"""            FutureBuilder<List<{field.relation_target}>>(
@@ -817,7 +1239,7 @@ def _render_form_field(field: DartField) -> str:
                 return DropdownButtonFormField<String>(
                   isExpanded: true,
                   initialValue: _{field.name}Value,
-                  decoration: const InputDecoration(labelText: '{field.name}'),
+                  decoration: const InputDecoration(labelText: '{label}'),
                   selectedItemBuilder: (context) => options
                       .map((item) => Align(
                             alignment: Alignment.centerLeft,
@@ -846,19 +1268,19 @@ def _render_form_field(field: DartField) -> str:
                 );
               }},
             ),
-            const SizedBox(height: 12),"""
+            const SizedBox(height: AppTheme.sectionGap),"""
     keyboard = "TextInputType.number" if field.input_type == "number" else "TextInputType.emailAddress" if field.input_type == "email" else "TextInputType.text"
     validator = "if (value == null || value.isEmpty) return 'Campo requerido';" if field.required else ""
     return f"""            TextFormField(
               controller: _{field.name}Controller,
-              decoration: const InputDecoration(labelText: '{field.name}'),
+              decoration: const InputDecoration(labelText: '{label}'),
               keyboardType: {keyboard},
               validator: (value) {{
                 {validator}
                 return null;
               }},
             ),
-            const SizedBox(height: 12),"""
+            const SizedBox(height: AppTheme.sectionGap),"""
 
 
 def _render_model_arg(field: DartField) -> str:

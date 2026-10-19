@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://case-inteligente.local/contracts/flutter_theme_v2.schema.json",
+  "title": "FlutterThemeConfigV2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "mode", "light", "dark", "typography", "shape", "components"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "mode": {"enum": ["light", "dark", "system"]},
+    "light": {"$ref": "#/$defs/palette"},
+    "dark": {"$ref": "#/$defs/palette"},
+    "typography": {
+      "type": "object", "additionalProperties": false,
+      "required": ["font_family", "heading_font_family", "scale", "weight"],
+      "properties": {
+        "font_family": {"const": "system"},
+        "heading_font_family": {"const": "system"},
+        "scale": {"enum": ["compact", "normal", "large"]},
+        "weight": {"enum": ["regular", "medium"]}
+      }
+    },
+    "shape": {
+      "type": "object", "additionalProperties": false,
+      "required": ["button_radius", "input_radius", "card_radius", "dialog_radius"],
+      "properties": {
+        "button_radius": {"type": "integer", "minimum": 0, "maximum": 24},
+        "input_radius": {"type": "integer", "minimum": 0, "maximum": 24},
+        "card_radius": {"type": "integer", "minimum": 0, "maximum": 24},
+        "dialog_radius": {"type": "integer", "minimum": 0, "maximum": 24}
+      }
+    },
+    "components": {
+      "type": "object", "additionalProperties": false,
+      "required": ["button_style", "input_style", "card_style", "navigation_style", "density", "show_field_labels"],
+      "properties": {
+        "button_style": {"enum": ["filled", "outline", "tonal"]},
+        "input_style": {"enum": ["outline", "filled"]},
+        "card_style": {"enum": ["flat", "outlined", "elevated"]},
+        "navigation_style": {"enum": ["bottom_bar", "navigation_drawer", "automatic"]},
+        "density": {"enum": ["compact", "normal", "comfortable"]},
+        "show_field_labels": {"type": "boolean"}
+      }
+    }
+  },
+  "$defs": {
+    "palette": {
+      "type": "object", "additionalProperties": false,
+      "required": ["primary", "on_primary", "secondary", "on_secondary", "background", "on_background", "surface", "on_surface", "error", "on_error", "outline"],
+      "properties": {
+        "primary": {"$ref": "#/$defs/color"}, "on_primary": {"$ref": "#/$defs/color"},
+        "secondary": {"$ref": "#/$defs/color"}, "on_secondary": {"$ref": "#/$defs/color"},
+        "background": {"$ref": "#/$defs/color"}, "on_background": {"$ref": "#/$defs/color"},
+        "surface": {"$ref": "#/$defs/color"}, "on_surface": {"$ref": "#/$defs/color"},
+        "error": {"$ref": "#/$defs/color"}, "on_error": {"$ref": "#/$defs/color"},
+        "outline": {"$ref": "#/$defs/color"}
+      }
+    },
+    "color": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"}
+  }
+}

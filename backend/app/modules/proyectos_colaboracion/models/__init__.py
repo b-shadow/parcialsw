@@ -3,6 +3,9 @@ from app.modules.proyectos_colaboracion.models.project import Project
 from app.modules.proyectos_colaboracion.models.project_invitation import ProjectInvitation
 from app.modules.proyectos_colaboracion.models.project_member import ProjectMember
 from app.modules.proyectos_colaboracion.models.project_permission import ProjectPermission
+from app.modules.proyectos_colaboracion.models.project_restore_operation import (
+    ProjectRestoreOperation,
+)
 from app.modules.proyectos_colaboracion.models.project_version import ProjectVersion
 
 __all__ = [
@@ -11,6 +14,7 @@ __all__ = [
     "ProjectInvitation",
     "ProjectMember",
     "ProjectPermission",
+    "ProjectRestoreOperation",
     "ProjectVersion",
 ]
 

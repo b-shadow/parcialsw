@@ -2,7 +2,7 @@ import json
 import time
 from collections import deque
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
 
@@ -10,7 +10,9 @@ from app.core.config.settings import settings
 from app.core.database.session import SessionLocal
 from app.core.security.jwt import decode_access_token
 from app.modules.acceso_usuarios.repositories.user_repository import UserRepository
+from app.modules.asistente_proyecto.repositories.assistant_repository import AssistantRepository
 from app.modules.proyectos_colaboracion.repositories.member_repository import MemberRepository
+from app.modules.proyectos_colaboracion.repositories.project_repository import ProjectRepository
 from app.modules.proyectos_colaboracion.services.project_service import ProjectService
 from app.websocket.connection_manager import manager
 
@@ -24,6 +26,7 @@ ALLOWED_UML_EVENTS = {
     "UPDATE_ATTRIBUTE",
     "CREATE_METHOD",
     "UPDATE_METHOD",
+    "METHOD_SIGNATURE_UPDATED",
     "DELETE_METHOD",
     "CREATE_RELATION",
     "CREATE_RELATIONSHIP",
@@ -88,12 +91,22 @@ async def project_collaboration(websocket: WebSocket, project_id: str) -> None:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Sin acceso al proyecto")
             return
         user_name = user.full_name
+        project_role = membership.project_role
+        current_project_sequence = ProjectRepository(db).current_event_sequence(project_uuid)
+        conversation = AssistantRepository(db).get_conversation(project_uuid)
+        current_conversation_sequence = conversation.last_message_sequence if conversation else 0
 
+    user_was_present = any(
+        manager.connection_users.get(item) == str(user_id)
+        for item in manager.active_connections.get(project_id, [])
+    )
     connected = await manager.connect(
         project_id,
         websocket,
         str(user_id),
         subprotocol="case-v1" if "case-v1" in offered_protocols else None,
+        display_name=user_name,
+        project_role=project_role,
     )
     if not connected:
         return
@@ -106,6 +119,46 @@ async def project_collaboration(websocket: WebSocket, project_id: str) -> None:
             "user_id": str(user_id),
             "user_name": user_name,
             "message": "Sesion colaborativa inicial conectada.",
+            "connection_id": (manager.connection(websocket) or {}).get("connection_id"),
+            "project_sequence": current_project_sequence,
+            "conversation_sequence": current_conversation_sequence,
+        },
+    )
+    presence = manager.presence(project_id)
+    if not user_was_present:
+        await manager.broadcast(
+            project_id,
+            {
+                "protocol_version": 2,
+                "type": "PRESENCE_JOINED",
+                "event_id": str(uuid4()),
+                "project_id": project_id,
+                "sequence_number": 0,
+                "conversation_sequence": current_conversation_sequence,
+                "correlation_id": str(uuid4()),
+                "occurred_at": datetime.now(UTC).isoformat(),
+                "persistent": False,
+                "actor": {"user_id": str(user_id), "display_name": user_name},
+                "payload": {"member": next(
+                    (item for item in presence if item["user_id"] == str(user_id)), None
+                )},
+            },
+            exclude=websocket,
+        )
+    await manager.broadcast(
+        project_id,
+        {
+            "protocol_version": 2,
+            "type": "PRESENCE_SNAPSHOT",
+            "event_id": str(uuid4()),
+            "project_id": project_id,
+            "sequence_number": 0,
+            "conversation_sequence": current_conversation_sequence,
+            "correlation_id": str(uuid4()),
+            "occurred_at": datetime.now(UTC).isoformat(),
+            "persistent": False,
+            "actor": {"user_id": str(user_id), "display_name": user_name},
+            "payload": {"members": presence},
         },
     )
     try:
@@ -154,6 +207,51 @@ async def project_collaboration(websocket: WebSocket, project_id: str) -> None:
                     websocket,
                     {"type": "PONG", "server_time": datetime.now(UTC).isoformat()},
                 )
+                active_diagram = _optional_uuid(event.get("active_diagram_id"))
+                manager.touch(
+                    websocket, str(active_diagram) if active_diagram else None
+                )
+                continue
+            if event_type == "SYNC_STATE":
+                last_project_sequence = event.get("last_project_sequence")
+                last_conversation_sequence = event.get("last_conversation_sequence")
+                with SessionLocal() as db:
+                    project_sequence = ProjectRepository(db).current_event_sequence(project_uuid)
+                    current_conversation = AssistantRepository(db).get_conversation(project_uuid)
+                    conversation_sequence = (
+                        current_conversation.last_message_sequence if current_conversation else 0
+                    )
+                if (
+                    isinstance(last_project_sequence, int)
+                    and last_project_sequence < project_sequence
+                ) or (
+                    isinstance(last_conversation_sequence, int)
+                    and last_conversation_sequence < conversation_sequence
+                ):
+                    await manager.send(
+                        project_id,
+                        websocket,
+                        {
+                            "protocol_version": 2,
+                            "type": "SYNC_REQUIRED",
+                            "event_id": str(uuid4()),
+                            "project_id": project_id,
+                            "sequence_number": project_sequence,
+                            "conversation_sequence": conversation_sequence,
+                            "correlation_id": str(uuid4()),
+                            "occurred_at": datetime.now(UTC).isoformat(),
+                            "persistent": False,
+                            "actor": {"user_id": str(user_id), "display_name": user_name},
+                            "payload": {
+                                "after_project_sequence": last_project_sequence or 0,
+                                "after_conversation_sequence": last_conversation_sequence or 0,
+                            },
+                        },
+                    )
+                continue
+            if event_type == "ACTIVE_DIAGRAM":
+                diagram_value = _optional_uuid(event.get("diagram_id"))
+                manager.touch(websocket, str(diagram_value) if diagram_value else None)
                 continue
             now = time.monotonic()
             recent_events.append(now)
@@ -248,4 +346,42 @@ async def project_collaboration(websocket: WebSocket, project_id: str) -> None:
     except WebSocketDisconnect:
         pass
     finally:
+        was_last_connection = sum(
+            1
+            for item in manager.active_connections.get(project_id, [])
+            if manager.connection_users.get(item) == str(user_id)
+        ) <= 1
         manager.disconnect(project_id, websocket)
+        if was_last_connection:
+            await manager.broadcast(
+                project_id,
+                {
+                    "protocol_version": 2,
+                    "type": "PRESENCE_LEFT",
+                    "event_id": str(uuid4()),
+                    "project_id": project_id,
+                    "sequence_number": 0,
+                    "conversation_sequence": None,
+                    "correlation_id": str(uuid4()),
+                    "occurred_at": datetime.now(UTC).isoformat(),
+                    "persistent": False,
+                    "actor": {"user_id": str(user_id), "display_name": user_name},
+                    "payload": {"user_id": str(user_id)},
+                },
+            )
+        await manager.broadcast(
+            project_id,
+            {
+                "protocol_version": 2,
+                "type": "PRESENCE_SNAPSHOT",
+                "event_id": str(uuid4()),
+                "project_id": project_id,
+                "sequence_number": 0,
+                "conversation_sequence": None,
+                "correlation_id": str(uuid4()),
+                "occurred_at": datetime.now(UTC).isoformat(),
+                "persistent": False,
+                "actor": {"user_id": str(user_id), "display_name": user_name},
+                "payload": {"members": manager.presence(project_id)},
+            },
+        )

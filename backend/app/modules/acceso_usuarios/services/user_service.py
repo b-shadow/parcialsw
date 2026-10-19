@@ -29,13 +29,20 @@ class UserService:
             setattr(user, field, value)
         if payload.role_name is not None:
             role = self.roles.get_by_name(payload.role_name)
-            if role is None:
+            if role is None or role.name not in {"ADMINISTRADOR", "EDITOR"}:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Rol global no valido",
                 )
-            user.roles.clear()
-            user.roles.append(UserRole(user_id=user.id, role_id=role.id))
+            if user.roles:
+                assignment = user.roles[0]
+                assignment.role_id = role.id
+                assignment.role = role
+                for duplicate in user.roles[1:]:
+                    self.db.delete(duplicate)
+                user.roles[:] = [assignment]
+            else:
+                user.roles.append(UserRole(user_id=user.id, role_id=role.id, role=role))
         self.audit.record(
             module="acceso_usuarios",
             action="UPDATE_USER",

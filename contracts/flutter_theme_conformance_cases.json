@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id": "lowercase_hex", "input": {"schema_version": 1, "primary_color": "#0f766e"}, "expected_path": "light.primary", "expected": "#0F766E"},
+    {"id": "legacy_radius", "input": {"schema_version": 1, "border_radius": 12}, "expected_path": "shape.card_radius", "expected": 12},
+    {"id": "legacy_density", "input": {"schema_version": 1, "density": "comfortable"}, "expected_path": "components.density", "expected": "comfortable"}
+  ]
+}

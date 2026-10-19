@@ -35,7 +35,7 @@ export function LoginPage() {
       setToken(token.access_token);
       const user = await authService.me();
       setUser(user);
-      navigate("/proyectos");
+      navigate("/proyectos/nuevo");
     } catch {
       setError("No se pudo iniciar sesion con esos datos.");
     } finally {

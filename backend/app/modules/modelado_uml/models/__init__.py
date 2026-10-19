@@ -2,6 +2,7 @@ from app.modules.modelado_uml.models.uml_attribute import UmlAttribute
 from app.modules.modelado_uml.models.uml_class import UmlClass
 from app.modules.modelado_uml.models.uml_diagram import UmlDiagram
 from app.modules.modelado_uml.models.uml_method import UmlMethod
+from app.modules.modelado_uml.models.uml_method_specification import UmlMethodSpecification
 from app.modules.modelado_uml.models.uml_parameter import UmlParameter
 from app.modules.modelado_uml.models.uml_relationship import UmlRelationship
 from app.modules.modelado_uml.models.uml_visual_element import UmlVisualElement
@@ -12,6 +13,7 @@ __all__ = [
     "UmlClass",
     "UmlDiagram",
     "UmlMethod",
+    "UmlMethodSpecification",
     "UmlParameter",
     "UmlRelationship",
     "UmlVisualElement",

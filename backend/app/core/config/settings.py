@@ -24,6 +24,25 @@ class Settings(BaseSettings):
     vapid_public_key: str | None = None
     vapid_private_key: str | None = None
     vapid_subject: str = "mailto:admin@example.com"
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_default_model: str = "qwen2.5-coder:7b"
+    ollama_small_model: str = "qwen2.5-coder:1.5b"
+    ollama_vision_model: str = "qwen3-vl:2b-instruct"
+    ollama_vision_enabled: bool = True
+    ollama_vision_timeout_seconds: float = 900
+    ollama_connect_timeout_seconds: float = 3
+    ollama_read_timeout_seconds: float = 120
+    ollama_keep_alive: str = "10m"
+    ai_max_retries: int = 2
+    ai_max_input_chars: int = 12000
+    ai_max_context_chars: int = 50000
+    ai_temperature: float = 0
+    ai_rule_fallback_enabled: bool = True
+    ai_max_concurrent_requests: int = 2
+    ai_messages_per_minute: int = 12
+    ai_max_concurrent_per_user_project: int = 1
+    project_snapshot_max_bytes: int = 8 * 1024 * 1024
+    notification_outbox_batch_size: int = 50
 
     @property
     def cors_origins(self) -> list[str]:

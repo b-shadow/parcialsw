@@ -39,6 +39,28 @@ class FlutterThemeConfig:
     border_radius: int = 12
     button_style: str = "filled"
     density: str = "normal"
+    mode: str = "system"
+    dark_primary_color: str = "#5EEAD4"
+    dark_secondary_color: str = "#93C5FD"
+    dark_background_color: str = "#020617"
+    dark_surface_color: str = "#0F172A"
+    on_primary_color: str = "#FFFFFF"
+    on_background_color: str = "#0F172A"
+    on_surface_color: str = "#0F172A"
+    dark_on_primary_color: str = "#042F2E"
+    dark_on_background_color: str = "#E2E8F0"
+    dark_on_surface_color: str = "#E2E8F0"
+    heading_font_family: str = "Roboto"
+    typography_scale: str = "normal"
+    typography_weight: str = "regular"
+    input_radius: int = 8
+    card_radius: int = 8
+    dialog_radius: int = 8
+    input_style: str = "outline"
+    card_style: str = "outlined"
+    navigation_style: str = "automatic"
+    show_field_labels: bool = True
+    raw_v2: dict = field(default_factory=dict)
 
 
 TYPE_MAPPING = {
@@ -105,19 +127,35 @@ def _safe_border_radius(value: object, fallback: int) -> int:
 
 
 def normalize_theme_config(raw_theme: dict | None = None) -> FlutterThemeConfig:
-    if not raw_theme:
-        return FlutterThemeConfig()
-    defaults = FlutterThemeConfig()
+    from app.modules.generacion_software.schemas.theme_contract import normalize_theme
+
+    legacy = dict(raw_theme or {}) if (raw_theme or {}).get("schema_version", 1) == 1 else {}
+    normalizable = dict(raw_theme or {})
+    if legacy and legacy.get("font_family") not in {"system", "Roboto", None}:
+        normalizable["font_family"] = "Roboto"
+    theme, diagnostics, _ = normalize_theme(normalizable)
+    if any(item.severity == "error" for item in diagnostics):
+        raise ValueError("La configuracion visual no cumple los requisitos de contraste")
+    raw = theme.model_dump(mode="json")
+    light, dark = theme.light, theme.dark
     return FlutterThemeConfig(
-        primary_color=_safe_hex(raw_theme.get("primary_color"), defaults.primary_color),
-        secondary_color=_safe_hex(raw_theme.get("secondary_color"), defaults.secondary_color),
-        background_color=_safe_hex(raw_theme.get("background_color"), defaults.background_color),
-        surface_color=_safe_hex(raw_theme.get("surface_color"), defaults.surface_color),
-        button_color=_safe_hex(raw_theme.get("button_color"), defaults.button_color),
-        font_family=str(raw_theme.get("font_family") or defaults.font_family).strip()[:80] or defaults.font_family,
-        border_radius=_safe_border_radius(raw_theme.get("border_radius"), defaults.border_radius),
-        button_style=_safe_choice(raw_theme.get("button_style"), defaults.button_style, {"filled", "outline", "tonal"}),
-        density=_safe_choice(raw_theme.get("density"), defaults.density, {"compact", "normal", "comfortable"}),
+        primary_color=light.primary, secondary_color=light.secondary,
+        background_color=light.background, surface_color=light.surface,
+        button_color=_safe_hex(legacy.get("button_color"), light.primary) if legacy else light.primary,
+        font_family=str(legacy.get("font_family") or theme.typography.font_family)[:80],
+        border_radius=theme.shape.button_radius, button_style=theme.components.button_style,
+        density=theme.components.density, mode=theme.mode,
+        dark_primary_color=dark.primary, dark_secondary_color=dark.secondary,
+        dark_background_color=dark.background, dark_surface_color=dark.surface,
+        on_primary_color=light.on_primary, on_background_color=light.on_background,
+        on_surface_color=light.on_surface, dark_on_primary_color=dark.on_primary,
+        dark_on_background_color=dark.on_background, dark_on_surface_color=dark.on_surface,
+        heading_font_family=theme.typography.heading_font_family,
+        typography_scale=theme.typography.scale, typography_weight=theme.typography.weight,
+        input_radius=theme.shape.input_radius, card_radius=theme.shape.card_radius,
+        dialog_radius=theme.shape.dialog_radius, input_style=theme.components.input_style,
+        card_style=theme.components.card_style, navigation_style=theme.components.navigation_style,
+        show_field_labels=theme.components.show_field_labels, raw_v2=raw,
     )
 
 

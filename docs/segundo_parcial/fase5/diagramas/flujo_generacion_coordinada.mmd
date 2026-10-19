@@ -1,0 +1,15 @@
+flowchart TD
+    A[Modelo intermedio v2] --> B[Compilar GenerationPlan]
+    B --> C{Preflight listo}
+    C -- No --> D[Diagnosticos sin artefactos]
+    C -- Si --> E[Staging]
+    E --> F[Emisor Spring Boot]
+    E --> G[Emisor Flutter]
+    F --> H[Validacion cruzada]
+    G --> H
+    H --> I[Escaneo de secretos]
+    I --> J[Compilacion y pruebas]
+    J --> K{Resultado aceptable}
+    K -- No --> L[Eliminar staging]
+    K -- Si --> M[Publicacion atomica]
+    M --> N[Bundle full stack]

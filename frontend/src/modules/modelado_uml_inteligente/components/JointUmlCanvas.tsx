@@ -3,7 +3,14 @@ import * as joint from "@joint/core";
 
 import type { UmlClassDetail, UmlRelationship } from "../types/uml";
 
-type UmlTool = "select" | "class" | "association" | "inheritance" | "associationClass";
+type UmlTool =
+  | "select"
+  | "class"
+  | "association"
+  | "inheritance"
+  | "aggregation"
+  | "composition"
+  | "associationClass";
 
 type JointUmlCanvasProps = {
   classes: UmlClassDetail[];
@@ -164,15 +171,24 @@ function relationshipLabel(relationship: UmlRelationship) {
 function linkAttrs(relationship: UmlRelationship, isDark: boolean, selected: boolean) {
   const stroke = relationship.relationship_type === "inheritance" ? "#1d4ed8" : "#0f766e";
   const dashed = relationship.relationship_type === "dependency" || relationship.relationship_type === "implementation";
+  const targetMarker = (() => {
+    switch (relationship.relationship_type) {
+      case "inheritance":
+        return { type: "path", d: "M 12 -6 0 0 12 6 z", fill: isDark ? "#0f172a" : "#f8fafc", stroke };
+      case "aggregation":
+        return { type: "path", d: "M 12 0 6 -6 0 0 6 6 z", fill: isDark ? "#0f172a" : "#f8fafc", stroke };
+      case "composition":
+        return { type: "path", d: "M 12 0 6 -6 0 0 6 6 z", fill: stroke, stroke };
+      default:
+        return { type: "path", d: "M 10 -5 0 0 10 5", fill: "none", stroke };
+    }
+  })();
   return {
     line: {
       stroke,
       strokeWidth: selected ? 3 : 2,
       strokeDasharray: dashed ? "8 6" : undefined,
-      targetMarker:
-        relationship.relationship_type === "inheritance"
-          ? { type: "path", d: "M 10 -5 0 0 10 5 z", fill: isDark ? "#0f172a" : "#f8fafc", stroke }
-          : { type: "path", d: "M 10 -5 0 0 10 5", fill: "none", stroke }
+      targetMarker
     }
   };
 }
@@ -446,7 +462,7 @@ export function JointUmlCanvas({
     });
 
     graph.addCells([...elements, ...anchorElements, ...links]);
-    paper.setDimensions(Math.max(containerRef.current?.clientWidth || 0, 900), 620);
+    paper.setDimensions(Math.max(containerRef.current?.clientWidth || 0, 900), 760);
     paper.translate(viewport.x, viewport.y);
     paper.scale(viewport.scale, viewport.scale);
     paper.render();
@@ -621,12 +637,24 @@ export function JointUmlCanvas({
     const midX = (x1 + x2) / 2;
     const midY = (y1 + y2) / 2;
     const associationPosition = associationClass ? classPosition(associationClass, associationIndex, transientPositions) : null;
+    const markerEnd = (() => {
+      switch (relationship.relationship_type) {
+        case "inheritance":
+          return "url(#uml-generalization)";
+        case "aggregation":
+          return "url(#uml-aggregation)";
+        case "composition":
+          return "url(#uml-composition)";
+        default:
+          return "url(#uml-association)";
+      }
+    })();
 
     return (
       <g key={relationship.id}>
         <line
           className="cursor-pointer"
-          markerEnd={relationship.relationship_type === "inheritance" ? "url(#uml-generalization)" : "url(#uml-association)"}
+          markerEnd={markerEnd}
           onClick={(event) => {
             event.stopPropagation();
             onRelationshipClick(relationship.id);
@@ -674,7 +702,7 @@ export function JointUmlCanvas({
 
   return (
     <div
-      className="joint-uml-canvas relative h-[620px] cursor-grab overflow-hidden active:cursor-grabbing"
+      className="joint-uml-canvas relative h-[760px] cursor-grab overflow-hidden active:cursor-grabbing"
       onPointerDown={handleCanvasPointerDown}
       onPointerMove={handleCanvasPointerMove}
       onPointerUp={handleCanvasPointerUp}
@@ -703,6 +731,12 @@ export function JointUmlCanvas({
             </marker>
             <marker id="uml-generalization" markerHeight="12" markerWidth="12" orient="auto" refX="12" refY="6">
               <path d="M 12 6 L 0 0 L 0 12 Z" fill={isDark ? "#111827" : "#f8fafc"} stroke="#1d4ed8" strokeWidth="1.8" />
+            </marker>
+            <marker id="uml-aggregation" markerHeight="12" markerWidth="12" orient="auto" refX="12" refY="6">
+              <path d="M 12 6 L 6 0 L 0 6 L 6 12 Z" fill={isDark ? "#111827" : "#f8fafc"} stroke="#0f766e" strokeWidth="1.8" />
+            </marker>
+            <marker id="uml-composition" markerHeight="12" markerWidth="12" orient="auto" refX="12" refY="6">
+              <path d="M 12 6 L 6 0 L 0 6 L 6 12 Z" fill="#0f766e" stroke="#0f766e" strokeWidth="1.8" />
             </marker>
           </defs>
           {relationships.map(renderRelationship)}

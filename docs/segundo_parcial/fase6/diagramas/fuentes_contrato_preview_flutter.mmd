@@ -1,0 +1,8 @@
+flowchart TD
+  UML[Modelo intermedio v2] --> GP[GenerationPlan]
+  GP --> UI[ui_manifest.json]
+  UI --> R[Preview React]
+  UI --> F[Pantallas Flutter]
+  T[FlutterThemeConfigV2] --> R
+  T --> TD[ThemeData Flutter]
+  TD --> F

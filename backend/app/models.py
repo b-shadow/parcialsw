@@ -1,7 +1,17 @@
 from app.core.database.session import Base
 from app.modules.acceso_usuarios.models import AuditLog, Role, User, UserRole, UserSession
+from app.modules.asistente_proyecto.models import (
+    AiAction,
+    AiConversation,
+    AiMessage,
+    AiProjectSettings,
+    AiRecommendation,
+)
 from app.modules.generacion_software.models import (
     AiProcess,
+    CoordinatedGeneration,
+    FlutterThemePreset,
+    FlutterThemeSettings,
     GeneratedArtifact,
     GeneratedBackend,
     GeneratedFrontend,
@@ -12,33 +22,52 @@ from app.modules.modelado_uml.models import (
     UmlClass,
     UmlDiagram,
     UmlMethod,
+    UmlMethodSpecification,
     UmlParameter,
     UmlRelationship,
     UmlVisualElement,
     XmiExchange,
 )
-from app.modules.notificaciones.models import PushSubscription
+from app.modules.notificaciones.models import (
+    Notification,
+    NotificationOutbox,
+    NotificationPreference,
+    PushSubscription,
+)
 from app.modules.proyectos_colaboracion.models import (
     CollaborationEvent,
     Project,
     ProjectInvitation,
     ProjectMember,
     ProjectPermission,
+    ProjectRestoreOperation,
     ProjectVersion,
 )
 
 __all__ = [
+    "AiAction",
+    "AiConversation",
+    "AiMessage",
     "AiProcess",
+    "AiProjectSettings",
+    "AiRecommendation",
     "AuditLog",
     "Base",
     "CollaborationEvent",
+    "CoordinatedGeneration",
+    "FlutterThemePreset",
+    "FlutterThemeSettings",
     "GeneratedArtifact",
     "GeneratedBackend",
     "GeneratedFrontend",
+    "Notification",
+    "NotificationOutbox",
+    "NotificationPreference",
     "Project",
     "ProjectInvitation",
     "ProjectMember",
     "ProjectPermission",
+    "ProjectRestoreOperation",
     "ProjectVersion",
     "PushSubscription",
     "Role",
@@ -46,6 +75,7 @@ __all__ = [
     "UmlClass",
     "UmlDiagram",
     "UmlMethod",
+    "UmlMethodSpecification",
     "UmlParameter",
     "UmlRelationship",
     "UmlTransformation",

@@ -5,10 +5,10 @@ import { App } from "./App";
 import { JointUmlCanvas } from "./modules/modelado_uml_inteligente/components/JointUmlCanvas";
 
 describe("App", () => {
-  it("renderiza el acceso como primera ruta cuando no hay token", () => {
+  it("renderiza el acceso como primera ruta cuando no hay token", async () => {
     window.localStorage.clear();
     render(<App />);
-    expect(screen.getByRole("heading", { name: /bienvenido/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /bienvenido/i })).toBeInTheDocument();
   });
 
   it("dibuja una clase UML cuando el modelo contiene clases", () => {

@@ -1,6 +1,30 @@
 ﻿import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { Image, Mic, Plus, Save, Trash2, X } from "lucide-react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  ArrowUpRight,
+  Bot,
+  ChevronDown,
+  Diamond,
+  Eye,
+  GitBranch,
+  History,
+  Image,
+  Link2,
+  List,
+  Mic,
+  MousePointer2,
+  Network,
+  PencilRuler,
+  Plus,
+  Save,
+  Send,
+  Settings2,
+  SlidersHorizontal,
+  Square,
+  Table2,
+  Trash2,
+  X
+} from "lucide-react";
 
 import {
   createProjectSocket,
@@ -13,14 +37,23 @@ import { Panel } from "../../../shared/components/Panel";
 import { StatusBadge } from "../../../shared/components/StatusBadge";
 import { cn } from "../../../shared/utils/cn";
 import { JointUmlCanvas } from "../components/JointUmlCanvas";
+import { MethodSpecificationEditor } from "../components/MethodSpecificationEditor";
 import { UmlToolbar } from "../components/UmlToolbar";
+import { ProjectAiAssistant } from "../../gestion_proyectos_colaboracion/components/ProjectAiAssistant";
 import { ProjectHistoryPanel } from "../../gestion_proyectos_colaboracion/components/ProjectHistoryPanel";
 import { aiService } from "../services/aiService";
 import { umlService } from "../services/umlService";
 import { useUmlStore } from "../store/umlStore";
 import type { DiagramModel, UmlAttribute, UmlMethod } from "../types/uml";
 
-type UmlTool = "select" | "class" | "association" | "inheritance" | "associationClass";
+type UmlTool =
+  | "select"
+  | "class"
+  | "association"
+  | "inheritance"
+  | "aggregation"
+  | "composition"
+  | "associationClass";
 
 const visibilityOptions = [
   { value: "public", label: "Publico", symbol: "+" },
@@ -28,6 +61,13 @@ const visibilityOptions = [
 ];
 
 const multiplicityOptions = ["", "0", "0..1", "1", "1..*", "0..*", "*"];
+
+const relationshipTypeOptions = [
+  { value: "association", label: "Association" },
+  { value: "inheritance", label: "Generalization" },
+  { value: "aggregation", label: "Aggregation" },
+  { value: "composition", label: "Composition" }
+] as const;
 
 const springDataTypes = [
   "String",
@@ -125,6 +165,8 @@ function promptFromAiResult(result: AiUmlResult, fallback: string) {
 export function UmlEditorPage() {
   const { projectId = "", diagramId = "" } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedChatId = searchParams.get("chat");
   const socketRef = useRef<WebSocket | null>(null);
   const remoteRefreshTimerRef = useRef<number | null>(null);
   const pendingSocketEventsRef = useRef<Record<string, unknown>[]>([]);
@@ -144,8 +186,8 @@ export function UmlEditorPage() {
   const setRelationships = useUmlStore((state) => state.setRelationships);
   const setValidation = useUmlStore((state) => state.setValidation);
   const setSelectedClassId = useUmlStore((state) => state.setSelectedClassId);
-  const [sourcePrompt, setSourcePrompt] = useState("Crear sistema de biblioteca con libros, usuarios y prestamos");
-  const [aiObservation, setAiObservation] = useState("Motor IA local listo.");
+  const [sourcePrompt, setSourcePrompt] = useState("");
+  const [aiObservation, setAiObservation] = useState("");
   const [xmiContent, setXmiContent] = useState("");
   const [attributeName, setAttributeName] = useState("nombre");
   const [attributeType, setAttributeType] = useState("String");
@@ -164,8 +206,17 @@ export function UmlEditorPage() {
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState("desconectado");
   const [canvasRevision, setCanvasRevision] = useState(0);
+  const [specificationMethodId, setSpecificationMethodId] = useState<string | null>(null);
+  const [rightPanelTab, setRightPanelTab] = useState<"editor" | "assistant" | "versions">(
+    () => searchParams.get("panel") === "assistant" ? "assistant" : "editor"
+  );
+  const [elementsExpanded, setElementsExpanded] = useState(true);
+  const [editingToolsExpanded, setEditingToolsExpanded] = useState(true);
+  const [elementDetailsTab, setElementDetailsTab] = useState<"properties" | "relationships">("properties");
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const xmiInputRef = useRef<HTMLInputElement | null>(null);
+  const attributeNameInputRef = useRef<HTMLInputElement | null>(null);
+  const methodNameInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     refreshDiagramModel();
@@ -495,14 +546,20 @@ export function UmlEditorPage() {
       });
       return;
     }
-    const type = tool === "inheritance" ? "inheritance" : "association";
+    const type = tool === "inheritance" || tool === "aggregation" || tool === "composition" ? tool : "association";
+    const defaultLabels: Record<string, string> = {
+      association: "asocia",
+      inheritance: "generaliza",
+      aggregation: "agrega",
+      composition: "compone"
+    };
     const created = await umlService.createRelationship(diagramId, {
       source_class_id: sourceId,
       target_class_id: targetId,
       relationship_type: type,
-      label: type === "inheritance" ? "generaliza" : relationshipLabel.trim() || "asocia",
-      source_cardinality: type === "association" ? sourceMultiplicity.trim() || null : null,
-      target_cardinality: type === "association" ? targetMultiplicity.trim() || null : null
+      label: relationshipLabel.trim() || defaultLabels[type],
+      source_cardinality: sourceMultiplicity.trim() || null,
+      target_cardinality: targetMultiplicity.trim() || null
     });
     addRelationship(created);
     setSelectedRelationshipId(created.id);
@@ -514,7 +571,7 @@ export function UmlEditorPage() {
 
   const handleClassClick = useCallback(
     (classId: string) => {
-      if (activeTool === "association" || activeTool === "inheritance" || activeTool === "associationClass") {
+      if (activeTool !== "select" && activeTool !== "class") {
         if (!pendingSourceId) {
           setPendingSourceId(classId);
           setSelectedClassId(classId);
@@ -715,7 +772,7 @@ export function UmlEditorPage() {
       ...selectedClass,
       methods: selectedClass.methods.map((item) => (item.id === methodId ? updated : item))
     });
-    publishChange({ action: "UPDATE_METHOD", method_id: methodId });
+    publishChange({ action: "METHOD_SIGNATURE_UPDATED", method_id: methodId });
   }
 
   async function deleteMethod(methodId: string) {
@@ -764,9 +821,17 @@ export function UmlEditorPage() {
       diagram_id: diagramId,
       source_type: sourceType
     });
-    setAiObservation(
-      `${aiResult.engine} actualizo este diagrama: ${promptFromAiResult(aiResult, fallbackDescription)}`
-    );
+    if (sourceType === "image") {
+      setAiObservation(
+        `${aiResult.engine} incorporo la imagen al diagrama actual. ` +
+        `Se conservaron las ${currentClasses.length} clases y ${currentRelationships.length} relaciones previas. ` +
+        promptFromAiResult(aiResult, fallbackDescription)
+      );
+    } else {
+      setAiObservation(
+        `${aiResult.engine} actualizo este diagrama: ${promptFromAiResult(aiResult, fallbackDescription)}`
+      );
+    }
     return updatedModel;
   }
 
@@ -782,6 +847,30 @@ export function UmlEditorPage() {
         image_base64: file ? await fileToBase64(file) : undefined,
         file_name: file?.name
       });
+    const unresolvedClasses = aiResult.classes.filter(
+      (umlClass) => /^Clase\d+$/i.test(umlClass.name) || !umlClass.name.trim()
+    );
+    const duplicateClassNames = new Set<string>();
+    const seenClassNames = new Set<string>();
+    for (const umlClass of aiResult.classes) {
+      const normalizedName = umlClass.name.trim().toLocaleLowerCase();
+      if (seenClassNames.has(normalizedName)) {
+        duplicateClassNames.add(normalizedName);
+      }
+      seenClassNames.add(normalizedName);
+    }
+    if (
+      aiResult.classes.length === 0 ||
+      unresolvedClasses.length > 0 ||
+      duplicateClassNames.size > 0 ||
+      aiResult.confidence < 0.55
+    ) {
+      setAiObservation(
+        aiResult.observations.join(" ") ||
+          "No se pudo leer la imagen con suficiente precision. El diagrama actual no fue modificado."
+      );
+      return;
+    }
     setAiObservation(
       `${aiResult.engine} confianza ${Math.round(aiResult.confidence * 100)}%: ${aiResult.classes
         .map((umlClass) => umlClass.name)
@@ -904,6 +993,7 @@ export function UmlEditorPage() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (file) {
+      setAiObservation(`Analizando ${file.name} para incorporarlo al diagrama actual...`);
       await generateFromSource("image", file);
     }
   }
@@ -985,9 +1075,8 @@ export function UmlEditorPage() {
       const transcript = Array.from(event.results)
         .map((result) => result[0].transcript)
         .join(" ");
-      setSourcePrompt(transcript);
-      setAiObservation("Transcripcion capturada. Generando UML por voz.");
-      void generateFromSource("voice", undefined, transcript);
+      setSourcePrompt((current) => [current.trim(), transcript.trim()].filter(Boolean).join(" "));
+      setAiObservation("Transcripcion lista. Revise el texto y envielo cuando desee editar el diagrama.");
     };
     recognition.onerror = () => {
       setIsListening(false);
@@ -996,6 +1085,39 @@ export function UmlEditorPage() {
     recognition.onend = () => setIsListening(false);
     setIsListening(true);
     recognition.start();
+  }
+
+  function activateEditorTool(tool: UmlTool) {
+    setPendingSourceId("");
+    if (tool === "class") {
+      void handleAddClass();
+      return;
+    }
+    setActiveTool(tool);
+    if (tool === "select") {
+      return;
+    }
+    const labels: Partial<Record<UmlTool, string>> = {
+      association: "asocia",
+      inheritance: "generaliza",
+      aggregation: "agrega",
+      composition: "compone",
+      associationClass: "detalle"
+    };
+    setRelationshipLabel(labels[tool] ?? "");
+    if (tool === "associationClass") {
+      setSourceMultiplicity("*");
+      setTargetMultiplicity("*");
+    } else if (tool === "inheritance") {
+      setSourceMultiplicity("1");
+      setTargetMultiplicity("1");
+    } else if (tool === "aggregation" || tool === "composition") {
+      setSourceMultiplicity("0..*");
+      setTargetMultiplicity("1");
+    } else {
+      setSourceMultiplicity((current) => current || "1");
+      setTargetMultiplicity((current) => current || "0..*");
+    }
   }
 
   function exportXmi() {
@@ -1022,9 +1144,14 @@ export function UmlEditorPage() {
   return (
     <section className={cn("uml-editor-scope grid gap-4", isDark ? "uml-editor-dark" : "uml-editor-light")}>
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink dark:text-white">Editor UML</h1>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Canvas colaborativo de diagrama de clases.</p>
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300">
+            <Network size={23} aria-hidden="true" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-ink dark:text-white">Editor UML</h1>
+            <p className="text-sm text-slate-600 dark:text-slate-300">Canvas colaborativo de diagramas de clases.</p>
+          </div>
         </div>
         <StatusBadge tone={connectionStatus === "conectado" ? "success" : "warning"}>
           {connectionStatus}
@@ -1037,7 +1164,32 @@ export function UmlEditorPage() {
           onValidate={handleValidate}
           onExport={exportXmi}
           onImport={openXmiPicker}
-          onImage={() => imageInputRef.current?.click()}
+          rightContent={(
+            <nav aria-label="Panel lateral del editor" className="grid min-w-[330px] grid-cols-3 gap-1" role="tablist">
+              {([
+                ["editor", "Editor", PencilRuler],
+                ["assistant", "Asistente", Bot],
+                ["versions", "Versiones", History],
+              ] as const).map(([tab, label, Icon]) => (
+                <button
+                  aria-selected={rightPanelTab === tab}
+                  className={cn(
+                    "flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold transition",
+                    rightPanelTab === tab
+                      ? "bg-teal-700 text-white shadow-sm"
+                      : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                  )}
+                  key={tab}
+                  onClick={() => setRightPanelTab(tab)}
+                  role="tab"
+                  type="button"
+                >
+                  <Icon className="shrink-0" size={15} aria-hidden="true" />
+                  <span className="truncate">{label}</span>
+                </button>
+              ))}
+            </nav>
+          )}
         />
         <input ref={imageInputRef} className="hidden" type="file" accept="image/*" onChange={handleImageSelected} />
         <input
@@ -1047,11 +1199,8 @@ export function UmlEditorPage() {
           accept=".xml,.xmi,text/xml,application/xml,*/*"
           onChange={handleXmiSelected}
         />
-        <div className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-          {aiObservation}
-        </div>
-        <div className="grid min-h-[620px] xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="h-[620px] bg-slate-50 dark:bg-slate-900">
+        <div className="grid min-h-[760px] xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="h-[760px] bg-slate-50 dark:bg-slate-900">
             <JointUmlCanvas
               activeTool={activeTool}
               classes={classes}
@@ -1068,124 +1217,228 @@ export function UmlEditorPage() {
               selectedRelationshipId={selectedRelationshipId}
             />
           </div>
-          <aside className="border-t border-slate-300 bg-[#f5f5f5] p-3 dark:border-slate-700 dark:bg-slate-950 xl:border-l xl:border-t-0">
-            <div className="grid gap-3">
-              <Panel className="overflow-hidden p-0 dark:border-slate-700 dark:bg-slate-900">
-                <div className="border-b border-slate-300 bg-[#ececec] px-3 py-2 text-sm font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
-                  Toolbox
-                </div>
-                <div className="grid gap-1 p-2">
-                  <button
-                    className={`flex h-9 items-center gap-2 rounded px-2 text-left text-sm ${activeTool === "select" ? "bg-teal-100 text-teal-900 dark:bg-teal-500/20 dark:text-teal-100" : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"}`}
-                    onClick={() => {
-                      setActiveTool("select");
-                      setPendingSourceId("");
-                    }}
-                    type="button"
-                  >
-                    <span className="w-5 text-center text-lg">S</span> Select
-                  </button>
-                  <div className="mt-2 border-t border-slate-300 pt-2 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-400">
-                    Class
+          <aside className="flex h-[760px] min-h-0 flex-col border-t border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950 xl:border-l xl:border-t-0">
+            <div className="min-h-0 flex-1 overflow-hidden p-2">
+              <div className={cn("h-full overflow-y-auto", rightPanelTab !== "editor" && "hidden")} role="tabpanel">
+                <div className="grid content-start gap-2">
+              <section className="overflow-hidden rounded-md border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                <button
+                  aria-expanded={elementsExpanded}
+                  className="flex h-10 w-full items-center justify-between px-3 text-left text-sm font-bold text-ink hover:bg-slate-50 dark:text-white dark:hover:bg-slate-800"
+                  onClick={() => setElementsExpanded((current) => !current)}
+                  type="button"
+                >
+                  Elementos del diagrama
+                  <ChevronDown className={cn("transition", !elementsExpanded && "-rotate-90")} size={16} aria-hidden="true" />
+                </button>
+                {elementsExpanded && (
+                  <div className="grid grid-cols-6 gap-2 border-t border-slate-100 p-3 dark:border-slate-700">
+                    {([
+                      ["select", "Select", MousePointer2],
+                      ["class", isCreatingClass ? "Creando" : "Clase", Square],
+                      ["association", "Asociacion", ArrowUpRight],
+                      ["inheritance", "Generalize", GitBranch],
+                      ["associationClass", "Association Class", Table2],
+                      ["composition", "Compose", Diamond],
+                      ["aggregation", "Aggregate", Diamond]
+                    ] as const).map(([tool, label, Icon], index) => {
+                      const active = activeTool === tool;
+                      return (
+                        <button
+                          aria-label={label}
+                          className={cn(
+                            "flex min-h-[72px] min-w-0 flex-col items-center justify-center gap-2 rounded-md border px-1 py-2 text-center text-[11px] font-semibold leading-3 transition",
+                            index < 2 || index >= 5 ? "col-span-3" : "col-span-2",
+                            active
+                              ? "border-teal-500 bg-teal-50 text-teal-800 shadow-sm dark:border-teal-400 dark:bg-teal-500/15 dark:text-teal-200"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-teal-300 hover:bg-teal-50/60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-teal-700 dark:hover:bg-teal-950/30"
+                          )}
+                          disabled={tool === "class" && isCreatingClass}
+                          key={tool}
+                          onClick={() => activateEditorTool(tool)}
+                          title={label}
+                          type="button"
+                        >
+                          <Icon
+                            className={cn("shrink-0", tool === "composition" && "fill-current")}
+                            size={21}
+                            aria-hidden="true"
+                          />
+                          <span className="max-w-full">{label}</span>
+                        </button>
+                      );
+                    })}
+                    <p className="col-span-6 mt-1 border-t border-slate-100 pt-2 text-xs leading-4 text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                      {pendingSourceId
+                        ? "Origen seleccionado. Elija la clase destino."
+                        : activeTool === "select"
+                          ? "Arrastre clases o seleccione una relacion."
+                          : "Seleccione la clase origen y luego la clase destino."}
+                    </p>
                   </div>
-                  <button
-                    className="flex h-9 items-center gap-2 rounded px-2 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60 dark:text-slate-200 dark:hover:bg-slate-800"
-                    disabled={isCreatingClass}
-                    onClick={() => void handleAddClass()}
-                    type="button"
-                  >
-                    <Plus size={16} aria-hidden="true" /> {isCreatingClass ? "Creando..." : "Class"}
-                  </button>
-                  <div className="mt-2 border-t border-slate-300 pt-2 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-400">
-                    Class Relationships
-                  </div>
-                  {[
-                    ["association", "Associate", "-"],
-                    ["inheritance", "Generalize", "^"],
-                    ["associationClass", "Association Class", "<>"],
-                  ].map(([tool, label, glyph]) => (
-                    <button
-                      key={tool}
-                      className={`flex h-9 items-center gap-2 rounded px-2 text-left text-sm ${activeTool === tool ? "bg-teal-100 text-teal-900 dark:bg-teal-500/20 dark:text-teal-100" : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"}`}
-                      onClick={() => {
-                        setActiveTool(tool as UmlTool);
-                        setPendingSourceId("");
-                        if (tool === "associationClass") {
-                          setSourceMultiplicity("*");
-                          setTargetMultiplicity("*");
-                        } else if (tool === "inheritance") {
-                          setSourceMultiplicity("");
-                          setTargetMultiplicity("");
-                        } else if (tool === "association") {
-                          setSourceMultiplicity((current) => current || "1");
-                          setTargetMultiplicity((current) => current || "0..*");
-                        }
-                      }}
-                      type="button"
-                    >
-                      <span className="w-5 text-center text-sm font-semibold">{glyph}</span> {label}
-                    </button>
-                  ))}
-                  <p className="mt-2 rounded bg-white px-2 py-2 text-xs text-slate-500 dark:bg-slate-950 dark:text-slate-400">
-                    {pendingSourceId
-                      ? "Origen seleccionado. Haga click en la clase destino."
-                      : activeTool === "select"
-                        ? "Arrastre clases o seleccione una linea."
-                        : "Seleccione la clase origen y luego la clase destino."}
-                  </p>
-                </div>
-              </Panel>
+                )}
+              </section>
 
-              <Panel className="grid gap-3 p-4 dark:border-slate-700 dark:bg-slate-900">
-                <h2 className="text-sm font-semibold text-ink dark:text-white">IA local preparada</h2>
+              <section className="overflow-hidden rounded-md border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                <button
+                  aria-expanded={editingToolsExpanded}
+                  className="flex h-10 w-full items-center justify-between px-3 text-left text-sm font-bold text-ink hover:bg-slate-50 dark:text-white dark:hover:bg-slate-800"
+                  onClick={() => setEditingToolsExpanded((current) => !current)}
+                  type="button"
+                >
+                  Herramientas de edicion
+                  <ChevronDown className={cn("transition", !editingToolsExpanded && "-rotate-90")} size={16} aria-hidden="true" />
+                </button>
+                {editingToolsExpanded && <div className="grid gap-3 border-t border-slate-100 p-3 dark:border-slate-700">
                 <textarea
-                  className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-teal-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                  aria-label="Instruccion para editar el diagrama"
+                  className="min-h-24 resize-none rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-teal-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                  placeholder="Escriba o dicte una instruccion..."
                   value={sourcePrompt}
                   onChange={(event) => setSourcePrompt(event.target.value)}
                 />
-                <div className="grid grid-cols-2 gap-2">
-                  <Button onClick={() => generateFromSource("text")} variant="secondary">Texto</Button>
-                  <Button onClick={() => modifyCurrentDiagramFromPrompt()} variant="secondary">Editar</Button>
-                  <Button icon={<Mic size={16} aria-hidden="true" />} onClick={generateFromVoiceCapture} variant="secondary">
-                    {isListening ? "Escuchando" : "Voz"}
+                <div className="grid grid-cols-3 gap-2">
+                  <Button
+                    aria-label={isListening ? "Escuchando dictado" : "Iniciar dictado por voz"}
+                    className="w-full px-0"
+                    disabled={isListening}
+                    icon={<Mic className={isListening ? "animate-pulse" : ""} size={18} aria-hidden="true" />}
+                    onClick={generateFromVoiceCapture}
+                    title={isListening ? "Escuchando" : "Transcribir por voz"}
+                    variant="secondary"
+                  >
+                    <span className="sr-only">{isListening ? "Escuchando" : "Voz"}</span>
                   </Button>
-                  <Button icon={<Image size={16} aria-hidden="true" />} onClick={() => imageInputRef.current?.click()} variant="secondary">
-                    Imagen a UML
+                  <Button
+                    aria-label="Enviar instruccion de edicion"
+                    className="w-full px-0"
+                    disabled={!sourcePrompt.trim()}
+                    icon={<Send size={18} aria-hidden="true" />}
+                    onClick={() => modifyCurrentDiagramFromPrompt()}
+                    title="Editar diagrama"
+                    variant="secondary"
+                  >
+                    <span className="sr-only">Editar</span>
+                  </Button>
+                  <Button
+                    aria-label="Incorporar diagrama desde imagen"
+                    className="w-full px-0"
+                    icon={<Image size={18} aria-hidden="true" />}
+                    onClick={() => imageInputRef.current?.click()}
+                    title="Incorporar imagen al diagrama actual"
+                    variant="secondary"
+                  >
+                    <span className="sr-only">Imagen</span>
                   </Button>
                 </div>
-                <p className="text-xs leading-5 text-slate-600 dark:text-slate-300">{aiObservation}</p>
-              </Panel>
+                {aiObservation ? <p className="text-xs leading-5 text-slate-600 dark:text-slate-300" role="status">{aiObservation}</p> : null}
+                </div>}
+              </section>
+                </div>
+              </div>
+              <div className={cn("h-full min-h-0", rightPanelTab !== "assistant" && "hidden")} role="tabpanel">
+                <ProjectAiAssistant
+                  diagramId={diagramId}
+                  initialConversationId={requestedChatId}
+                  mode="embedded"
+                  projectId={projectId}
+                />
+              </div>
+              <div className={cn("h-full min-h-0", rightPanelTab !== "versions" && "hidden")} role="tabpanel">
+                <ProjectHistoryPanel
+                  mode="embedded"
+                  projectId={projectId}
+                  onVersionRestored={async (result) => {
+                    if (!result.restored_diagram_ids.includes(diagramId)) {
+                      const destination = result.restored_diagram_ids[0];
+                      navigate(
+                        destination
+                          ? `/proyectos/${projectId}/uml/${destination}`
+                          : `/proyectos/${projectId}/colaborativo`,
+                        { replace: true }
+                      );
+                      return;
+                    }
+                    await refreshDiagramModel();
+                    setCanvasRevision((current) => current + 1);
+                  }}
+                />
+              </div>
             </div>
           </aside>
         </div>
 
         <div className="border-t border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
-          <Panel className="p-4 dark:border-slate-700 dark:bg-slate-950">
+          <Panel className="overflow-hidden p-0 dark:border-slate-700 dark:bg-slate-950">
+            <div className="p-4 pb-0">
             <div className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
-              <div>
-                <h2 className="text-lg font-semibold text-ink dark:text-white">Propiedades del elemento</h2>
-                <p className="text-sm text-slate-600 dark:text-slate-300">
-                  {selectedClass ? `${selectedClass.name}: atributos y metodos editables` : "Seleccione una clase para editar atributos y metodos."}
-                </p>
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-teal-50 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300">
+                  <SlidersHorizontal size={20} aria-hidden="true" />
+                </span>
+                <div>
+                  <h2 className="text-lg font-bold text-ink dark:text-white">Propiedades del elemento</h2>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                    {selectedClass ? `${selectedClass.name}: atributos y metodos editables` : "Seleccione una clase para editar atributos y metodos."}
+                  </p>
+                </div>
               </div>
               <div className="rounded-md border border-slate-200 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
                 {relationships.length} relaciones en el diagrama
               </div>
             </div>
 
-            <div className="mt-4 grid gap-4 xl:grid-cols-2">
+            <nav aria-label="Detalles del elemento" className="mt-3 flex border-b border-slate-200 dark:border-slate-700" role="tablist">
+              {([
+                ["properties", "Propiedades del elemento", Settings2],
+                ["relationships", "Relaciones", Link2]
+              ] as const).map(([tab, label, Icon]) => (
+                <button
+                  aria-selected={elementDetailsTab === tab}
+                  className={cn(
+                    "flex h-10 items-center gap-2 border-b-2 px-4 text-xs font-semibold transition",
+                    elementDetailsTab === tab
+                      ? "border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300"
+                      : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100"
+                  )}
+                  key={tab}
+                  onClick={() => setElementDetailsTab(tab)}
+                  role="tab"
+                  type="button"
+                >
+                  <Icon size={15} aria-hidden="true" />
+                  {label}
+                </button>
+              ))}
+            </nav>
+            </div>
+
+            {elementDetailsTab === "properties" ? (
+            <div className="grid gap-3 p-4 pt-3 xl:grid-cols-2" role="tabpanel">
               <div className="overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
-                <div className="border-b border-slate-200 bg-white px-3 py-2 font-semibold text-ink dark:border-slate-700 dark:bg-slate-900 dark:text-white">
-                  Atributos
+                <div className="flex min-h-11 items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                  <div className="flex items-center gap-2 font-semibold text-ink dark:text-white">
+                    <List className="text-indigo-600 dark:text-indigo-300" size={18} aria-hidden="true" />
+                    Atributos
+                  </div>
+                  <Button
+                    className="h-8 px-3 text-xs"
+                    disabled={!selectedClass}
+                    icon={<Plus size={14} aria-hidden="true" />}
+                    onClick={() => attributeNameInputRef.current?.focus()}
+                    variant="secondary"
+                  >
+                    Agregar atributo
+                  </Button>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[560px] text-left text-sm">
+                  <table className="w-full min-w-[500px] text-left text-sm">
                     <thead className="bg-slate-100 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                       <tr>
                         <th className="w-24 px-3 py-2">Vis.</th>
                         <th className="px-3 py-2">Nombre</th>
                         <th className="px-3 py-2">Tipo</th>
-                        <th className="w-36 px-3 py-2">Acciones</th>
+                        <th className="w-24 px-3 py-2">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-950">
@@ -1225,13 +1478,23 @@ export function UmlEditorPage() {
                             </select>
                           </td>
                           <td className="px-3 py-2">
-                            <div className="flex gap-2">
-                              <Button icon={<Save size={15} aria-hidden="true" />} onClick={() => saveAttribute(attribute.id)} variant="secondary">
-                                Guardar
-                              </Button>
-                              <Button icon={<Trash2 size={15} aria-hidden="true" />} onClick={() => deleteAttribute(attribute.id)} variant="danger">
-                                Eliminar
-                              </Button>
+                            <div className="grid w-full grid-cols-2 gap-2">
+                              <Button
+                                aria-label="Guardar atributo"
+                                className="h-9 w-full min-w-9 !p-0"
+                                icon={<Save className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                                onClick={() => saveAttribute(attribute.id)}
+                                title="Guardar atributo"
+                                variant="secondary"
+                              />
+                              <Button
+                                aria-label="Eliminar atributo"
+                                className="h-9 w-full min-w-9 !p-0"
+                                icon={<Trash2 className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                                onClick={() => deleteAttribute(attribute.id)}
+                                title="Eliminar atributo"
+                                variant="danger"
+                              />
                             </div>
                           </td>
                         </tr>
@@ -1240,6 +1503,7 @@ export function UmlEditorPage() {
                         <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{visibilitySymbol("private")} Privado</td>
                         <td className="px-3 py-2">
                           <input
+                            ref={attributeNameInputRef}
                             className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                             disabled={!selectedClass}
                             placeholder="nombre"
@@ -1273,11 +1537,23 @@ export function UmlEditorPage() {
               </div>
 
               <div className="overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
-                <div className="border-b border-slate-200 bg-white px-3 py-2 font-semibold text-ink dark:border-slate-700 dark:bg-slate-900 dark:text-white">
-                  Metodos
+                <div className="flex min-h-11 items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                  <div className="flex items-center gap-2 font-semibold text-ink dark:text-white">
+                    <Settings2 className="text-indigo-600 dark:text-indigo-300" size={18} aria-hidden="true" />
+                    Metodos
+                  </div>
+                  <Button
+                    className="h-8 px-3 text-xs"
+                    disabled={!selectedClass}
+                    icon={<Plus size={14} aria-hidden="true" />}
+                    onClick={() => methodNameInputRef.current?.focus()}
+                    variant="secondary"
+                  >
+                    Agregar metodo
+                  </Button>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[560px] text-left text-sm">
+                  <table className="w-full min-w-[500px] text-left text-sm">
                     <thead className="bg-slate-100 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                       <tr>
                         <th className="w-24 px-3 py-2">Vis.</th>
@@ -1317,13 +1593,31 @@ export function UmlEditorPage() {
                             />
                           </td>
                           <td className="px-3 py-2">
-                            <div className="flex gap-2">
-                              <Button icon={<Save size={15} aria-hidden="true" />} onClick={() => saveMethod(method.id)} variant="secondary">
-                                Guardar
-                              </Button>
-                              <Button icon={<Trash2 size={15} aria-hidden="true" />} onClick={() => deleteMethod(method.id)} variant="danger">
-                                Eliminar
-                              </Button>
+                            <div className="grid w-full grid-cols-3 gap-2">
+                              <Button
+                                aria-label="Guardar metodo"
+                                className="h-9 w-full min-w-9 !p-0"
+                                icon={<Save className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                                onClick={() => saveMethod(method.id)}
+                                title="Guardar metodo"
+                                variant="secondary"
+                              />
+                              <Button
+                                aria-label="Especificar metodo"
+                                className="h-9 w-full min-w-9 !p-0"
+                                icon={<Eye className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />}
+                                onClick={() => setSpecificationMethodId(method.id)}
+                                title="Especificar metodo"
+                                variant="secondary"
+                              />
+                              <Button
+                                aria-label="Eliminar metodo"
+                                className="h-9 w-full min-w-9 !p-0"
+                                icon={<Trash2 className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                                onClick={() => deleteMethod(method.id)}
+                                title="Eliminar metodo"
+                                variant="danger"
+                              />
                             </div>
                           </td>
                         </tr>
@@ -1332,6 +1626,7 @@ export function UmlEditorPage() {
                         <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{visibilitySymbol("public")} Publico</td>
                         <td className="px-3 py-2">
                           <input
+                            ref={methodNameInputRef}
                             className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                             disabled={!selectedClass}
                             placeholder="calcular"
@@ -1359,6 +1654,69 @@ export function UmlEditorPage() {
                 </div>
               </div>
             </div>
+            ) : (
+              <div className="p-4 pt-3" role="tabpanel">
+                {relationships.length === 0 ? (
+                  <div className="flex min-h-32 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 px-4 text-center dark:border-slate-700">
+                    <Link2 className="text-slate-400" size={24} aria-hidden="true" />
+                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">El diagrama no tiene relaciones</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Cree una relacion desde las herramientas del editor.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
+                    <div className="flex min-h-11 items-center gap-2 border-b border-slate-200 bg-white px-3 py-2 font-semibold text-ink dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+                      <Link2 className="text-indigo-600 dark:text-indigo-300" size={18} aria-hidden="true" />
+                      Relaciones del diagrama
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[720px] text-left text-sm">
+                        <thead className="bg-slate-100 text-xs uppercase text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                          <tr>
+                            <th className="px-3 py-2">Origen</th>
+                            <th className="px-3 py-2">Tipo</th>
+                            <th className="px-3 py-2">Destino</th>
+                            <th className="px-3 py-2">Multiplicidad</th>
+                            <th className="w-24 px-3 py-2 text-center">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-950">
+                          {relationships.map((relationship) => (
+                            <tr key={relationship.id}>
+                              <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-100">
+                                {classes.find((item) => item.id === relationship.source_class_id)?.name ?? "Clase no disponible"}
+                              </td>
+                              <td className="px-3 py-2 capitalize text-slate-600 dark:text-slate-300">
+                                {relationship.relationship_type}
+                              </td>
+                              <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-100">
+                                {classes.find((item) => item.id === relationship.target_class_id)?.name ?? "Clase no disponible"}
+                              </td>
+                              <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
+                                {relationship.source_cardinality || "-"} / {relationship.target_cardinality || "-"}
+                              </td>
+                              <td className="px-3 py-2">
+                                <Button
+                                  aria-label="Editar relacion"
+                                  className="mx-auto h-8 min-w-9 !p-0"
+                                  icon={<Eye size={16} aria-hidden="true" />}
+                                  onClick={() => {
+                                    setSelectedRelationshipId(relationship.id);
+                                    setSelectedClassId(null);
+                                    setIsRelationshipModalOpen(true);
+                                  }}
+                                  title="Editar relacion"
+                                  variant="secondary"
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </Panel>
         </div>
       </Panel>
@@ -1380,9 +1738,7 @@ export function UmlEditorPage() {
               <div>
                 <h2 className={cn("text-lg font-semibold", isDark ? "text-white" : "text-slate-950")}>Propiedades de relacion</h2>
                 <p className={cn("text-sm", isDark ? "text-slate-400" : "text-slate-500")}>
-                  {selectedRelationship.relationship_type === "inheritance"
-                    ? "Generalize usa herencia y no requiere multiplicidad."
-                    : "Seleccione la multiplicidad en ambos extremos."}
+                  El extremo destino recibe la flecha, triangulo o diamante. Puede definir multiplicidad en ambos extremos.
                 </p>
               </div>
               <button
@@ -1398,6 +1754,23 @@ export function UmlEditorPage() {
             </div>
             <div className="grid gap-4 px-5 py-4">
               <label className={cn("grid gap-1.5 text-sm font-medium", isDark ? "text-slate-200" : "text-slate-700")}>
+                Tipo de relacion
+                <select
+                  className={cn(
+                    "h-10 rounded-md border px-3 text-sm outline-none transition focus:border-accent focus:ring-2",
+                    isDark
+                      ? "border-slate-700 bg-slate-900 text-slate-100 focus:ring-teal-900/50"
+                      : "border-slate-300 bg-white text-slate-950 focus:ring-teal-100"
+                  )}
+                  value={relationshipType}
+                  onChange={(event) => setRelationshipType(event.target.value)}
+                >
+                  {relationshipTypeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className={cn("grid gap-1.5 text-sm font-medium", isDark ? "text-slate-200" : "text-slate-700")}>
                 Etiqueta
                 <input
                   className={cn(
@@ -1410,8 +1783,7 @@ export function UmlEditorPage() {
                   onChange={(event) => setRelationshipLabel(event.target.value)}
                 />
               </label>
-              {selectedRelationship.relationship_type !== "inheritance" && (
-                <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                   <label className={cn("grid gap-1 text-xs font-semibold", isDark ? "text-slate-300" : "text-slate-600")}>
                     Origen
                     <select
@@ -1446,8 +1818,7 @@ export function UmlEditorPage() {
                       ))}
                     </select>
                   </label>
-                </div>
-              )}
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   className={cn(
@@ -1482,6 +1853,25 @@ export function UmlEditorPage() {
           </div>
         </div>
       )}
+
+      {specificationMethodId && selectedClass && (() => {
+        const method = selectedClass.methods.find((item) => item.id === specificationMethodId);
+        return method ? (
+          <MethodSpecificationEditor
+            projectId={projectId}
+            diagramId={diagramId}
+            umlClass={selectedClass}
+            classes={classes}
+            method={method}
+            dark={isDark}
+            onClose={() => setSpecificationMethodId(null)}
+            onMethodChange={(updated) => updateClass({
+              ...selectedClass,
+              methods: selectedClass.methods.map((item) => item.id === updated.id ? updated : item)
+            })}
+          />
+        ) : null;
+      })()}
 
       {showValidationModal && validation && (
         <div
@@ -1542,23 +1932,6 @@ export function UmlEditorPage() {
           </div>
         </div>
       )}
-      <ProjectHistoryPanel
-        projectId={projectId}
-        onVersionRestored={async (result) => {
-          if (!result.restored_diagram_ids.includes(diagramId)) {
-            const destination = result.restored_diagram_ids[0];
-            navigate(
-              destination
-                ? `/proyectos/${projectId}/uml/${destination}`
-                : `/proyectos/${projectId}/colaborativo`,
-              { replace: true }
-            );
-            return;
-          }
-          await refreshDiagramModel();
-          setCanvasRevision((current) => current + 1);
-        }}
-      />
     </section>
   );
 }

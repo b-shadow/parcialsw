@@ -125,6 +125,13 @@ class UmlParameterCreateRequest(BaseModel):
     order_index: int = 0
 
 
+class UmlParameterUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    data_type: str | None = Field(default=None, min_length=1, max_length=120)
+    default_value: str | None = None
+    order_index: int | None = Field(default=None, ge=0)
+
+
 class UmlParameterResponse(BaseModel):
     id: UUID
     method_id: UUID

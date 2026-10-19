@@ -1,11 +1,10 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Archive,
   BarChart3,
   Box,
   Calendar,
   Code2,
-  FileText,
   Folder,
   Layers,
   Plus,
@@ -17,6 +16,7 @@ import { Link } from "react-router-dom";
 
 import { useThemeStore } from "../../../core/theme/themeStore";
 import { cn } from "../../../shared/utils/cn";
+import { generationService } from "../../transformacion_generacion_software/services/generationService";
 import { projectService } from "../services/projectService";
 import type { Project } from "../types/project";
 
@@ -37,11 +37,9 @@ function projectStatus(project: Project) {
 export function ProjectsPage() {
   const isDark = useThemeStore((state) => state.mode === "dark");
   const [projects, setProjects] = useState<Project[]>([]);
+  const [generationCount, setGenerationCount] = useState(0);
   const [error, setError] = useState("");
-  const [projectName, setProjectName] = useState("Sistema de ventas");
-  const [projectDescription, setProjectDescription] = useState("Modelo colaborativo inicial");
   const [search, setSearch] = useState("");
-  const [creating, setCreating] = useState(false);
 
   const panelTone = isDark
     ? "border-[#233149] bg-[#0b1424] text-slate-100 shadow-[0_18px_54px_rgba(0,0,0,0.20)]"
@@ -66,7 +64,18 @@ export function ProjectsPage() {
 
   async function loadProjects() {
     try {
-      setProjects(await projectService.list());
+      const loadedProjects = await projectService.list();
+      setProjects(loadedProjects);
+      const totals = await Promise.all(
+        loadedProjects.map(async (project) => {
+          const [backends, frontends] = await Promise.all([
+            generationService.backends(project.id).catch(() => []),
+            generationService.frontends(project.id).catch(() => [])
+          ]);
+          return backends.length + frontends.length;
+        })
+      );
+      setGenerationCount(totals.reduce((total, count) => total + count, 0));
       setError("");
     } catch {
       setError("No se pudieron cargar los proyectos.");
@@ -76,25 +85,6 @@ export function ProjectsPage() {
   useEffect(() => {
     void loadProjects();
   }, []);
-
-  async function createProject(event: FormEvent) {
-    event.preventDefault();
-    if (projectName.trim().length < 2) {
-      return;
-    }
-    setCreating(true);
-    try {
-      await projectService.create({
-        name: projectName.trim(),
-        description: projectDescription.trim() || undefined
-      });
-      setProjectName("");
-      setProjectDescription("");
-      await loadProjects();
-    } finally {
-      setCreating(false);
-    }
-  }
 
   async function archiveProject(projectId: string) {
     await projectService.archive(projectId);
@@ -107,6 +97,13 @@ export function ProjectsPage() {
         <div className="relative z-10 pt-2">
           <h1 className="text-[34px] font-black leading-tight tracking-tight">Gestion de proyectos</h1>
           <p className={cn("mt-2 text-xl", mutedTone)}>Administra proyectos y generacion de codigo.</p>
+          <Link
+            className="mt-5 inline-flex h-12 items-center gap-2 rounded-lg bg-accent px-5 text-base font-black text-white shadow-lg shadow-teal-900/15 transition hover:brightness-95"
+            to="/proyectos/nuevo"
+          >
+            <Plus size={21} aria-hidden="true" />
+            Nuevo proyecto
+          </Link>
         </div>
         <div className="pointer-events-none relative hidden min-h-28 w-96 shrink-0 lg:block">
           <Box className={cn("absolute right-36 top-0 h-28 w-28", isDark ? "text-teal-400/10" : "text-teal-100")} />
@@ -122,7 +119,7 @@ export function ProjectsPage() {
       <div className="projects-metrics-grid">
         {[
           { icon: Folder, value: activeCount, label: "Proyectos activos", caption: "En desarrollo" },
-          { icon: Code2, value: 0, label: "Generaciones", caption: "Codigo generado" },
+          { icon: Code2, value: generationCount, label: "Generaciones", caption: "Codigo generado" },
           { icon: Archive, value: archivedCount, label: "Archivados", caption: "Proyectos finalizados" }
         ].map((item) => {
           const Icon = item.icon;
@@ -142,53 +139,6 @@ export function ProjectsPage() {
       </div>
 
       <div className="projects-content-grid">
-        <div className={cn("rounded-xl border p-7", panelTone)}>
-          <div className="mb-5 flex items-start gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-white">
-              <Plus size={30} aria-hidden="true" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-black">Nuevo proyecto</h2>
-              <p className={cn("mt-1 text-base leading-6", mutedTone)}>Crea un nuevo proyecto CASE para modelar y generar codigo.</p>
-            </div>
-          </div>
-
-          <form className="grid gap-5" onSubmit={createProject}>
-            <label className="grid gap-2 text-base font-bold">
-              Nombre del proyecto
-              <span className={cn("flex min-h-12 items-center gap-3 rounded-lg border px-4 transition focus-within:ring-4", inputTone)}>
-                <FileText size={22} aria-hidden="true" />
-                <input
-                  className="h-11 min-w-0 flex-1 bg-transparent text-base font-semibold outline-none"
-                  placeholder="Ej. Sistema de ventas"
-                  value={projectName}
-                  onChange={(event) => setProjectName(event.target.value)}
-                />
-              </span>
-            </label>
-            <label className="grid gap-2 text-base font-bold">
-              Descripcion
-              <span className={cn("flex min-h-24 gap-3 rounded-lg border px-4 py-3 transition focus-within:ring-4", inputTone)}>
-                <FileText className="mt-1 shrink-0" size={22} aria-hidden="true" />
-                <textarea
-                  className="min-h-20 min-w-0 flex-1 resize-y bg-transparent text-base font-semibold outline-none"
-                  placeholder="Describe el objetivo del proyecto..."
-                  value={projectDescription}
-                  onChange={(event) => setProjectDescription(event.target.value)}
-                />
-              </span>
-            </label>
-            <button
-              className="inline-flex h-14 items-center justify-center gap-3 rounded-lg bg-accent px-5 text-lg font-black text-white shadow-lg shadow-teal-900/15 transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={creating}
-              type="submit"
-            >
-              <Plus size={26} aria-hidden="true" />
-              {creating ? "Creando" : "Crear proyecto"}
-            </button>
-          </form>
-        </div>
-
         <div className={cn("rounded-xl border p-7", panelTone)}>
           <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-4">
@@ -251,7 +201,7 @@ export function ProjectsPage() {
                   </div>
 
                   <div className={cn("mt-5 h-px", isDark ? "bg-slate-800" : "bg-blue-100")} />
-                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <Link to={`/proyectos/${project.id}`}>
                       <button className="inline-flex h-12 w-full items-center justify-center gap-3 rounded-lg border border-accent bg-transparent px-4 text-base font-black text-accent transition hover:bg-teal-50 dark:hover:bg-teal-400/10">
                         <User size={21} aria-hidden="true" />
@@ -262,6 +212,12 @@ export function ProjectsPage() {
                       <button className={cn("inline-flex h-12 w-full items-center justify-center gap-3 rounded-lg border px-4 text-base font-black transition", isDark ? "border-slate-700 text-slate-200 hover:bg-slate-800" : "border-blue-200 text-blue-900 hover:bg-blue-50")}>
                         <Users size={21} aria-hidden="true" />
                         Colaborativo
+                      </button>
+                    </Link>
+                    <Link to={`/proyectos/${project.id}/generacion`}>
+                      <button className={cn("inline-flex h-12 w-full items-center justify-center gap-3 rounded-lg border px-4 text-base font-black transition", isDark ? "border-slate-700 text-slate-200 hover:bg-slate-800" : "border-blue-200 text-blue-900 hover:bg-blue-50")}>
+                        <Code2 size={21} aria-hidden="true" />
+                        Generacion
                       </button>
                     </Link>
                     <button

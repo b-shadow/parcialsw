@@ -1,3 +1,4 @@
+import json
 import re
 from datetime import UTC, datetime
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
@@ -8,6 +9,7 @@ from app.modules.modelado_uml.engine.internal_model import (
     UmlClassModel,
     UmlDiagramModel,
     UmlMethodModel,
+    UmlParameterModel,
     UmlRelationshipModel,
     UmlVisualModel,
 )
@@ -107,6 +109,21 @@ def _multiplicity_from_end(end: ElementTree.Element | None, fallback: str | None
     elif upper:
         multiplicity = upper
     return multiplicity or fallback
+
+
+def _aggregation_from_end(end: ElementTree.Element | None) -> str | None:
+    if end is None:
+        return None
+    aggregation = (
+        end.attrib.get("aggregation")
+        or _tagged_value(end, "aggregation")
+        or ""
+    ).strip().lower()
+    if aggregation in {"shared", "aggregate", "aggregation"}:
+        return "aggregation"
+    if aggregation in {"composite", "composition"}:
+        return "composition"
+    return None
 
 
 def _direct_children(node: ElementTree.Element, name: str) -> list[ElementTree.Element]:
@@ -504,6 +521,18 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
                     "pure": "0",
                     "ea_guid": export_guid(method.id, f"{class_id}_{method.name}"),
                     "ea_localid": str(operation_local_id),
+                    **(
+                        {
+                            "case_method_specification_v1": json.dumps(
+                                method.specification,
+                                ensure_ascii=True,
+                                separators=(",", ":"),
+                                sort_keys=True,
+                            )
+                        }
+                        if method.specification
+                        else {}
+                    ),
                 },
             )
             operation_local_id += 1
@@ -585,7 +614,7 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
         relationship_type = relationship.relationship_type.lower()
 
         if relationship_type in {"inheritance", "generalization"}:
-            ElementTree.SubElement(
+            generalization_node = ElementTree.SubElement(
                 owned_elements,
                 "UML:Generalization",
                 {
@@ -596,6 +625,13 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
                     "supertype": target_id,
                 },
             )
+            generalization_values: dict[str, str] = {}
+            if relationship.source_cardinality:
+                generalization_values["sourceMultiplicity"] = relationship.source_cardinality
+            if relationship.target_cardinality:
+                generalization_values["targetMultiplicity"] = relationship.target_cardinality
+            if generalization_values:
+                _tagged_values(generalization_node, generalization_values)
             continue
 
         if relationship_type in {"dependency", "realization", "implementation"}:
@@ -680,11 +716,6 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
         }
         if relationship.source_cardinality:
             source_end_attributes["multiplicity"] = relationship.source_cardinality
-        if relationship_type == "aggregation":
-            source_end_attributes["aggregation"] = "shared"
-        elif relationship_type == "composition":
-            source_end_attributes["aggregation"] = "composite"
-
         target_end_attributes = {
             "name": "",
             "type": target_id,
@@ -697,6 +728,10 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
         }
         if relationship.target_cardinality:
             target_end_attributes["multiplicity"] = relationship.target_cardinality
+        if relationship_type == "aggregation":
+            target_end_attributes["aggregation"] = "shared"
+        elif relationship_type == "composition":
+            target_end_attributes["aggregation"] = "composite"
 
         source_end = ElementTree.SubElement(
             connection_node,
@@ -882,6 +917,46 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                 )
             methods = []
             for order_index, child in enumerate(_feature_children(node, "Operation")):
+                parameters = []
+                for parameter_index, parameter in enumerate(
+
+                        item
+                        for item in child.iter()
+                        if _is_tag(item, "Parameter")
+                        and item.attrib.get("kind", "in") != "return"
+
+                ):
+                    default_value = next(
+                        (
+                            expression.attrib.get("body")
+                            for expression in parameter.iter()
+                            if _is_tag(expression, "Expression")
+                            and expression.attrib.get("body") is not None
+                        ),
+                        None,
+                    )
+                    parameters.append(
+                        UmlParameterModel(
+                            id=_xmi_attr(parameter, "id"),
+                            name=parameter.attrib.get("name", f"parametro{parameter_index + 1}"),
+                            data_type=parameter.attrib.get("type")
+                            or _tagged_value(parameter, "type")
+                            or "String",
+                            default_value=default_value,
+                            order_index=int(
+                                _tagged_value(parameter, "pos") or parameter_index
+                            ),
+                        )
+                    )
+                specification = None
+                raw_specification = _tagged_value(child, "case_method_specification_v1")
+                if raw_specification and len(raw_specification.encode("utf-8")) <= 64 * 1024:
+                    try:
+                        candidate = json.loads(raw_specification)
+                        if isinstance(candidate, dict) and candidate.get("schema_version", 1) == 1:
+                            specification = candidate
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        specification = None
                 methods.append(
                     UmlMethodModel(
                         id=_xmi_attr(child, "id"),
@@ -898,6 +973,8 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                         ),
                         visibility=child.attrib.get("visibility", "public"),
                         order_index=int(_tagged_value(child, "position") or order_index),
+                        parameters=parameters,
+                        specification=specification,
                     )
                 )
             class_name = node.attrib.get("name", "ClaseImportada")
@@ -934,6 +1011,8 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                     target_class_id=id_to_class_name.get(target_id, target_id),
                     relationship_type="inheritance",
                     label=node.attrib.get("name"),
+                    source_cardinality=_tagged_value(node, "sourceMultiplicity"),
+                    target_cardinality=_tagged_value(node, "targetMultiplicity"),
                 )
             )
         elif _is_tag(node, "Association") or (node.tag.endswith("packagedElement") and node_type == "uml:Association"):
@@ -948,9 +1027,19 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                     source_id, target_id = ends[0], ends[1]
             if source_id not in id_to_class_name or target_id not in id_to_class_name:
                 continue
-            source_end = next((child for child in node.iter() if _is_tag(child, "AssociationEnd") or _is_tag(child, "ownedEnd")), None)
             all_ends = [child for child in node.iter() if _is_tag(child, "AssociationEnd") or _is_tag(child, "ownedEnd")]
-            target_end = all_ends[1] if len(all_ends) > 1 else None
+            source_end = next((end for end in all_ends if end.attrib.get("type") == source_id), None)
+            target_end = next((end for end in all_ends if end.attrib.get("type") == target_id), None)
+            if source_end is None:
+                source_end = all_ends[0] if all_ends else None
+            if target_end is None:
+                target_end = all_ends[1] if len(all_ends) > 1 else None
+            source_aggregation = _aggregation_from_end(source_end)
+            target_aggregation = _aggregation_from_end(target_end)
+            relationship_type = target_aggregation or source_aggregation or "association"
+            if source_aggregation and not target_aggregation:
+                source_id, target_id = target_id, source_id
+                source_end, target_end = target_end, source_end
             source_multiplicity = _multiplicity_from_end(
                 source_end,
                 _tagged_value(node, "sourceMultiplicity") or _tagged_value(node, "lb"),
@@ -968,7 +1057,7 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                     id=relationship_id,
                     source_class_id=id_to_class_name.get(source_id, source_id),
                     target_class_id=id_to_class_name.get(target_id, target_id),
-                    relationship_type="association",
+                    relationship_type=relationship_type,
                     label=node.attrib.get("name"),
                     source_cardinality=source_multiplicity,
                     target_cardinality=target_multiplicity,

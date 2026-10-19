@@ -30,7 +30,7 @@ function classDetail(patch: Partial<UmlClassDetail> & Pick<UmlClassDetail, "id" 
 }
 
 describe("umlService.applyAiModificationToDiagram", () => {
-  it("aplica una clase generada por IA sobre un diagrama ya creado y la conecta 1 a 1", async () => {
+  it("fusiona lo detectado con el diagrama actual sin reemplazar sus clases", async () => {
     const createdClass: UmlClass = {
       id: "class-perfil",
       diagram_id: "diagram-1",
@@ -139,6 +139,14 @@ describe("umlService.applyAiModificationToDiagram", () => {
     expect(mockedApiClient.post).toHaveBeenCalledWith(
       "/uml/diagrams/diagram-1/classes",
       expect.objectContaining({ name: "Perfil" })
+    );
+    expect(mockedApiClient.post).not.toHaveBeenCalledWith(
+      "/uml/diagrams/diagram-1/classes",
+      expect.objectContaining({ name: "Usuario" })
+    );
+    expect(mockedApiClient.post).not.toHaveBeenCalledWith(
+      "/uml/classes/class-usuario/attributes",
+      expect.anything()
     );
     expect(mockedApiClient.post).toHaveBeenCalledWith(
       "/uml/classes/class-perfil/attributes",

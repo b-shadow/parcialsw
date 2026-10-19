@@ -1,0 +1,9 @@
+{
+  "schema_version": 2,
+  "mode": "system",
+  "light": {"primary": "#0F766E", "on_primary": "#FFFFFF", "secondary": "#2563EB", "on_secondary": "#FFFFFF", "background": "#F8FAFC", "on_background": "#0F172A", "surface": "#FFFFFF", "on_surface": "#0F172A", "error": "#B91C1C", "on_error": "#FFFFFF", "outline": "#64748B"},
+  "dark": {"primary": "#5EEAD4", "on_primary": "#042F2E", "secondary": "#93C5FD", "on_secondary": "#172554", "background": "#020617", "on_background": "#E2E8F0", "surface": "#0F172A", "on_surface": "#E2E8F0", "error": "#FCA5A5", "on_error": "#450A0A", "outline": "#94A3B8"},
+  "typography": {"font_family": "system", "heading_font_family": "system", "scale": "normal", "weight": "regular"},
+  "shape": {"button_radius": 8, "input_radius": 8, "card_radius": 8, "dialog_radius": 8},
+  "components": {"button_style": "filled", "input_style": "outline", "card_style": "outlined", "navigation_style": "automatic", "density": "normal", "show_field_labels": true}
+}

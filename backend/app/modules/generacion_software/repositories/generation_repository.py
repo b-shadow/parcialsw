@@ -4,6 +4,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.modules.generacion_software.models import (
+    CoordinatedGeneration,
     GeneratedArtifact,
     GeneratedBackend,
     GeneratedFrontend,
@@ -33,6 +34,15 @@ class GenerationRepository:
     def get_backend(self, backend_id: UUID) -> GeneratedBackend | None:
         return self.db.get(GeneratedBackend, backend_id)
 
+    def list_backends(self, project_id: UUID) -> list[GeneratedBackend]:
+        return list(
+            self.db.scalars(
+                select(GeneratedBackend)
+                .where(GeneratedBackend.project_id == project_id)
+                .order_by(GeneratedBackend.created_at.desc())
+            )
+        )
+
     def add_frontend(self, generated_frontend: GeneratedFrontend) -> GeneratedFrontend:
         self.db.add(generated_frontend)
         self.db.flush()
@@ -42,11 +52,40 @@ class GenerationRepository:
     def get_frontend(self, frontend_id: UUID) -> GeneratedFrontend | None:
         return self.db.get(GeneratedFrontend, frontend_id)
 
+    def list_frontends(self, project_id: UUID) -> list[GeneratedFrontend]:
+        return list(
+            self.db.scalars(
+                select(GeneratedFrontend)
+                .where(GeneratedFrontend.project_id == project_id)
+                .order_by(GeneratedFrontend.created_at.desc())
+            )
+        )
+
     def add_artifact(self, artifact: GeneratedArtifact) -> GeneratedArtifact:
         self.db.add(artifact)
         self.db.flush()
         self.db.refresh(artifact)
         return artifact
+
+    def add_coordinated(self, generated: CoordinatedGeneration) -> CoordinatedGeneration:
+        self.db.add(generated)
+        self.db.flush()
+        self.db.refresh(generated)
+        return generated
+
+    def get_coordinated(self, generation_id: UUID) -> CoordinatedGeneration | None:
+        return self.db.get(CoordinatedGeneration, generation_id)
+
+    def get_coordinated_by_request(
+        self, transformation_id: UUID, user_id: UUID, client_request_id: str
+    ) -> CoordinatedGeneration | None:
+        return self.db.scalar(
+            select(CoordinatedGeneration).where(
+                CoordinatedGeneration.transformation_id == transformation_id,
+                CoordinatedGeneration.requested_by_user_id == user_id,
+                CoordinatedGeneration.client_request_id == client_request_id,
+            )
+        )
 
     def delete_generation_tree_by_diagram(self, diagram_id: UUID) -> None:
         transformation_ids = list(
@@ -56,6 +95,12 @@ class GenerationRepository:
         )
         if not transformation_ids:
             return
+
+        self.db.execute(
+            delete(CoordinatedGeneration).where(
+                CoordinatedGeneration.transformation_id.in_(transformation_ids)
+            )
+        )
 
         backend_ids = list(
             self.db.scalars(

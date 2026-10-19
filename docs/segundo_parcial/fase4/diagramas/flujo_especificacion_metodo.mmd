@@ -1,0 +1,12 @@
+flowchart LR
+    U[Usuario abre metodo] --> E[Editor de especificacion]
+    E --> D[Guardar borrador]
+    D --> P{Precondicion HTTP valida?}
+    P -- No --> C[409 y revision actual]
+    P -- Si --> S[(Especificacion + auditoria)]
+    S --> W[Evento WebSocket posterior al commit]
+    E --> V[Validacion estricta]
+    V --> R{Ready?}
+    R -- No --> X[Diagnosticos por campo]
+    R -- Si --> G[Modelo intermedio v2]
+

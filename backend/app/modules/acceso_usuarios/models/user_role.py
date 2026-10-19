@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 class UserRole(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "user_roles"
-    __table_args__ = (UniqueConstraint("user_id", "role_id", name="uq_user_roles_user_role"),)
+    __table_args__ = (UniqueConstraint("user_id", name="uq_user_roles_user"),)
 
     user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"), index=True)
     role_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("roles.id"), index=True)

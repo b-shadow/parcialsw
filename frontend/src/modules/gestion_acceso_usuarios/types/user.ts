@@ -11,7 +11,7 @@ export type User = {
 
 export type Role = {
   id: string;
-  name: "ADMINISTRADOR" | "EDITOR" | "ORGANIZADOR";
+  name: "ADMINISTRADOR" | "EDITOR";
   description: string | null;
   is_system: boolean;
 };

@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { JointUmlCanvas } from "./JointUmlCanvas";
-import type { UmlClassDetail } from "../types/uml";
+import type { UmlClassDetail, UmlRelationship } from "../types/uml";
 
 const emptyClass: UmlClassDetail = {
   id: "class-1",
@@ -18,18 +18,18 @@ const emptyClass: UmlClassDetail = {
   visual: null
 };
 
-function renderCanvas(umlClass: UmlClassDetail) {
+function renderCanvas(umlClass: UmlClassDetail, relationships: UmlRelationship[] = [], extraClasses: UmlClassDetail[] = []) {
   return render(
     <JointUmlCanvas
       activeTool="select"
-      classes={[umlClass]}
+      classes={[umlClass, ...extraClasses]}
       isDark={false}
       onClassClick={vi.fn()}
       onClassMove={vi.fn()}
       onClassRename={vi.fn()}
       onRelationshipClick={vi.fn()}
       pendingSourceId=""
-      relationships={[]}
+      relationships={relationships}
       selectedClassId={null}
       selectedRelationshipId={null}
     />
@@ -62,5 +62,47 @@ describe("JointUmlCanvas class members", () => {
     });
 
     expect(screen.getByText(/guardar\(\): void/i)).toBeInTheDocument();
+  });
+
+  it.each([
+    ["inheritance", "uml-generalization"],
+    ["aggregation", "uml-aggregation"],
+    ["composition", "uml-composition"]
+  ])("renders the UML marker for %s", (relationshipType, markerId) => {
+    const targetClass: UmlClassDetail = {
+      ...emptyClass,
+      id: "class-2",
+      name: "Destino",
+      visual: {
+        id: "visual-2",
+        diagram_id: "diagram-1",
+        element_type: "class",
+        element_id: "class-2",
+        position_x: 500,
+        position_y: 100,
+        width: null,
+        height: null,
+        style: {}
+      }
+    };
+    const relationship: UmlRelationship = {
+      id: `relationship-${relationshipType}`,
+      diagram_id: "diagram-1",
+      source_class_id: emptyClass.id,
+      target_class_id: targetClass.id,
+      relationship_type: relationshipType,
+      source_cardinality: "0..*",
+      target_cardinality: "1",
+      direction: "source_to_target",
+      label: relationshipType,
+      metadata_json: {}
+    };
+
+    const { container } = renderCanvas(emptyClass, [relationship], [targetClass]);
+
+    expect(container.querySelector(`[id="${markerId}"]`)).toBeInTheDocument();
+    expect(
+      [...container.querySelectorAll("line")].some((line) => line.getAttribute("marker-end") === `url(#${markerId})`)
+    ).toBe(true);
   });
 });

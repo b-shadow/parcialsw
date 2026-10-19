@@ -6,6 +6,10 @@ import type {
   UmlClassDetail,
   UmlDiagram,
   UmlMethod,
+  MethodSpecification,
+  MethodSpecificationEnvelope,
+  MethodSpecificationProposal,
+  MethodReadiness,
   UmlRelationship,
   UmlValidation,
   UmlVisualElement
@@ -113,6 +117,39 @@ export const umlService = {
   },
   async deleteMethod(methodId: string) {
     await apiClient.delete(`/uml/methods/${methodId}`);
+  },
+  async addParameter(methodId: string, payload: { name: string; data_type: string; default_value?: string | null; order_index?: number }) {
+    return (await apiClient.post<UmlMethod["parameters"][number]>(`/uml/methods/${methodId}/parameters`, payload)).data;
+  },
+  async updateParameter(parameterId: string, payload: Partial<UmlMethod["parameters"][number]>) {
+    return (await apiClient.patch<UmlMethod["parameters"][number]>(`/uml/parameters/${parameterId}`, payload)).data;
+  },
+  async deleteParameter(parameterId: string) {
+    await apiClient.delete(`/uml/parameters/${parameterId}`);
+  },
+  async methodSpecification(methodId: string) {
+    return (await apiClient.get<MethodSpecificationEnvelope>(`/uml/methods/${methodId}/specification`)).data;
+  },
+  async saveMethodSpecification(methodId: string, payload: Omit<MethodSpecification, "id" | "method_id" | "revision" | "created_at" | "updated_at">, revision: number | null) {
+    const headers = revision === null
+      ? { "If-None-Match": "*" }
+      : { "If-Match": `"revision-${revision}"` };
+    return (await apiClient.put<MethodSpecification>(`/uml/methods/${methodId}/specification`, payload, { headers })).data;
+  },
+  async deleteMethodSpecification(methodId: string, revision: number) {
+    await apiClient.delete(`/uml/methods/${methodId}/specification`, {
+      headers: { "If-Match": `"revision-${revision}"` }
+    });
+  },
+  async validateMethodSpecification(methodId: string, strict = false) {
+    return (await apiClient.post<MethodReadiness>(`/uml/methods/${methodId}/specification/validate`, undefined, { params: { strict } })).data;
+  },
+  async refineMethodSpecification(methodId: string, instruction: string, baseRevision: number) {
+    return (await apiClient.post<MethodSpecificationProposal>(`/uml/methods/${methodId}/specification/refine`, {
+      instruction,
+      base_revision: baseRevision,
+      client_message_id: crypto.randomUUID()
+    })).data;
   },
   async createRelationship(
     diagramId: string,

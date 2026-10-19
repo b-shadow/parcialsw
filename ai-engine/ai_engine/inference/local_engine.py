@@ -40,6 +40,8 @@ from ai_engine.validators import validate_uml_quality
 
 
 class LocalAIEngine:
+    MIN_IMAGE_DETECTION_CONFIDENCE = 0.55
+
     ATTRIBUTE_WORDS = (
         "atributo",
         "atributos",
@@ -144,8 +146,34 @@ class LocalAIEngine:
     def generate_uml_from_image(self, request: ImageProcessingRequest) -> UmlGenerationResponse:
         if request.image_base64:
             detection = analyze_uml_image(request.image_base64)
-            if detection.classes:
+            unresolved = any(item.name.startswith("Clase") for item in detection.classes)
+            if (
+                detection.classes
+                and not unresolved
+                and detection.confidence >= self.MIN_IMAGE_DETECTION_CONFIDENCE
+            ):
                 return self._build_response_from_image_detection(detection)
+            # Classical OCR is intentionally the fast first pass. A local multimodal
+            # reader handles distant handwriting while OpenCV remains the geometry guard.
+            from ai_engine.inference.vision_uml_reader import VisionUmlReader
+
+            vision_reader = VisionUmlReader()
+            try:
+                vision_response = vision_reader.read(request.image_base64, detection)
+            finally:
+                vision_reader.close()
+            if vision_response is not None:
+                return vision_response
+            return UmlGenerationResponse(
+                classes=[],
+                relationships=[],
+                confidence=detection.confidence,
+                observations=[
+                    *detection.observations,
+                    "No se aplico una interpretacion parcial o ambigua de la imagen.",
+                ],
+                knowledge_context=[],
+            )
         description = normalize_image_description(request.description, request.image_base64, request.file_name)
         return self._build_response(description, "image", True)
 
@@ -1513,7 +1541,7 @@ class LocalAIEngine:
         return UmlGenerationResponse(
             classes=classes,
             relationships=relationships,
-            confidence=0.84 if any(uml_class.attributes for uml_class in classes) else 0.68,
+            confidence=detection.confidence,
             observations=[
                 *detection.observations,
                 f"Firma visual: {detection.signature or 'clases_detectadas'}.",

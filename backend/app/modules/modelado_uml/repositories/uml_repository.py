@@ -8,6 +8,7 @@ from app.modules.modelado_uml.models import (
     UmlClass,
     UmlDiagram,
     UmlMethod,
+    UmlMethodSpecification,
     UmlParameter,
     UmlRelationship,
     UmlVisualElement,
@@ -84,6 +85,33 @@ class UmlRepository:
     def get_method(self, method_id: UUID) -> UmlMethod | None:
         return self.db.get(UmlMethod, method_id)
 
+    def get_method_specification(self, method_id: UUID) -> UmlMethodSpecification | None:
+        return self.db.scalar(
+            select(UmlMethodSpecification).where(
+                UmlMethodSpecification.method_id == method_id
+            )
+        )
+
+    def get_method_specification_for_update(
+        self, method_id: UUID
+    ) -> UmlMethodSpecification | None:
+        return self.db.scalar(
+            select(UmlMethodSpecification)
+            .where(UmlMethodSpecification.method_id == method_id)
+            .with_for_update()
+        )
+
+    def add_method_specification(
+        self, specification: UmlMethodSpecification
+    ) -> UmlMethodSpecification:
+        self.db.add(specification)
+        self.db.flush()
+        self.db.refresh(specification)
+        return specification
+
+    def delete_method_specification(self, specification: UmlMethodSpecification) -> None:
+        self.db.delete(specification)
+
     def delete_method(self, method: UmlMethod) -> None:
         self.db.delete(method)
 
@@ -92,6 +120,12 @@ class UmlRepository:
         self.db.flush()
         self.db.refresh(parameter)
         return parameter
+
+    def get_parameter(self, parameter_id: UUID) -> UmlParameter | None:
+        return self.db.get(UmlParameter, parameter_id)
+
+    def delete_parameter(self, parameter: UmlParameter) -> None:
+        self.db.delete(parameter)
 
     def add_relationship(self, relationship: UmlRelationship) -> UmlRelationship:
         self.db.add(relationship)

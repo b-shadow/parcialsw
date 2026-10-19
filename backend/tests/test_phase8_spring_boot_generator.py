@@ -195,4 +195,5 @@ def test_spring_boot_generator_applies_multiplicity_owner_rules(tmp_path: Path) 
 def test_phase8_openapi_contracts_are_registered() -> None:
     paths = app.openapi()["paths"]
     assert "/api/v1/generation/spring-boot" in paths
+    assert "/api/v1/generation/projects/{project_id}/spring-boot" in paths
     assert "/api/v1/generation/spring-boot/{backend_id}/download" in paths

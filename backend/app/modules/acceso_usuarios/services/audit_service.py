@@ -5,6 +5,27 @@ from sqlalchemy.orm import Session
 from app.modules.acceso_usuarios.models import AuditLog
 from app.modules.acceso_usuarios.repositories.audit_repository import AuditRepository
 
+SENSITIVE_AUDIT_KEYS = (
+    "password", "token", "authorization", "secret", "private_key",
+    "p256dh", "cookie", "database_url", "connection_string",
+)
+
+
+def sanitize_audit_metadata(value: object, *, depth: int = 0) -> object:
+    if depth >= 5:
+        return "[truncated]"
+    if isinstance(value, dict):
+        return {
+            str(key)[:80]: sanitize_audit_metadata(child, depth=depth + 1)
+            for key, child in list(value.items())[:50]
+            if not any(part in str(key).casefold() for part in SENSITIVE_AUDIT_KEYS)
+        }
+    if isinstance(value, list):
+        return [sanitize_audit_metadata(child, depth=depth + 1) for child in value[:50]]
+    if isinstance(value, str):
+        return value[:500]
+    return value
+
 
 class AuditService:
     def __init__(self, db: Session) -> None:
@@ -29,7 +50,7 @@ class AuditService:
                 action=action,
                 result=result,
                 detail=detail,
-                metadata_json=metadata or {},
+                metadata_json=sanitize_audit_metadata(metadata or {}),
             )
         )
 

@@ -1,0 +1,16 @@
+flowchart TD
+    M[Metodo UML] --> F[Firma y parametros]
+    M --> S[Especificacion funcional]
+    S --> B[Contrato backend]
+    S --> U[Contrato Flutter]
+    S --> V[Validador estricto]
+    F --> I[Modelo intermedio v2]
+    B --> I
+    U --> I
+    V --> I
+    I --> J[Generador Spring Boot]
+    I --> D[Generador Flutter]
+    J --> JC[Controller DTO Service Security]
+    D --> DC[Formulario Controles Selectores Refresco]
+    S --> X[TaggedValue XMI]
+    S --> P[Snapshot de version]

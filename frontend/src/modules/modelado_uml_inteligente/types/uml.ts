@@ -64,6 +64,114 @@ export type UmlMethod = {
   parameters: Array<{ id: string; name: string; data_type: string; default_value: string | null; order_index: number }>;
 };
 
+export type MethodRule = {
+  code: string;
+  description: string;
+  severity: "info" | "warning" | "error";
+  target?: { kind: "parameter" | "attribute" | "class" | "relationship"; id?: string | null; name: string } | null;
+  error_code?: string | null;
+  generation?: Record<string, unknown> | null;
+};
+
+export type MethodSideEffect = {
+  code: string;
+  kind: "data_change" | "status_change" | "notification" | "audit_event" | "refresh_required";
+  description: string;
+  target_entity_id: string | null;
+  target_entity_name: string | null;
+};
+
+export type MethodRelatedEntity = {
+  class_id: string | null;
+  class_name: string;
+  relation: "owner" | "input_reference" | "output" | "reads" | "creates" | "updates" | "deletes" | "refresh_target";
+  required: boolean;
+  source_parameter_id: string | null;
+};
+
+export type MethodSpecification = {
+  id: string;
+  method_id: string;
+  description: string | null;
+  operation_kind: "create" | "read" | "search" | "update" | "delete" | "calculate" | "business_action" | "custom";
+  exposure: "internal" | "api" | "user_action";
+  preconditions: MethodRule[];
+  postconditions: MethodRule[];
+  business_rules: MethodRule[];
+  validations: MethodRule[];
+  side_effects: MethodSideEffect[];
+  required_permissions: Array<{ code: string; description?: string | null }>;
+  related_entities: MethodRelatedEntity[];
+  backend_contract: {
+    http_method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+    path: string;
+    request_dto: string | null;
+    response_dto: string | null;
+    transactional: boolean;
+    authorization: string[];
+    error_codes: string[];
+    status_codes: { success: number; validation_error: number; not_found: number; conflict: number };
+  } | null;
+  frontend_contract: {
+    interaction: "form" | "button" | "menu_action" | "background" | "filter";
+    label: string;
+    placement: string | null;
+    confirmation_required: boolean;
+    refresh_targets: string[];
+    success_message: string | null;
+    fields: Array<{
+      parameter_id: string | null;
+      parameter: string;
+      control: string;
+      source_entity_id: string | null;
+      source_entity: string | null;
+      display_fields: string[];
+      hidden: boolean;
+    }>;
+  } | null;
+  schema_version: 1;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MethodDiagnostic = {
+  code: string;
+  severity: "info" | "warning" | "error";
+  path: string;
+  message: string;
+  suggestion: string | null;
+  related_element_id: string | null;
+};
+
+export type MethodReadiness = {
+  status: "empty" | "draft" | "needs_review" | "invalid" | "ready" | "legacy";
+  ready_for_generation: boolean;
+  errors: MethodDiagnostic[];
+  warnings: MethodDiagnostic[];
+  inferred_fields: string[];
+};
+
+export type MethodSpecificationEnvelope = {
+  specification: MethodSpecification | null;
+  readiness: MethodReadiness;
+};
+
+export type MethodSpecificationProposal = {
+  action_id: string;
+  method_id: string;
+  base_revision: number;
+  summary: string;
+  patch: Partial<MethodSpecification>;
+  changed_fields: string[];
+  unresolved_references: string[];
+  assumptions: string[];
+  warnings: string[];
+  validation: MethodReadiness;
+  provider: string;
+  fallback_used: boolean;
+};
+
 export type UmlRelationship = {
   id: string;
   diagram_id: string;

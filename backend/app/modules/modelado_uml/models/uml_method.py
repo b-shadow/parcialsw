@@ -13,6 +13,7 @@ from app.core.database.session import Base
 
 if TYPE_CHECKING:
     from app.modules.modelado_uml.models.uml_class import UmlClass
+    from app.modules.modelado_uml.models.uml_method_specification import UmlMethodSpecification
     from app.modules.modelado_uml.models.uml_parameter import UmlParameter
 
 
@@ -31,4 +32,7 @@ class UmlMethod(UuidPrimaryKeyMixin, TimestampMixin, Base):
     uml_class: Mapped[UmlClass] = relationship(back_populates="methods")
     parameters: Mapped[list[UmlParameter]] = relationship(
         back_populates="method", cascade="all, delete-orphan"
+    )
+    specification: Mapped[UmlMethodSpecification | None] = relationship(
+        back_populates="method", cascade="all, delete-orphan", uselist=False
     )

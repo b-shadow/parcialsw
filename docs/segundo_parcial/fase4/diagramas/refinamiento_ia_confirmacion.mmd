@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant U as Usuario
+    participant F as Editor React
+    participant B as FastAPI
+    participant A as Motor local
+    participant DB as PostgreSQL
+    participant WS as WebSocket
+    U->>F: Describe refinamiento
+    F->>B: POST refine + revision + client_message_id
+    B->>A: Clasificar e inferir contrato tipado
+    A-->>B: Patch + referencias no resueltas
+    B->>DB: Mensajes + AiAction proposed
+    B-->>F: Propuesta, no aplicada
+    U->>F: Confirmar
+    F->>B: POST action/confirm
+    B->>DB: Verificar revision y transaccion atomica
+    DB-->>B: Commit
+    B->>WS: METHOD_SPECIFICATION_CREATED/UPDATED
+    B-->>F: Accion aplicada
+

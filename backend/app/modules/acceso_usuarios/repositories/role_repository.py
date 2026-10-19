@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.modules.acceso_usuarios.models import Role
 
+GLOBAL_ROLE_NAMES = ("ADMINISTRADOR", "EDITOR")
+
 
 class RoleRepository:
     def __init__(self, db: Session) -> None:
@@ -17,5 +19,9 @@ class RoleRepository:
         return self.db.get(Role, role_id)
 
     def list(self) -> list[Role]:
-        return list(self.db.scalars(select(Role).order_by(Role.name)))
+        return list(
+            self.db.scalars(
+                select(Role).where(Role.name.in_(GLOBAL_ROLE_NAMES)).order_by(Role.name)
+            )
+        )
 

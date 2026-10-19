@@ -1,0 +1,9 @@
+flowchart LR
+  U[Usuario] --> D[Borrador React]
+  D --> V[Validacion local]
+  V --> API[PUT con revision]
+  API --> N[Normalizador backend]
+  N --> DB[(Tema v2)]
+  DB --> A[Auditoria]
+  A --> W[Evento WebSocket]
+  DB --> G[Generador Flutter]

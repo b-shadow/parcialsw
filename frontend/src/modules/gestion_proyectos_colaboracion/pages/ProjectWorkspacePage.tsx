@@ -1,506 +1,202 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AlertCircle, LoaderCircle, MessageSquare, MoreHorizontal, Pencil, Plus } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import {
-  CalendarDays,
-  ChevronDown,
-  ChevronRight,
-  FileText,
-  FileUp,
-  FolderTree,
-  Image,
-  Layers3,
-  Mic,
-  Pencil,
-  PlusCircle,
-  Save,
-  Search,
-  Settings,
-  Sparkles,
-  Trash2,
-  Upload,
-  Users,
-} from "lucide-react";
 
+import { phase1Service } from "../../../core/api/phase1Service";
+import type { AiConversation } from "../../../core/contracts/phase1";
 import { cn } from "../../../shared/utils/cn";
-import { useAuthStore } from "../../../core/auth/authStore";
-import { aiService } from "../../modelado_uml_inteligente/services/aiService";
 import { umlService } from "../../modelado_uml_inteligente/services/umlService";
-import type { UmlDiagram } from "../../modelado_uml_inteligente/types/uml";
-import { ProjectHistoryPanel } from "../components/ProjectHistoryPanel";
 import { projectService } from "../services/projectService";
-import { useProjectStore } from "../store/projectStore";
-import type { ProjectMember } from "../types/project";
-
-type AiUmlResult = Awaited<ReturnType<typeof aiService.textToUml>>;
-
-const inputClass = "collab-field h-11 w-full rounded-md border px-3 text-sm outline-none transition focus:ring-2";
-const textareaClass = "collab-field min-h-24 w-full rounded-md border px-3 py-2 text-sm outline-none transition focus:ring-2";
-const buttonBase =
-  "inline-flex h-11 items-center justify-center gap-2 rounded-md px-4 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60";
-
-function fileToBase64(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
-function fileToText(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsText(file);
-  });
-}
-
-function promptFromAiResult(result: AiUmlResult, fallback: string) {
-  const classNames = result.classes.map((umlClass) => umlClass.name).filter(Boolean);
-  const relations = result.relationships
-    .map((relationship) => `${relationship.source} ${relationship.relationship_type} ${relationship.target}`)
-    .join(", ");
-  return [fallback, classNames.length > 0 ? `Clases: ${classNames.join(", ")}` : "", relations ? `Relaciones: ${relations}` : ""]
-    .filter(Boolean)
-    .join(". ");
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("es", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
-}
-
-function diagramTypeLabel(type: string) {
-  return type === "class" ? "Diagrama de clases" : type;
-}
-
-function statusLabel(status: string) {
-  return status === "active" ? "Actualizado" : status === "review" ? "En revision" : status;
-}
-
-function memberInitial(value: string) {
-  return value.slice(0, 2).toUpperCase();
-}
-
-function statusClassName(status: string) {
-  if (status === "active") {
-    return "collab-status collab-status-success";
-  }
-  return "collab-status collab-status-warning";
-}
 
 export function ProjectWorkspacePage() {
   const { projectId = "" } = useParams();
   const navigate = useNavigate();
-  const currentUser = useAuthStore((state) => state.user);
-  const activeProject = useProjectStore((state) => state.activeProject);
-  const setActiveProject = useProjectStore((state) => state.setActiveProject);
-  const [diagrams, setDiagrams] = useState<UmlDiagram[]>([]);
-  const [members, setMembers] = useState<ProjectMember[]>([]);
-  const [diagramName, setDiagramName] = useState("");
-  const [sourcePrompt, setSourcePrompt] = useState("");
-  const [xmiContent, setXmiContent] = useState("");
-  const [operationMessage, setOperationMessage] = useState("Motor IA local listo.");
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isSavingVersion, setIsSavingVersion] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const xmiInputRef = useRef<HTMLInputElement | null>(null);
-  const projectReady = useMemo(() => Boolean(projectId), [projectId]);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [projectName, setProjectName] = useState("");
+  const [diagramId, setDiagramId] = useState("");
+  const [conversations, setConversations] = useState<AiConversation[]>([]);
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!projectReady) {
-      return;
+    if (!projectId) return;
+    let cancelled = false;
+    async function loadWorkspace() {
+      try {
+        const [project, diagrams, chats] = await Promise.all([
+          projectService.get(projectId),
+          umlService.listDiagrams(projectId),
+          phase1Service.conversations(projectId),
+        ]);
+        let diagram = diagrams[0];
+        if (!diagram) {
+          diagram = await umlService.createDiagram({
+            project_id: projectId,
+            name: project.name,
+            description: project.description ?? undefined,
+          });
+        }
+        if (!cancelled) {
+          setProjectName(project.name);
+          setDiagramId(diagram.id);
+          setConversations(chats);
+        }
+      } catch {
+        if (!cancelled) setError("No se pudieron cargar los chats del proyecto.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-    projectService.get(projectId).then(setActiveProject).catch(() => undefined);
-    projectService.members(projectId).then(setMembers).catch(() => undefined);
-    umlService.listDiagrams(projectId).then(setDiagrams).catch(() => undefined);
-  }, [projectId, projectReady, setActiveProject]);
+    void loadWorkspace();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
-  const diagramTypes = useMemo(() => Array.from(new Set(diagrams.map((diagram) => diagram.diagram_type))).filter(Boolean), [diagrams]);
-  const filteredDiagrams = useMemo(
-    () =>
-      diagrams.filter((diagram) => {
-        const matchesSearch =
-          diagram.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (diagram.description ?? "").toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesType = typeFilter === "all" || diagram.diagram_type === typeFilter;
-        return matchesSearch && matchesType;
-      }),
-    [diagrams, searchTerm, typeFilter]
-  );
-  const isOrganizer = members.some(
-    (member) => member.user_id === currentUser?.id && member.project_role === "ORGANIZADOR"
-  );
+  useEffect(() => {
+    function closeMenu(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuId(null);
+      }
+    }
+    document.addEventListener("mousedown", closeMenu);
+    return () => document.removeEventListener("mousedown", closeMenu);
+  }, []);
 
-  async function createDiagram(event: FormEvent) {
-    event.preventDefault();
-    if (diagramName.trim().length < 2 || isProcessing) {
-      return;
-    }
-    setIsProcessing(true);
-    try {
-      const diagram = await umlService.createDiagram({
-        project_id: projectId,
-        name: diagramName,
-        description: activeProject?.description ?? undefined,
-      });
-      setDiagrams((current) => [diagram, ...current]);
-      setDiagramName("");
-      setOperationMessage(`Diagrama creado: ${diagram.name}`);
-    } finally {
-      setIsProcessing(false);
-    }
+  function openConversation(conversationId: string) {
+    if (!diagramId || editingId) return;
+    navigate(`/proyectos/${projectId}/uml/${diagramId}?panel=assistant&chat=${conversationId}`);
   }
 
-  async function deleteDiagram(diagram: UmlDiagram) {
-    const confirmed = window.confirm(`Eliminar "${diagram.name}"? Esta accion no se puede deshacer.`);
-    if (!confirmed) {
-      return;
-    }
-    await umlService.deleteDiagram(diagram.id);
-    setDiagrams((current) => current.filter((item) => item.id !== diagram.id));
-    setOperationMessage(`Diagrama eliminado: ${diagram.name}`);
-  }
-
-  async function saveVersion() {
-    if (isSavingVersion) return;
-    setIsSavingVersion(true);
+  async function createConversation() {
+    if (creating || !diagramId) return;
+    setCreating(true);
+    setError("");
     try {
-      const version = await projectService.saveVersion(projectId, {
-        name: `Version ${new Date().toLocaleString()}`,
-        description: "Snapshot completo guardado manualmente",
-      });
-      setOperationMessage(`Version ${version.version_number} del proyecto guardada.`);
+      const conversation = await phase1Service.createConversation(projectId);
+      openConversation(conversation.id);
     } catch {
-      setOperationMessage("No se pudo guardar la version del proyecto.");
-    } finally {
-      setIsSavingVersion(false);
+      setError("No se pudo iniciar el nuevo chat.");
+      setCreating(false);
     }
   }
 
-  async function createFromAi(sourceType: "text" | "voice" | "image", file?: File) {
-    if (!projectId || isProcessing) {
-      return;
-    }
-    setIsProcessing(true);
+  function beginRename(conversation: AiConversation) {
+    setMenuId(null);
+    setEditingId(conversation.id);
+    setEditingTitle(conversation.title);
+  }
+
+  async function saveRename(conversationId: string) {
+    const title = editingTitle.trim();
+    if (!title) return;
     try {
-      const basePrompt = sourcePrompt.trim() || "Modelo UML generado por IA local";
-      const aiResult =
-        sourceType === "text"
-          ? await aiService.textToUml(basePrompt)
-          : sourceType === "voice"
-            ? await aiService.voiceToUml({ transcript: basePrompt })
-            : await aiService.imageToUml({
-                description: undefined,
-                image_base64: file ? await fileToBase64(file) : undefined,
-                file_name: file?.name,
-              });
-      const generated = await umlService.createDiagramFromAiResult({
-        project_id: projectId,
-        name: `UML generado por ${sourceType === "text" ? "texto" : sourceType === "voice" ? "voz" : "imagen"}`,
-        description: promptFromAiResult(aiResult, sourceType === "image" ? "Modelo UML generado desde imagen" : basePrompt),
-        source_type: sourceType,
-        result: aiResult,
-      });
-      setDiagrams((current) => [generated, ...current]);
-      setOperationMessage(`Modelo creado con ${aiResult.engine}. Clases: ${aiResult.classes.map((item) => item.name).join(", ")}`);
+      const updated = await phase1Service.updateConversation(projectId, conversationId, title);
+      setConversations((items) =>
+        items.map((item) => (item.id === updated.id ? updated : item))
+      );
+      setEditingId(null);
     } catch {
-      setOperationMessage("No se pudo generar el modelo UML desde la entrada seleccionada.");
-    } finally {
-      setIsProcessing(false);
+      setError("No se pudo cambiar el nombre del chat.");
     }
   }
 
-  async function handleImageSelected(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (file) {
-      await createFromAi("image", file);
-    }
+  if (loading) {
+    return (
+      <section className="grid min-h-72 place-items-center" aria-live="polite">
+        <div className="text-center">
+          <LoaderCircle className="mx-auto animate-spin text-teal-700" size={32} />
+          <p className="mt-3 text-sm font-semibold text-slate-600 dark:text-slate-300">Cargando chats...</p>
+        </div>
+      </section>
+    );
   }
 
-  async function handleXmlSelected(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || !projectId || isProcessing) {
-      return;
-    }
-    setIsProcessing(true);
-    try {
-      const imported = await umlService.importXmi({
-        project_id: projectId,
-        name: file.name.replace(/\.[^.]+$/, "") || "Modelo importado XML",
-        file_name: file.name,
-        content: await fileToText(file),
-      });
-      setDiagrams((current) => [imported, ...current]);
-      setOperationMessage(`XML importado: ${file.name}`);
-      navigate(`/proyectos/${projectId}/uml/${imported.id}`);
-    } catch {
-      setOperationMessage("No se pudo importar el archivo XML.");
-    } finally {
-      setIsProcessing(false);
-    }
-  }
-
-  async function importXmlFromText() {
-    if (!projectId || xmiContent.trim().length === 0 || isProcessing) {
-      return;
-    }
-    setIsProcessing(true);
-    try {
-      const imported = await umlService.importXmi({
-        project_id: projectId,
-        name: "Modelo importado XML",
-        file_name: "modelo-importado.xml",
-        content: xmiContent,
-      });
-      setDiagrams((current) => [imported, ...current]);
-      setXmiContent("");
-      setOperationMessage("XML pegado importado correctamente.");
-      navigate(`/proyectos/${projectId}/uml/${imported.id}`);
-    } catch {
-      setOperationMessage("No se pudo importar el contenido XML.");
-    } finally {
-      setIsProcessing(false);
-    }
+  if (error && !diagramId) {
+    return (
+      <section className="mx-auto grid min-h-72 max-w-xl place-items-center border border-rose-200 bg-white p-8 text-center dark:border-rose-900 dark:bg-slate-950">
+        <div>
+          <AlertCircle className="mx-auto text-rose-600" size={34} />
+          <h1 className="mt-3 text-xl font-bold">No se pudo abrir Colaborativo</h1>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{error}</p>
+          <Link className="mt-5 inline-flex h-10 items-center border border-slate-300 px-4 text-sm font-semibold" to="/proyectos">Volver a proyectos</Link>
+        </div>
+      </section>
+    );
   }
 
   return (
-    <section className="collab-workspace min-h-[calc(100vh-5rem)] rounded-none p-6 lg:p-8">
-      <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+    <section className="mx-auto w-full max-w-4xl">
+      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-5 dark:border-slate-800">
         <div>
-          <nav className="collab-breadcrumb mb-3 flex flex-wrap items-center gap-2 text-xs font-semibold">
-            <Link to="/proyectos">Proyectos</Link>
-            <ChevronRight size={14} aria-hidden="true" />
-            <Link to={`/proyectos/${projectId}`}>{activeProject?.name ?? "Proyecto"}</Link>
-            <ChevronRight size={14} aria-hidden="true" />
-            <span>Colaborativo</span>
-          </nav>
-          <div className="flex items-start gap-4">
-            <div className="collab-icon h-12 w-12">
-              <Users size={28} aria-hidden="true" />
-            </div>
-            <div>
-              <h1 className="collab-title text-3xl font-black tracking-normal">{activeProject?.name ?? "Proyecto"}</h1>
-              <p className="collab-muted mt-1 text-sm">Modo colaborativo: diagramas UML, IA, XML y versiones.</p>
-            </div>
-          </div>
+          <p className="text-sm font-semibold text-teal-700 dark:text-teal-300">{projectName}</p>
+          <h1 className="mt-1 text-2xl font-bold text-ink dark:text-white">Chats del proyecto</h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Selecciona una conversacion para trabajar sobre el diagrama.</p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Link className={cn(buttonBase, "collab-btn-secondary h-12 px-5")} to={`/proyectos/${projectId}`}>
-            <Settings size={18} aria-hidden="true" />
-            Gestion
-          </Link>
-          {isOrganizer ? (
-            <button
-              className={cn(buttonBase, "collab-btn-primary h-12 px-6")}
-              disabled={isSavingVersion}
-              onClick={saveVersion}
-              type="button"
-            >
-              <Save size={18} aria-hidden="true" />
-              Guardar version
-            </button>
-          ) : null}
-        </div>
-      </div>
+        <button
+          className="inline-flex h-11 items-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-60"
+          disabled={creating}
+          onClick={() => void createConversation()}
+          type="button"
+        >
+          {creating ? <LoaderCircle className="animate-spin" size={18} /> : <Plus size={18} />}
+          Nuevo chat
+        </button>
+      </header>
 
-      <div className="collab-grid">
-        <aside className="grid content-start gap-4">
-          <section className="collab-card p-5">
-            <div className="mb-4 flex items-start gap-3">
-              <div className="collab-icon h-10 w-10">
-                <FolderTree size={22} aria-hidden="true" />
-              </div>
-              <div>
-                <h2 className="collab-title text-lg font-black">Diagramas</h2>
-                <p className="collab-muted mt-1 text-sm">Crea un nuevo diagrama UML.</p>
-              </div>
-            </div>
-            <form className="grid gap-3" onSubmit={createDiagram}>
-              <label className="grid gap-2 text-sm font-bold">
-                <span className="collab-title">Nombre del diagrama</span>
-                <input className={inputClass} value={diagramName} onChange={(event) => setDiagramName(event.target.value)} />
-              </label>
-              <button className={cn(buttonBase, "collab-btn-primary w-full")} disabled={isProcessing} type="submit">
-                <PlusCircle size={18} aria-hidden="true" />
-                Crear diagrama
-              </button>
-            </form>
-          </section>
+      {error && <p className="mt-4 border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-200">{error}</p>}
 
-          <section className="collab-card p-5">
-            <div className="mb-4 flex items-start gap-3">
-              <div className="collab-icon h-10 w-10">
-                <Sparkles size={22} aria-hidden="true" />
-              </div>
-              <div>
-                <h2 className="collab-title text-lg font-black">Crear desde IA</h2>
-                <p className="collab-muted mt-1 text-sm">Describe el modelo que deseas generar.</p>
-              </div>
-            </div>
-            <label className="grid gap-2 text-sm font-bold">
-              <span className="collab-title">Prompt</span>
-              <textarea
-                className={cn(textareaClass, "min-h-28")}
-                maxLength={500}
-                placeholder="Ej. Sistema de ventas con clientes, productos, pedidos y pagos."
-                value={sourcePrompt}
-                onChange={(event) => setSourcePrompt(event.target.value)}
+      <div className="mt-5 overflow-visible border-y border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+        <div className="border-b border-slate-200 px-4 py-3 text-xs font-bold uppercase text-slate-500 dark:border-slate-800">Recientes</div>
+        {conversations.map((conversation) => (
+          <div className="relative flex min-h-16 items-center gap-3 border-b border-slate-100 px-4 transition last:border-b-0 hover:bg-teal-50/60 dark:border-slate-800 dark:hover:bg-slate-900" key={conversation.id}>
+            <MessageSquare className="shrink-0 text-teal-700 dark:text-teal-300" size={19} />
+            {editingId === conversation.id ? (
+              <input
+                autoFocus
+                className="h-10 min-w-0 flex-1 rounded-md border border-teal-500 bg-white px-3 text-sm outline-none dark:bg-slate-900"
+                maxLength={160}
+                onBlur={() => void saveRename(conversation.id)}
+                onChange={(event) => setEditingTitle(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void saveRename(conversation.id);
+                  if (event.key === "Escape") setEditingId(null);
+                }}
+                value={editingTitle}
               />
-            </label>
-            <p className="collab-muted mt-1 text-right text-xs">{sourcePrompt.length}/500</p>
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              <button className={cn(buttonBase, "collab-btn-secondary px-2")} disabled={isProcessing} onClick={() => createFromAi("text")} type="button">
-                <FileText size={16} aria-hidden="true" />
-                Texto
+            ) : (
+              <button className="min-w-0 flex-1 py-3 text-left" onClick={() => openConversation(conversation.id)} type="button">
+                <span className="block truncate text-sm font-semibold text-slate-900 dark:text-white">{conversation.title}</span>
+                <span className="mt-1 block text-xs text-slate-500">{new Date(conversation.updated_at).toLocaleString()}</span>
               </button>
-              <button className={cn(buttonBase, "collab-btn-secondary px-2")} disabled={isProcessing} onClick={() => createFromAi("voice")} type="button">
-                <Mic size={16} aria-hidden="true" />
-                Voz
-              </button>
+            )}
+            <div ref={menuId === conversation.id ? menuRef : undefined}>
               <button
-                className={cn(buttonBase, "collab-btn-secondary px-2")}
-                disabled={isProcessing}
-                onClick={() => imageInputRef.current?.click()}
+                aria-expanded={menuId === conversation.id}
+                aria-label={`Opciones de ${conversation.title}`}
+                className={cn("grid size-9 place-items-center rounded-md text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800", menuId === conversation.id && "bg-slate-200 dark:bg-slate-800")}
+                onClick={() => setMenuId((current) => current === conversation.id ? null : conversation.id)}
+                title="Opciones del chat"
                 type="button"
               >
-                <Image size={16} aria-hidden="true" />
-                Imagen
+                <MoreHorizontal size={19} />
               </button>
-            </div>
-            <button className={cn(buttonBase, "collab-btn-outline mt-3 w-full")} disabled={isProcessing} onClick={() => createFromAi("text")} type="button">
-              <Sparkles size={16} aria-hidden="true" />
-              Generar modelo con IA
-            </button>
-            <input ref={imageInputRef} className="hidden" type="file" accept="image/*" onChange={handleImageSelected} />
-            <p className="collab-muted mt-3 text-xs leading-5">{operationMessage}</p>
-          </section>
-
-          <section className="collab-card p-5">
-            <div className="mb-4 flex items-start gap-3">
-              <div className="collab-icon h-10 w-10">
-                <Upload size={22} aria-hidden="true" />
-              </div>
-              <div>
-                <h2 className="collab-title text-lg font-black">Importar XML</h2>
-                <p className="collab-muted mt-1 text-sm">Carga un archivo XML y crea los diagramas.</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button className={cn(buttonBase, "collab-btn-secondary")} disabled={isProcessing} onClick={() => xmiInputRef.current?.click()} type="button">
-                <FileUp size={16} aria-hidden="true" />
-                Archivo
-              </button>
-              <button className={cn(buttonBase, "collab-btn-secondary")} disabled={isProcessing || xmiContent.trim().length === 0} onClick={importXmlFromText} type="button">
-                Importar
-              </button>
-            </div>
-            <input ref={xmiInputRef} className="hidden" type="file" accept=".xml,text/xml,application/xml" onChange={handleXmlSelected} />
-            <label className="mt-3 grid gap-2 text-sm font-bold">
-              <span className="collab-title">Contenido XML</span>
-              <textarea
-                className={textareaClass}
-                placeholder='<?xml version="1.0" encoding="windows-1252"?>'
-                value={xmiContent}
-                onChange={(event) => setXmiContent(event.target.value)}
-              />
-            </label>
-          </section>
-        </aside>
-
-        <section className="collab-card p-5">
-          <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-            <div className="flex items-start gap-3">
-              <div className="collab-icon h-11 w-11">
-                <Layers3 size={26} aria-hidden="true" />
-              </div>
-              <div>
-                <h2 className="collab-title text-2xl font-black">Modelos disponibles</h2>
-                <p className="collab-muted mt-1 text-sm">Diagramas UML del proyecto. Colabora, edita y manten versiones.</p>
-              </div>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-[minmax(220px,320px)_170px]">
-              <label className="relative">
-                <Search className="collab-muted pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" size={18} aria-hidden="true" />
-                <input
-                  className={cn(inputClass, "pl-10")}
-                  placeholder="Buscar diagramas..."
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                />
-              </label>
-              <label className="relative">
-                <select className={cn(inputClass, "appearance-none pr-9")} value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
-                  <option value="all">Todos los tipos</option>
-                  {diagramTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {diagramTypeLabel(type)}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="collab-muted pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" size={16} aria-hidden="true" />
-              </label>
+              {menuId === conversation.id && (
+                <div className="absolute right-4 top-12 z-20 min-w-40 border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                  <button className="flex h-9 w-full items-center gap-2 rounded-sm px-3 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => beginRename(conversation)} type="button">
+                    <Pencil size={15} />
+                    Editar nombre
+                  </button>
+                </div>
+              )}
             </div>
           </div>
-
-          <div className="grid gap-3">
-            {filteredDiagrams.map((diagram) => (
-              <article className="collab-model-card grid gap-4 p-4 lg:grid-cols-[80px_1fr_auto]" key={diagram.id}>
-                <div className="collab-model-icon">
-                  <FolderTree size={38} aria-hidden="true" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <h3 className="collab-title truncate text-xl font-black">{diagram.name}</h3>
-                    <span className={statusClassName(diagram.status)}>{statusLabel(diagram.status)}</span>
-                  </div>
-                  <p className="collab-muted mt-1 line-clamp-2 text-sm">{diagram.description ?? "Diagrama UML sin descripcion."}</p>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-                    <span className="collab-chip collab-chip-blue">{diagramTypeLabel(diagram.diagram_type)}</span>
-                    <span className="collab-chip">v{diagram.current_version}</span>
-                    <span className="collab-chip">
-                      <CalendarDays size={14} aria-hidden="true" />
-                      Creado: {formatDate(diagram.created_at)}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex flex-col justify-between gap-4 lg:min-w-72">
-                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                    <span className="collab-avatar">{memberInitial(diagram.created_by_user_id)}</span>
-                    {members.length > 1 ? <span className="collab-avatar collab-avatar-muted">+{members.length - 1}</span> : null}
-                  </div>
-                  <div className="flex flex-wrap gap-2 lg:justify-end">
-                    <Link className={cn(buttonBase, "collab-btn-primary min-w-32")} to={`/proyectos/${projectId}/uml/${diagram.id}`}>
-                      <Pencil size={16} aria-hidden="true" />
-                      Editar
-                    </Link>
-                    <button className={cn(buttonBase, "collab-btn-danger min-w-32")} onClick={() => deleteDiagram(diagram)} type="button">
-                      <Trash2 size={16} aria-hidden="true" />
-                      Eliminar
-                    </button>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-
-          {filteredDiagrams.length === 0 ? (
-            <div className="collab-empty mt-6 flex min-h-64 flex-col items-center justify-center px-6 py-10 text-center">
-              <FolderTree className="collab-muted mb-4" size={70} aria-hidden="true" />
-              <p className="collab-title text-base font-black">No hay diagramas para mostrar.</p>
-              <p className="collab-muted mt-1 max-w-md text-sm">Crea, importa o genera diagramas para visualizarlos aqui.</p>
-            </div>
-          ) : null}
-        </section>
+        ))}
       </div>
-      <ProjectHistoryPanel
-        projectId={projectId}
-        onVersionRestored={async () => setDiagrams(await umlService.listDiagrams(projectId))}
-      />
     </section>
   );
 }

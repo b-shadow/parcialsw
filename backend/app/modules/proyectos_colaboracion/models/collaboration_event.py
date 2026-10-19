@@ -35,4 +35,10 @@ class CollaborationEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     element_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
     base_version: Mapped[int | None] = mapped_column(Integer)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    actor_display_name: Mapped[str | None] = mapped_column(String(160))
+    resource_type: Mapped[str | None] = mapped_column(String(80))
+    resource_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    correlation_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), index=True)
+    causation_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    summary_key: Mapped[str | None] = mapped_column(String(160))
 

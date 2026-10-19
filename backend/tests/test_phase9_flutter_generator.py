@@ -120,7 +120,7 @@ def test_flutter_generator_writes_complete_project(tmp_path: Path, monkeypatch) 
     assert "SwitchListTile" in form.read_text(encoding="utf-8")
     assert "PrimaryActionButton" in form.read_text(encoding="utf-8")
     assert "'/cliente'" in router.read_text(encoding="utf-8")
-    assert "Card(" in router.read_text(encoding="utf-8")
+    assert "NavigationBar(" in router.read_text(encoding="utf-8")
     assert "showDatePicker" in pedido_form.read_text(encoding="utf-8")
     assert "readOnly: true" in pedido_form.read_text(encoding="utf-8")
     assert "toIso8601String" not in pedido_model.read_text(encoding="utf-8")
@@ -302,4 +302,5 @@ def test_flutter_generator_creates_join_screen_for_many_to_many_without_associat
 def test_phase9_openapi_contracts_are_registered() -> None:
     paths = app.openapi()["paths"]
     assert "/api/v1/generation/flutter" in paths
+    assert "/api/v1/generation/projects/{project_id}/flutter" in paths
     assert "/api/v1/generation/flutter/{frontend_id}/download" in paths

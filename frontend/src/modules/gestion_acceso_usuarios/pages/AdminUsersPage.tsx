@@ -130,7 +130,7 @@ export function AdminUsersPage() {
                       <p className="font-semibold text-ink">{user.full_name}</p>
                       <p className="text-xs text-slate-500">{user.email}</p>
                     </td>
-                    <td className="px-4 py-3">{user.role_names.join(", ") || "Sin rol"}</td>
+                    <td className="px-4 py-3">{user.role_names[0] || "Sin rol"}</td>
                     <td className="px-4 py-3">
                       <StatusBadge tone={user.is_active ? "success" : "danger"}>
                         {user.is_active ? "active" : "inactive"}
@@ -158,7 +158,7 @@ export function AdminUsersPage() {
             </div>
             <div>
               <h2 className="text-lg font-semibold">Permisos globales</h2>
-              <p className="text-sm text-slate-500">Cambios restringidos al rol Administrador.</p>
+              <p className="text-sm text-slate-500">Cada cuenta mantiene un unico rol global.</p>
             </div>
           </div>
 

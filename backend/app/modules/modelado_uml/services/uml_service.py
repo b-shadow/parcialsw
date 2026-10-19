@@ -43,6 +43,7 @@ from app.modules.modelado_uml.schemas.uml import (
     UmlMethodCreateRequest,
     UmlMethodUpdateRequest,
     UmlParameterCreateRequest,
+    UmlParameterUpdateRequest,
     UmlRelationshipCreateRequest,
     UmlRelationshipUpdateRequest,
     UmlValidationResponse,
@@ -56,6 +57,7 @@ from app.modules.modelado_uml.validators.uml_validator import (
 )
 from app.modules.proyectos_colaboracion.models import CollaborationEvent
 from app.modules.proyectos_colaboracion.repositories.member_repository import MemberRepository
+from app.modules.proyectos_colaboracion.services.project_mutation_guard import ProjectMutationGuard
 from app.modules.proyectos_colaboracion.validators.project_validator import ensure_membership
 
 
@@ -66,9 +68,21 @@ class UmlService:
         self.generations = GenerationRepository(db)
         self.members = MemberRepository(db)
         self.audit = AuditService(db)
+        self.mutations = ProjectMutationGuard(db)
 
     def create_diagram(self, payload: DiagramCreateRequest, user_id: UUID) -> UmlDiagram:
         ensure_membership(self.members.get_membership(payload.project_id, user_id))
+        existing = self.uml.list_diagrams_by_project(payload.project_id)
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "PROJECT_DIAGRAM_ALREADY_EXISTS",
+                    "message": "El proyecto ya tiene su diagrama de clases",
+                    "diagram_id": str(existing[0].id),
+                },
+            )
+        self._begin_mutation(payload.project_id)
         diagram = self.uml.add_diagram(
             UmlDiagram(
                 project_id=payload.project_id,
@@ -97,6 +111,7 @@ class UmlService:
     def delete_diagram(self, diagram_id: UUID, user_id: UUID) -> None:
         diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
         self.generations.delete_generation_tree_by_diagram(diagram_id)
         self.uml.delete_visual_elements_by_diagram(diagram_id)
         self.uml.delete_relationships_by_diagram(diagram_id)
@@ -118,6 +133,7 @@ class UmlService:
     ) -> UmlClass:
         diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
         uml_class = self.uml.add_class(
             UmlClass(
                 diagram_id=diagram_id,
@@ -179,6 +195,7 @@ class UmlService:
         uml_class = ensure_class_exists(self.uml.get_class(class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(uml_class, field, value)
         self.audit.record(
@@ -196,6 +213,7 @@ class UmlService:
         uml_class = ensure_class_exists(self.uml.get_class(class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
         for relationship in self.uml.list_relationships_for_class(class_id):
             self.uml.delete_visual_element(diagram.id, "relationship", relationship.id)
             self.uml.delete_relationship(relationship)
@@ -217,6 +235,7 @@ class UmlService:
         uml_class = ensure_class_exists(self.uml.get_class(class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
         attribute = self.uml.add_attribute(UmlAttribute(class_id=class_id, **payload.model_dump()))
         self.audit.record(
             module="modelado_uml",
@@ -240,6 +259,7 @@ class UmlService:
         uml_class = ensure_class_exists(self.uml.get_class(attribute.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(attribute, field, value)
         self.audit.record(
@@ -262,6 +282,7 @@ class UmlService:
         uml_class = ensure_class_exists(self.uml.get_class(attribute.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
         self.uml.delete_attribute(attribute)
         self.audit.record(
             module="modelado_uml",
@@ -278,6 +299,7 @@ class UmlService:
         uml_class = ensure_class_exists(self.uml.get_class(class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
         method = self.uml.add_method(UmlMethod(class_id=class_id, **payload.model_dump()))
         self.audit.record(
             module="modelado_uml",
@@ -301,6 +323,7 @@ class UmlService:
         uml_class = ensure_class_exists(self.uml.get_class(method.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(method, field, value)
         self.audit.record(
@@ -323,6 +346,7 @@ class UmlService:
         uml_class = ensure_class_exists(self.uml.get_class(method.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
         self.uml.delete_method(method)
         self.audit.record(
             module="modelado_uml",
@@ -344,6 +368,8 @@ class UmlService:
         uml_class = ensure_class_exists(self.uml.get_class(method.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
+        self._validate_parameter(method, payload.name, payload.data_type, payload.default_value)
         parameter = self.uml.add_parameter(UmlParameter(method_id=method_id, **payload.model_dump()))
         self.audit.record(
             module="modelado_uml",
@@ -356,11 +382,112 @@ class UmlService:
         self.db.refresh(parameter)
         return parameter
 
+    def update_parameter(
+        self, parameter_id: UUID, payload: UmlParameterUpdateRequest, user_id: UUID
+    ) -> UmlParameter:
+        parameter = self.uml.get_parameter(parameter_id)
+        if parameter is None:
+            raise HTTPException(status_code=404, detail="Parametro UML no encontrado")
+        method = self.uml.get_method(parameter.method_id)
+        uml_class = ensure_class_exists(self.uml.get_class(method.class_id))
+        diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
+        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
+        values = payload.model_dump(exclude_unset=True)
+        self._validate_parameter(
+            method,
+            values.get("name", parameter.name),
+            values.get("data_type", parameter.data_type),
+            values.get("default_value", parameter.default_value),
+            exclude_id=parameter.id,
+        )
+        for field, value in values.items():
+            setattr(parameter, field, value)
+        self.audit.record(
+            module="modelado_uml",
+            action="UPDATE_PARAMETER",
+            user_id=user_id,
+            project_id=diagram.project_id,
+            metadata={"method_id": str(method.id), "parameter_id": str(parameter.id)},
+        )
+        self.db.commit()
+        self.db.refresh(parameter)
+        return parameter
+
+    def delete_parameter(self, parameter_id: UUID, user_id: UUID) -> None:
+        parameter = self.uml.get_parameter(parameter_id)
+        if parameter is None:
+            raise HTTPException(status_code=404, detail="Parametro UML no encontrado")
+        method = self.uml.get_method(parameter.method_id)
+        uml_class = ensure_class_exists(self.uml.get_class(method.class_id))
+        diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
+        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
+        specification = self.uml.get_method_specification(method.id)
+        if specification and self._parameter_is_referenced(specification, parameter.id, parameter.name):
+            raise HTTPException(
+                status_code=409,
+                detail="El parametro esta referenciado por la especificacion funcional",
+            )
+        self.uml.delete_parameter(parameter)
+        self.audit.record(
+            module="modelado_uml",
+            action="DELETE_PARAMETER",
+            user_id=user_id,
+            project_id=diagram.project_id,
+            metadata={"method_id": str(method.id), "parameter_id": str(parameter.id)},
+        )
+        self.db.commit()
+
+    def _validate_parameter(
+        self,
+        method,
+        name: str,
+        data_type: str,
+        default_value: str | None,
+        *,
+        exclude_id: UUID | None = None,
+    ) -> None:
+        if any(
+            item.id != exclude_id and item.name.casefold() == name.casefold()
+            for item in method.parameters
+        ):
+            raise HTTPException(status_code=409, detail="El metodo ya contiene un parametro con ese nombre")
+        normalized = data_type.casefold()
+        if default_value not in {None, ""}:
+            compatible = True
+            try:
+                if normalized in {"int", "integer", "long"}:
+                    int(default_value)
+                elif normalized in {"float", "double", "decimal"}:
+                    float(default_value)
+                elif normalized in {"bool", "boolean"}:
+                    compatible = default_value.casefold() in {"true", "false"}
+            except ValueError:
+                compatible = False
+            if not compatible:
+                raise HTTPException(status_code=422, detail="El valor por defecto no coincide con el tipo")
+
+    @staticmethod
+    def _parameter_is_referenced(specification, parameter_id: UUID, name: str) -> bool:
+        serialized = str(
+            {
+                "preconditions": specification.preconditions,
+                "postconditions": specification.postconditions,
+                "business_rules": specification.business_rules,
+                "validations": specification.validations,
+                "related_entities": specification.related_entities,
+                "frontend_contract": specification.frontend_contract,
+            }
+        )
+        return str(parameter_id) in serialized or f"'{name}'" in serialized or f'"{name}"' in serialized
+
     def create_relationship(
         self, diagram_id: UUID, payload: UmlRelationshipCreateRequest, user_id: UUID
     ) -> UmlRelationship:
         diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
         source = ensure_class_exists(self.uml.get_class(payload.source_class_id))
         target = ensure_class_exists(self.uml.get_class(payload.target_class_id))
         ensure_class_belongs_to_diagram(source, diagram_id)
@@ -389,6 +516,7 @@ class UmlService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Relacion UML no encontrada")
         diagram = ensure_diagram_exists(self.uml.get_diagram(relationship.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(relationship, field, value)
         self.audit.record(
@@ -410,6 +538,7 @@ class UmlService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Relacion UML no encontrada")
         diagram = ensure_diagram_exists(self.uml.get_diagram(relationship.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
         self.uml.delete_visual_element(diagram.id, "relationship", relationship_id)
         self.uml.delete_relationship(relationship)
         self.audit.record(
@@ -426,6 +555,7 @@ class UmlService:
     ) -> UmlVisualElement:
         diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._begin_mutation(diagram.project_id)
         visual = self.uml.get_visual_element(diagram_id, payload.element_type, payload.element_id)
         if visual is None:
             visual = self.uml.add_visual_element(
@@ -497,6 +627,10 @@ class UmlService:
 
     def import_diagram_xmi(self, payload: XmiImportRequest, user_id: UUID) -> UmlDiagram:
         ensure_membership(self.members.get_membership(payload.project_id, user_id))
+        existing = self.uml.list_diagrams_by_project(payload.project_id)
+        if existing:
+            return self.import_diagram_xmi_into_existing(existing[0].id, payload, user_id)
+        self._begin_mutation(payload.project_id)
         model = import_xmi(payload.content, payload.name)
         diagram = self._persist_internal_model(model, payload.project_id, user_id)
         self.uml.add_xmi_exchange(
@@ -526,14 +660,21 @@ class UmlService:
     ) -> UmlDiagram:
         diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        if diagram.project_id != payload.project_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="El diagrama no pertenece al proyecto indicado",
+            )
+        self._begin_mutation(diagram.project_id)
         model = import_xmi(payload.content, payload.name)
 
+        self.generations.delete_generation_tree_by_diagram(diagram_id)
         self.uml.delete_visual_elements_by_diagram(diagram_id)
         self.uml.delete_relationships_by_diagram(diagram_id)
         self.uml.delete_classes_by_diagram(diagram_id)
         self.db.flush()
 
-        diagram.name = model.name or payload.name
+        diagram.name = payload.name
         diagram.diagram_type = model.diagram_type
         diagram.status = model.status
         diagram.current_version = model.current_version
@@ -568,13 +709,35 @@ class UmlService:
 
     def generate_from_prompt(self, payload: TextToUmlRequest, user_id: UUID) -> UmlDiagram:
         ensure_membership(self.members.get_membership(payload.project_id, user_id))
+        self._begin_mutation(payload.project_id)
         model = build_uml_from_text(payload.prompt, payload.name)
-        diagram = self._persist_internal_model(
-            model,
-            payload.project_id,
-            user_id,
-            metadata={"source_type": payload.source_type, "source_prompt": payload.prompt},
-        )
+        existing = self.uml.list_diagrams_by_project(payload.project_id)
+        if existing:
+            diagram = existing[0]
+            self.generations.delete_generation_tree_by_diagram(diagram.id)
+            self.uml.delete_visual_elements_by_diagram(diagram.id)
+            self.uml.delete_relationships_by_diagram(diagram.id)
+            self.uml.delete_classes_by_diagram(diagram.id)
+            self.db.flush()
+            diagram.name = model.name
+            diagram.diagram_type = model.diagram_type
+            diagram.status = model.status
+            diagram.current_version += 1
+            diagram.description = model.description
+            diagram.metadata_json = {
+                **diagram.metadata_json,
+                **model.metadata_json,
+                "source_type": payload.source_type,
+                "source_prompt": payload.prompt,
+            }
+            self._populate_existing_diagram_from_model(diagram, model)
+        else:
+            diagram = self._persist_internal_model(
+                model,
+                payload.project_id,
+                user_id,
+                metadata={"source_type": payload.source_type, "source_prompt": payload.prompt},
+            )
         self.audit.record(
             module="modelado_uml",
             action="GENERATE_UML_FROM_SOURCE",
@@ -658,6 +821,10 @@ class UmlService:
 
         return restored_ids
 
+    def _begin_mutation(self, project_id: UUID) -> None:
+        project = self.mutations.acquire(project_id)
+        self.mutations.advance(project)
+
     def _detach_collaboration_events(self, diagram_id: UUID) -> None:
         self.db.execute(
             update(CollaborationEvent)
@@ -702,6 +869,26 @@ class UmlService:
                             visibility=method.visibility,
                             order_index=method.order_index,
                             metadata_json=method.metadata_json,
+                            specification=(
+                                {
+                                    "description": method.specification.description,
+                                    "operation_kind": method.specification.operation_kind,
+                                    "exposure": method.specification.exposure,
+                                    "preconditions": method.specification.preconditions,
+                                    "postconditions": method.specification.postconditions,
+                                    "business_rules": method.specification.business_rules,
+                                    "validations": method.specification.validations,
+                                    "side_effects": method.specification.side_effects,
+                                    "required_permissions": method.specification.required_permissions,
+                                    "related_entities": method.specification.related_entities,
+                                    "backend_contract": method.specification.backend_contract,
+                                    "frontend_contract": method.specification.frontend_contract,
+                                    "schema_version": method.specification.schema_version,
+                                    "revision": method.specification.revision,
+                                }
+                                if method.specification
+                                else None
+                            ),
                             parameters=[
                                 UmlParameterModel(
                                     id=str(parameter.id),
@@ -809,8 +996,41 @@ class UmlService:
                 self.uml.add_attribute(UmlAttribute(class_id=uml_class.id, **attribute_model.model_dump(exclude={"id"})))
             for method_model in uml_class_model.methods:
                 method = self.uml.add_method(
-                    UmlMethod(class_id=uml_class.id, **method_model.model_dump(exclude={"id", "parameters"}))
+                    UmlMethod(
+                        class_id=uml_class.id,
+                        **method_model.model_dump(
+                            exclude={"id", "parameters", "specification", "readiness"}
+                        ),
+                    )
                 )
+                if method_model.specification:
+                    from app.modules.modelado_uml.models import UmlMethodSpecification
+                    from app.modules.modelado_uml.schemas.method_specification import (
+                        UmlMethodSpecificationBase,
+                    )
+
+                    try:
+                        raw_values = dict(method_model.specification)
+                        revision = max(1, int(raw_values.pop("revision", 1)))
+                        raw_values.pop("readiness", None)
+                        specification_values = UmlMethodSpecificationBase.model_validate(
+                            raw_values
+                        ).model_dump(mode="json")
+                        specification_values["backend_contract"] = (
+                            specification_values["backend_contract"] or {}
+                        )
+                        specification_values["frontend_contract"] = (
+                            specification_values["frontend_contract"] or {}
+                        )
+                        self.uml.add_method_specification(
+                            UmlMethodSpecification(
+                                method_id=method.id,
+                                revision=revision,
+                                **specification_values,
+                            )
+                        )
+                    except (TypeError, ValueError, ValidationError):
+                        pass
                 for parameter_model in method_model.parameters:
                     self.uml.add_parameter(
                         UmlParameter(method_id=method.id, **parameter_model.model_dump(exclude={"id"}))

@@ -72,6 +72,47 @@ class ProjectRepository:
         )
         return list(self.db.execute(statement).tuples())
 
+    def list_changes_after(
+        self, project_id: UUID, after_sequence: int, limit: int = 250
+    ) -> list[tuple[CollaborationEvent, str]]:
+        statement = (
+            select(CollaborationEvent, User.full_name)
+            .join(User, User.id == CollaborationEvent.user_id)
+            .where(
+                CollaborationEvent.project_id == project_id,
+                CollaborationEvent.sequence_number > after_sequence,
+            )
+            .order_by(CollaborationEvent.sequence_number)
+            .limit(max(1, min(limit, 250)))
+        )
+        return list(self.db.execute(statement).tuples())
+
+    def list_activity_before(
+        self, project_id: UUID, before_sequence: int | None, limit: int,
+        event_types: set[str] | None = None,
+    ) -> list[tuple[CollaborationEvent, str]]:
+        statement = (
+            select(CollaborationEvent, User.full_name)
+            .join(User, User.id == CollaborationEvent.user_id)
+            .where(CollaborationEvent.project_id == project_id)
+        )
+        if before_sequence is not None:
+            statement = statement.where(CollaborationEvent.sequence_number < before_sequence)
+        if event_types:
+            statement = statement.where(CollaborationEvent.event_type.in_(event_types))
+        return list(self.db.execute(
+            statement.order_by(CollaborationEvent.sequence_number.desc())
+            .limit(max(1, min(limit, 100)) + 1)
+        ).tuples())
+
+    def current_event_sequence(self, project_id: UUID) -> int:
+        current = self.db.scalar(
+            select(func.max(CollaborationEvent.sequence_number)).where(
+                CollaborationEvent.project_id == project_id
+            )
+        )
+        return current or 0
+
     def get_event_by_client_id(
         self, project_id: UUID, user_id: UUID, client_event_id: UUID
     ) -> CollaborationEvent | None:
@@ -84,10 +125,5 @@ class ProjectRepository:
         )
 
     def next_event_sequence(self, project_id: UUID) -> int:
-        current = self.db.scalar(
-            select(func.max(CollaborationEvent.sequence_number)).where(
-                CollaborationEvent.project_id == project_id
-            )
-        )
-        return (current or 0) + 1
+        return self.current_event_sequence(project_id) + 1
 

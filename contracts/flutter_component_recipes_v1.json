@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "density": {
+    "compact": {"screen_padding": 12, "section_gap": 8, "field_height": 44},
+    "normal": {"screen_padding": 16, "section_gap": 12, "field_height": 48},
+    "comfortable": {"screen_padding": 20, "section_gap": 16, "field_height": 52}
+  },
+  "navigation": {"automatic_bottom_bar_min_modules": 2, "automatic_bottom_bar_max_modules": 4},
+  "icons": {"add": "plus", "edit": "pencil", "delete": "trash", "search": "search", "save": "save", "play": "play"}
+}

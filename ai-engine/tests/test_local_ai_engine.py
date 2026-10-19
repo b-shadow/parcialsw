@@ -39,7 +39,7 @@ def test_text_voice_and_image_generate_structured_uml() -> None:
     assert text.confidence > 0
 
 
-def test_image_detector_identifies_association_class_geometry() -> None:
+def test_image_detector_identifies_association_class_geometry(monkeypatch) -> None:
     import base64
 
     import cv2
@@ -67,13 +67,23 @@ def test_image_detector_identifies_association_class_geometry() -> None:
         "Clase2",
         "Clase3",
     ]
-    assert [attribute.name for attribute in detection.classes[0].attributes] == ["id", "nombre"]
+    assert all(uml_class.attributes == [] for uml_class in detection.classes)
+    assert detection.confidence < 0.55
     assert detection.relationships[0].source == "Clase1"
     assert detection.relationships[0].target == "Clase2"
     assert detection.relationships[0].association_class_name == "Clase3"
     assert not {"Estudiante", "Curso", "Inscripcion"}.intersection(
         {uml_class.name for uml_class in detection.classes}
     )
+
+    monkeypatch.setenv("OLLAMA_VISION_ENABLED", "false")
+    response = LocalAIService().image_to_uml(
+        ImageProcessingRequest(image_base64=base64.b64encode(encoded.tobytes()).decode("ascii"))
+    )
+    assert response.classes == []
+    assert response.relationships == []
+    assert response.confidence < 0.55
+    assert any("parcial o ambigua" in observation for observation in response.observations)
 
 
 def test_text_generates_single_class_with_requested_attributes() -> None:

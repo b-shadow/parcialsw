@@ -1,0 +1,17 @@
+sequenceDiagram
+    participant O as Orquestador
+    participant P as GenerationPlan
+    participant J as Emisor Spring
+    participant F as Emisor Flutter
+    participant V as Validador cruzado
+    O->>P: Compilar una vez
+    O->>J: Emitir desde P
+    O->>F: Emitir desde P
+    J-->>V: rutas y DTO emitidos
+    F-->>V: llamadas y JSON emitidos
+    V->>P: comparar invariantes
+    alt coincide
+        V-->>O: passed
+    else deriva
+        V-->>O: diagnostico y aborto
+    end

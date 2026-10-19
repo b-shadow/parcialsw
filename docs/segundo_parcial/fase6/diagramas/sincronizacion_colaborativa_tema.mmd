@@ -1,0 +1,16 @@
+sequenceDiagram
+  participant A as Editor A
+  participant API as FastAPI
+  participant DB as PostgreSQL
+  participant WS as WebSocket
+  participant B as Editor B
+  A->>API: PUT tema If-Match revision 4
+  API->>DB: validar y actualizar revision 5
+  DB-->>API: commit
+  API->>WS: FLUTTER_THEME_UPDATED revision 5
+  WS-->>B: evento confirmado
+  alt B sin borrador
+    B->>API: GET tema
+  else B con borrador
+    B->>B: conservar y mostrar conflicto
+  end

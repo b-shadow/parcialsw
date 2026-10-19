@@ -7,48 +7,208 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  validate:
+  python-quality:
+    name: AI and backend quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            ai-engine/pyproject.toml
+            backend/pyproject.toml
+      - name: Install Python projects
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e "./ai-engine[dev]"
+          python -m pip install -e "./backend[dev]"
+      - name: Lint AI engine
+        run: python -m ruff check ai-engine
+      - name: Test AI engine
+        working-directory: ai-engine
+        run: python -m pytest -q
+      - name: Lint backend
+        run: python -m ruff check backend/app backend/tests backend/migrations
+      - name: Test backend
+        working-directory: backend
+        run: python -m pytest -q
 
+  postgres-integration:
+    name: PostgreSQL migrations
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: case_inteligente_test
+          POSTGRES_USER: case_test
+          POSTGRES_PASSWORD: case_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U case_test -d case_inteligente_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://case_test:case_test_password@127.0.0.1:5432/case_inteligente_test
+      JWT_SECRET_KEY: ci-only-not-a-production-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install backend and AI engine
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./ai-engine ./backend
+      - name: Upgrade, downgrade and re-upgrade schema
+        working-directory: backend
+        run: |
+          python -m alembic upgrade head
+          python -m alembic current
+          python -m alembic downgrade -1
+          python -m alembic upgrade head
+          python -m alembic check
+
+  frontend-quality:
+    name: Frontend unit, build and E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-
-      - name: Validate AI engine
-        working-directory: ai-engine
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-          python -m ruff check .
-          python -m pytest
-
-      - name: Validate backend
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-          python -m pip install -e ../ai-engine
-          python -m ruff check app tests
-          python -m pytest
-
-      - name: Validate frontend
+      - name: Install frontend
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Lint and unit tests
         working-directory: frontend
         run: |
-          npm ci --no-audit --no-fund
           npm run lint
-          npm test -- --run
-          npm run build
+          npm run test -- --run
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Browser E2E and PWA offline
+        working-directory: frontend
+        run: npx playwright test
+      - name: Upload Playwright failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 7
 
-      - name: Build Docker images
+  mobile-quality:
+    name: Flutter mobile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1"
+          channel: stable
+          cache: true
+      - name: Validate mobile client
+        working-directory: mobile
+        run: |
+          flutter pub get
+          dart format --output=none --set-exit-if-changed lib test
+          flutter analyze
+          flutter test
+          flutter build apk --debug
+
+  generated-spring:
+    name: Generated Spring Boot compiles
+    runs-on: ubuntu-latest
+    env:
+      CASE_VERIFY_GENERATED_SPRING: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install generators
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./ai-engine "./backend[dev]"
+      - name: Generate and compile Spring Boot
+        working-directory: backend
+        run: python -m pytest tests/test_second_part_phase9_generated_toolchains.py -k spring -q
+
+  generated-flutter:
+    name: Generated Flutter analyzes and builds
+    runs-on: ubuntu-latest
+    env:
+      CASE_VERIFY_GENERATED_FLUTTER: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1"
+          channel: stable
+          cache: true
+      - name: Install generators
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./ai-engine "./backend[dev]"
+      - name: Generate and validate Flutter
+        working-directory: backend
+        run: python -m pytest tests/test_second_part_phase9_generated_toolchains.py -k flutter -q
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker-build:
+    name: Production container builds
+    runs-on: ubuntu-latest
+    needs:
+      - python-quality
+      - frontend-quality
+      - generated-spring
+      - generated-flutter
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production Compose
+        env:
+          POSTGRES_PASSWORD: ci-only-postgres-password
+          JWT_SECRET_KEY: ci-only-jwt-secret
+          CORS_ORIGINS: http://localhost:8080
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: docker compose -f docker-compose.prod.yml config --quiet
+      - name: Build production images
         run: |
           docker build -f backend/Dockerfile -t case-inteligente-backend:${{ github.sha }} .
           docker build -f frontend/Dockerfile.runtime -t case-inteligente-frontend:${{ github.sha }} .
