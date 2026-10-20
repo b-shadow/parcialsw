@@ -7,6 +7,22 @@ Registro cronológico de tareas ejecutadas por los agentes A1, A2, A3 y A4 en el
 
 ## Ola 1 · Rebanadas Base
 
+### [A2] V1.4 · Hook de permisos y PermissionGate en el frontend
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - Implementado `frontend/src/core/permissions/useProjectPermissions.ts`:
+    - Cache en Zustand con TTL de 60 segundos indexado por `projectId`.
+    - Deduplicación de peticiones en vuelo concurrentes para un mismo `projectId`.
+    - Hook `useProjectPermissions(projectId)` que expone `{ role, can, loading, refresh }`.
+    - Mientras `loading` está activo o no hay membresía, `can(code)` retorna `false`.
+    - Método `refresh()` para invalidación forzada (ej. ante 403 PERMISSION_DENIED).
+  - Implementado `frontend/src/core/permissions/PermissionGate.tsx`:
+    - Componente declarativo que renderiza `children` solo cuando `can(code)` es `true`, renderizando `fallback` en caso contrario o mientras carga.
+  - Escrita suite `frontend/src/core/permissions/useProjectPermissions.test.tsx`:
+    - 4 pruebas unitarias: `mientras carga -> can() devuelve false`, `respuesta EDITOR -> can('uml.edit') true y can('members.manage') false`, `dos componentes con el mismo projectId -> una sola petición`, y `PermissionGate oculta children sin permiso y muestra fallback`.
+  - Documentado en `docs/segundo_parcial/mejoras-2p/permisos.md`.
+  - Vitest: 56 pruebas pasadas; ESLint y Build de TypeScript en verde con código 0.
+
 ### [A2] V1.3 · Permisos por rol aplicados en el backend (incluye Lector)
 - **Fecha:** 2026-10-20
 - **Cambios realizados:**
