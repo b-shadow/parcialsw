@@ -228,3 +228,12 @@ Registro cronológico de tareas ejecutadas por los agentes A1, A2, A3 y A4 en el
     - Compositor con botón de micrófono (oculto si no hay soporte), live region de dictado en curso e interruptor «Enviar al terminar de dictar».
   - Suite de pruebas `useSpeechRecognition.test.ts` con 4 pruebas pasando.
   - Vitest, eslint y build de TypeScript en verde.
+
+### [A1] V2.1 · Consumidor del registro e IA proactiva
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - Implementado `ChangeLogConsumer` en `app/core/changelog/consumer.py` con grupo `case-workers` en stream global `case:changelog:all`, difusión en tiempo real de `CHANGE_LOGGED` vía WebSocket y confirmación `XACK`.
+  - Integrado arranque controlado de background workers en `app/core/workers.py` vía lifespan de FastAPI según `redis_enabled` y `ai_proactive_enabled`.
+  - Implementado `ProactiveAdvisorService` en `app/modules/asistente_proyecto/services/proactive_advisor_service.py` con detección de los 3 disparadores (acumulación de cambios, versión de proyecto, importación XMI), validación sintáctica del modelo UML con `validate_internal_model`, control de cooldown por proyecto (120 s) y descarte de eventos del sistema.
+  - Creada suite de pruebas `test_mejoras_v2_proactivo.py` con 8 pruebas pasando al 100% con fakeredis.
+  - Documentado en `ia-equipo.md`.
