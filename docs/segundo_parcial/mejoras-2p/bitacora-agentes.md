@@ -214,3 +214,17 @@ Registro cronológico de tareas ejecutadas por los agentes A1, A2, A3 y A4 en el
   - Permitido `'gemini'` en `AiProjectSettings` (CheckConstraint) y schemas Pydantic de configuración de IA.
   - Creadas suites de prueba `test_gemini_provider.py` (ai-engine) y `test_mejoras_v1_proveedor.py` (backend) con 100% de éxito usando `MockTransport`.
   - Documentado en `ia-proveedores.md`.
+
+### [A4] V1.8 · Voz en el chat de IA y selector de proveedor
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - Implementado hook `useSpeechRecognition.ts` con manejo de resultados continuos/parciales, error handling en español (`not-allowed`, `no-speech`) y detección de soporte (`window.SpeechRecognition`).
+  - Implementado componente `AiProviderSettings.tsx` con popover `role='radiogroup'`, consulta de `/ai/provider-health`, llamada a `updateAiSettings` y notificación con `toast.success`.
+  - Actualizado `ProjectAiAssistant.tsx` matching `maqueta.html#asistente`:
+    - Cabecera con píldora del proveedor y botón de ajustes restringido por `can('ai.settings')`.
+    - Integración de `Avatar` en mensajes propios, de compañeros e IA.
+    - Soporte para etiquetas «Dictado por voz» y tarjetas de «Sugerencia de la IA» ante mensajes proactivos.
+    - Botones de confirmar/rechazar cambios protegidos por `can('ai.confirm_actions')`.
+    - Compositor con botón de micrófono (oculto si no hay soporte), live region de dictado en curso e interruptor «Enviar al terminar de dictar».
+  - Suite de pruebas `useSpeechRecognition.test.ts` con 4 pruebas pasando.
+  - Vitest, eslint y build de TypeScript en verde.
