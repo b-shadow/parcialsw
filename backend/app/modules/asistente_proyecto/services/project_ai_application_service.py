@@ -24,6 +24,7 @@ from app.modules.asistente_proyecto.services.event_publisher import ProjectAiEve
 from app.modules.asistente_proyecto.services.provider_factory import (
     get_ollama_provider,
     resolve_ollama_model,
+    select_provider,
 )
 from app.modules.asistente_proyecto.services.rate_limiter import project_ai_rate_limiter
 from app.modules.modelado_uml.repositories.uml_repository import UmlRepository
@@ -82,8 +83,20 @@ class ProjectAiApplicationService:
                 selected_model_available=True,
                 latency_ms=0,
             )
-        provider = get_ollama_provider()
-        selected_model = await resolve_ollama_model(provider, project_settings.model_name)
+        provider, selected_model = await select_provider(
+            project_settings.preferred_provider, project_settings.model_name
+        )
+        if provider is None:
+            return AiProviderHealthResponse(
+                provider=project_settings.preferred_provider,
+                available=False,
+                models=[],
+                selected_model=selected_model,
+                selected_model_available=False,
+                latency_ms=0,
+                error_code="missing_api_key" if project_settings.preferred_provider == "gemini" else None,
+                error_message="Falta GEMINI_API_KEY" if project_settings.preferred_provider == "gemini" else None,
+            )
         health = await provider.health(selected_model)
         return AiProviderHealthResponse(
             provider=health.provider,
@@ -175,15 +188,10 @@ class ProjectAiApplicationService:
             correlation_id=user_message.correlation_id,
             conversation_sequence=user_message.sequence_number,
         )
-        preferred_provider = (
-            get_ollama_provider() if project_settings.preferred_provider == "ollama" else None
+        preferred_provider, selected_model = await select_provider(
+            project_settings.preferred_provider, project_settings.model_name
         )
         fallback_enabled = project_settings.fallback_enabled and app_settings.ai_rule_fallback_enabled
-        selected_model = project_settings.model_name
-        if preferred_provider is not None:
-            selected_model = await resolve_ollama_model(
-                preferred_provider, project_settings.model_name
-            )
         persisted_user_message_id = user_message.id
         persisted_correlation_id = user_message.correlation_id
         orchestrator = UnifiedAiOrchestrator(

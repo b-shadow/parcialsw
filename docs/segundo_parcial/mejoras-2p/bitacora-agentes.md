@@ -157,3 +157,60 @@ Registro cronológico de tareas ejecutadas por los agentes A1, A2, A3 y A4 en el
   - Creada suite `sharedComponents.test.tsx` (6 pruebas pasando al 100%).
   - Suite de Vitest: 47 pasadas, 0 fallos.
   - Build y lint de React/TypeScript en verde sin errores.
+
+### [A1] V1.1 · Registro de cambios NoSQL en Redis Streams y fallback
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - Implementado `RedisChangeLogService` con `xadd`, `xrevrange`, `xtrim` y paginación cursor.
+  - Implementado `install_change_log_hooks` capturando mutaciones en `ProjectMutationGuard.advance`.
+  - Implementado `backfill_from_audit` y router `change_log.py` con `GET /projects/{project_id}/changes`.
+  - Suite de pruebas `test_mejoras_v1_registro_cambios.py` en verde.
+
+### [A1] V1.2 · Panel de registro de cambios en el frontend
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - Implementado `changeLogService.ts` y componente `ChangeLogPanel.tsx` integrado en `ProjectWorkspacePage.tsx`.
+  - Soporte para eventos WebSocket `CHANGE_LOGGED` en tiempo real y paginación continua.
+  - Pruebas unitarias de frontend en verde.
+
+### [A2] V1.3 · Roles y permisos granulares en backend
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - Implementado `ensure_project_permission`, `ensure_membership` y `ensure_organizer` en `project_validator.py`.
+  - Agregado endpoint `GET /projects/{project_id}/members/me` retornando rol y lista de permisos efectivos.
+  - Servicios protegidos: `uml.edit`, `ai.confirm_actions`, `ai.settings`, `ai.chat`, `generation.run`, `theme.edit`.
+  - Suite de pruebas `test_mejoras_v1_permisos.py` con 124 pruebas pasando.
+
+### [A2] V1.4 · Guardián de permisos y hook en frontend
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - Implementado `useProjectPermissions.ts` (store Zustand con TTL de 60s y deduplicación de peticiones).
+  - Implementado componente `PermissionGate.tsx` para ocultar o deshabilitar elementos según permisos.
+  - Documentada la arquitectura de permisos en `permisos.md`. Pruebas en verde.
+
+### [A3] V1.5 · Editor UML colaborativo: Tipos y visualizaciones completas
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - Paleta enriquecida con `dependency` y `realization`, estereotipos `«interface»` y `«enumeration»`.
+  - Visibilidades completas (`+`, `-`, `#`, `~`), clases abstractas en cursiva.
+  - Bloqueos visuales con icono de candado y borde ámbar ante `lockedElements`.
+  - Pruebas unitarias del editor en verde.
+
+### [A3] V1.6 · Validación sintáctica y exportación/importación XMI sin pérdida
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - Validadores Pydantic 201/422 en español en `schemas/uml.py`.
+  - Soporte completo de estereotipos, dependencias, realizaciones y visibilidades en importación/exportación XMI.
+  - Resolución de errores 500 en nodos XMI vacíos o no tipados.
+  - Suite `test_mejoras_v1_editor_xmi.py` en verde (21/21 pruebas).
+
+### [A4] V1.7 · Proveedor Gemini opcional e intercambiable
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - Creado `GeminiProvider` en `ai_engine.providers` con soporte de salida estructurada JSON (`generateContent`), gestión de errores tipados, límite de reintentos y cabecera segura `x-goog-api-key`.
+  - Modelo seleccionado por defecto: `gemini-2.5-flash` de Google AI Studio.
+  - Actualizado `provider_factory.py` con `get_gemini_provider()` y función de resolución unificada `select_provider()`.
+  - Actualizado `project_ai_application_service.py` para usar `select_provider` en `provider_health` e `interact`.
+  - Permitido `'gemini'` en `AiProjectSettings` (CheckConstraint) y schemas Pydantic de configuración de IA.
+  - Creadas suites de prueba `test_gemini_provider.py` (ai-engine) y `test_mejoras_v1_proveedor.py` (backend) con 100% de éxito usando `MockTransport`.
+  - Documentado en `ia-proveedores.md`.
