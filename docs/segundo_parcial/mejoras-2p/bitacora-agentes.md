@@ -7,6 +7,16 @@ Registro cronológico de tareas ejecutadas por los agentes A1, A2, A3 y A4 en el
 
 ## Ola 1 · Rebanadas Base
 
+### [A3] V1.6 · Backend UML: validación de valores y XMI sin pérdida
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - `schemas/uml.py`: validadores y constantes Pydantic para `element_type` (`class`, `interface`, `enum`, `abstract_class`), `visibility` (`public`, `private`, `protected`, `package`), y `relationship_type` (`association`, `inheritance`, `aggregation`, `composition`, `dependency`, `realization`, `implementation`), respondiendo con 422 y mensajes claros en español.
+  - `engine/xmi.py`:
+    - En exportación: serialización de `isAbstract='true'` para clases abstractas, estereotipos `interface` y `enumeration`, visibilidades extendidas (`protected`, `package`), y elementos `UML:Dependency` y `UML:Abstraction` con sus respectivos tagged values de Enterprise Architect. Conservación de `aggregation='shared'` y `aggregation='composite'` en extremos de asociación.
+    - En importación: lectura de `aggregation` en `AssociationEnd` preservando `composition` y `aggregation`; resolución segura de `UML:Dependency` y `UML:Abstraction` previniendo errores 500 (`AttributeError`); mapeo de `isAbstract` y estereotipos directos a `element_type`.
+  - Escrita suite `backend/tests/test_mejoras_v1_editor_xmi.py` con 5 pruebas exhaustivas (validación 201/422, roundtrip completo con todos los elementos y visibilidades, importación real de `exportar.xml`, y prevención de error 500 en dependencias y abstracciones).
+  - Suite completa del backend: 130 pasadas, 3 omitidas, 0 fallos.
+
 ### [A3] V1.5 · Editor: interfaz, enum, abstracta, dependencia, realización y visibilidades
 - **Fecha:** 2026-10-20
 - **Cambios realizados:**

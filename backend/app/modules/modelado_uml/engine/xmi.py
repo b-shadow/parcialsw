@@ -415,49 +415,69 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
             None,
         )
         ea_ntype = str(uml_class.metadata_json.get("ea_ntype") or "17" if association_connector_id else "0")
+        is_abstract = "true" if uml_class.element_type == "abstract_class" else "false"
+        ea_stype = (
+            "Interface"
+            if uml_class.element_type == "interface"
+            else "Enumeration"
+            if uml_class.element_type == "enum"
+            else "Class"
+        )
+        stereotype = (
+            "interface"
+            if uml_class.element_type == "interface"
+            else "enumeration"
+            if uml_class.element_type == "enum"
+            else uml_class.stereotype
+        )
+        class_attributes = {
+            "xmi.id": class_id,
+            "name": uml_class.name,
+            "visibility": uml_class.visibility,
+            "namespace": package_id,
+            "isSpecification": "false",
+            "isRoot": "false",
+            "isLeaf": "false",
+            "isAbstract": is_abstract,
+            "isActive": "false",
+        }
+        if stereotype:
+            class_attributes["stereotype"] = stereotype
         class_node = ElementTree.SubElement(
             owned_elements,
             "UML:Class",
-            {
-                "xmi.id": class_id,
-                "name": uml_class.name,
-                "visibility": uml_class.visibility,
-                "namespace": package_id,
-                "isSpecification": "false",
-                "isRoot": "false",
-                "isLeaf": "false",
-                "isAbstract": "false",
-                "isActive": "false",
-            },
+            class_attributes,
         )
-        _tagged_values(
-            class_node,
-            {
-                "isSpecification": "false",
-                "ea_stype": "Class",
-                "ea_ntype": ea_ntype,
-                "version": "1.0",
-                "isActive": "false",
-                "package": package_id,
-                "date_created": _timestamp(),
-                "date_modified": _timestamp(),
-                "gentype": "Java",
-                "tagged": "0",
-                "package_name": diagram.name,
-                "phase": "1.0",
-                "author": "CASE Inteligente",
-                "complexity": "1",
-                "status": "Proposed",
-                "tpos": "0",
-                "ea_localid": str(index),
-                "ea_eleType": "element",
-                **({"conID": association_connector_id} if association_connector_id else {}),
-                "style": (
-                    "BackColor=-1;BorderColor=-1;BorderWidth=-1;FontColor=-1;"
-                    "VSwimLanes=1;HSwimLanes=1;BorderStyle=0;"
-                ),
-            },
-        )
+        class_tagged_values = {
+            "isSpecification": "false",
+            "ea_stype": ea_stype,
+            "ea_ntype": ea_ntype,
+            "version": "1.0",
+            "isActive": "false",
+            "package": package_id,
+            "date_created": _timestamp(),
+            "date_modified": _timestamp(),
+            "gentype": "Java",
+            "tagged": "0",
+            "package_name": diagram.name,
+            "phase": "1.0",
+            "author": "CASE Inteligente",
+            "complexity": "1",
+            "status": "Proposed",
+            "tpos": "0",
+            "ea_localid": str(index),
+            "ea_eleType": "element",
+            **({"conID": association_connector_id} if association_connector_id else {}),
+            "style": (
+                "BackColor=-1;BorderColor=-1;BorderWidth=-1;FontColor=-1;"
+                "VSwimLanes=1;HSwimLanes=1;BorderStyle=0;"
+            ),
+        }
+        if is_abstract == "true":
+            class_tagged_values["isAbstract"] = "true"
+        if stereotype:
+            class_tagged_values["stereotype"] = stereotype
+        _tagged_values(class_node, class_tagged_values)
         features_node = ElementTree.SubElement(class_node, "UML:Classifier.feature")
 
         for attribute_index, attribute in enumerate(uml_class.attributes):
@@ -987,11 +1007,38 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                 class_metadata["ea_ntype"] = ea_ntype
             if con_id:
                 class_metadata["conID"] = con_id
+
+            is_abstract = (
+                node.attrib.get("isAbstract", "").lower() == "true"
+                or _tagged_value(node, "isAbstract") == "true"
+            )
+            ea_stype = (_tagged_value(node, "ea_stype") or "").strip().lower()
+            raw_stereotype = (
+                node.attrib.get("stereotype")
+                or _tagged_value(node, "stereotype")
+                or ""
+            ).strip().lower().strip("«»")
+
+            if ea_stype == "interface" or raw_stereotype == "interface":
+                element_type = "interface"
+                stereotype = None
+            elif ea_stype in {"enumeration", "enum"} or raw_stereotype in {"enumeration", "enum"}:
+                element_type = "enum"
+                stereotype = None
+            elif is_abstract:
+                element_type = "abstract_class"
+                stereotype = raw_stereotype or None
+            else:
+                element_type = "class"
+                stereotype = raw_stereotype or None
+
             classes.append(
                 UmlClassModel(
                     id=class_id,
                     name=class_name,
                     visibility=node.attrib.get("visibility", "public"),
+                    element_type=element_type,
+                    stereotype=stereotype,
                     attributes=attributes,
                     methods=methods,
                     visual=visual_by_subject.get(class_id or "", UmlVisualModel()),
@@ -1065,23 +1112,65 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                 )
             )
         elif _is_tag(node, "Dependency") or _is_tag(node, "Abstraction") or (node.tag.endswith("packagedElement") and node_type and node_type != "uml:Class"):
+            relationship_id = _xmi_attr(node, "id")
+            if has_class_diagram_filter and relationship_id not in diagram_subjects:
+                continue
             source_id = node.attrib.get("source") or node.attrib.get("client", "")
             target_id = node.attrib.get("target") or node.attrib.get("supplier", "")
+            if not source_id:
+                for child in node.iter():
+                    if _is_tag(child, "client"):
+                        ref = _xmi_attr(child, "idref") or child.attrib.get("xmi.idref") or child.attrib.get("idref")
+                        if not ref:
+                            for sub in child.iter():
+                                ref = _xmi_attr(sub, "idref") or sub.attrib.get("xmi.idref")
+                                if ref:
+                                    break
+                        if ref:
+                            source_id = ref
+                            break
+            if not target_id:
+                for child in node.iter():
+                    if _is_tag(child, "supplier"):
+                        ref = _xmi_attr(child, "idref") or child.attrib.get("xmi.idref") or child.attrib.get("idref")
+                        if not ref:
+                            for sub in child.iter():
+                                ref = _xmi_attr(sub, "idref") or sub.attrib.get("xmi.idref")
+                                if ref:
+                                    break
+                        if ref:
+                            target_id = ref
+                            break
             if node_type == "uml:Association" and not (source_id and target_id):
                 ends = [child.attrib.get("type", "") for child in node if child.tag.endswith("ownedEnd")]
                 if len(ends) >= 2:
                     source_id, target_id = ends[0], ends[1]
-            relationship_type = node_type.replace("uml:", "").lower()
-            if relationship_type == "generalization":
+
+            if node_type:
+                clean_type = node_type.replace("uml:", "").lower()
+            else:
+                clean_type = "realization" if _is_tag(node, "Abstraction") else "dependency"
+
+            if clean_type in {"abstraction", "realization", "realisation", "implementation"}:
+                relationship_type = "realization"
+            elif clean_type in {"generalization", "inheritance"}:
                 relationship_type = "inheritance"
-            relationships.append(
-                UmlRelationshipModel(
-                    id=_xmi_attr(node, "id"),
-                    source_class_id=id_to_class_name.get(source_id, source_id),
-                    target_class_id=id_to_class_name.get(target_id, target_id),
-                    relationship_type=relationship_type,
-                    label=node.attrib.get("name"),
+            elif clean_type == "dependency":
+                relationship_type = "dependency"
+            else:
+                relationship_type = clean_type
+
+            src = id_to_class_name.get(source_id, source_id)
+            tgt = id_to_class_name.get(target_id, target_id)
+            if src and tgt:
+                relationships.append(
+                    UmlRelationshipModel(
+                        id=relationship_id,
+                        source_class_id=src,
+                        target_class_id=tgt,
+                        relationship_type=relationship_type,
+                        label=node.attrib.get("name"),
+                    )
                 )
-            )
     _normalize_visuals_for_editor(classes, relationships)
     return UmlDiagramModel(name=diagram_name or name, classes=classes, relationships=relationships)
