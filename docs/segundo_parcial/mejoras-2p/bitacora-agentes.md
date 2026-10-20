@@ -237,3 +237,14 @@ Registro cronológico de tareas ejecutadas por los agentes A1, A2, A3 y A4 en el
   - Implementado `ProactiveAdvisorService` en `app/modules/asistente_proyecto/services/proactive_advisor_service.py` con detección de los 3 disparadores (acumulación de cambios, versión de proyecto, importación XMI), validación sintáctica del modelo UML con `validate_internal_model`, control de cooldown por proyecto (120 s) y descarte de eventos del sistema.
   - Creada suite de pruebas `test_mejoras_v2_proactivo.py` con 8 pruebas pasando al 100% con fakeredis.
   - Documentado en `ia-equipo.md`.
+
+### [A1] V2.2 · IA consciente del equipo: autores y actividad por integrante
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - Enriquecidos contratos de contexto en `contracts.py`: agregado `author_display_name` a `RecentMessageContext`, nuevo modelo `TeamActivityItem`, y agregado `team_activity` a `AiProjectContext`.
+  - Actualizado `ContextBuilder.build`: resolución de nombres reales de autores de mensajes recientes con `user_display_names`, agregación de las últimas 50 entradas del stream en `team_activity` agrupadas por integrante (máximo 10 acciones por persona) y aplicación de `ContextBudget(50000)`.
+  - Ampliado `IntentClassifier`: añadidas frases de intención `coordinate_team` («que hizo cada», «quien cambio», «quien modifico», «resumen del equipo», «que esta haciendo», «reparte», «organiza el trabajo») con normalización resiliente a signos interrogativos (`¿`).
+  - Implementado `RuleEngineProvider._coordinate_team_answer`: respuesta determinista estructurada por integrante («Ana: creó...; relacionó...») y detección de colisión de ediciones sobre la misma clase con recomendación proactiva de coordinación.
+  - Actualizado prompt de sistema `unified_system.md` instruyendo a la IA a comportarse como un desarrollador integrante del equipo y moderar modificaciones concurrentes.
+  - Creada suite `ai-engine/tests/test_mejoras_equipo.py` con 4 pruebas al 100% verde (67 pruebas totales en ai-engine sin regresiones).
+  - Actualizada documentación en `ia-equipo.md`.

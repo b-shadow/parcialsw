@@ -38,3 +38,11 @@ La plataforma CASE Inteligente integra la Inteligencia Artificial como un **desa
 - **Cooldown**: Tras emitir una sugerencia, se activa una clave con TTL en Redis (`case:proactive:cooldown:{project_id}`) equivalente a `AI_PROACTIVE_COOLDOWN_SECONDS=120`. Durante este intervalo no se emiten nuevas sugerencias.
 - **Filtrado de Fuente**: Los cambios con `source='system'` son descartados para no generar bucles infinitos de retroalimentación.
 - **Degradación Transparente**: Si el proyecto aún no tiene una conversación creada, el servicio captura la condición, registra un mensaje informativo en el log y continúa sin interrumpir el flujo.
+
+## 5. Conciencia del Equipo: Autores y Actividad por Integrante (V2.2)
+
+- **Atribución de Autores**: Cada mensaje reciente en el chat incluye `author_display_name` obtenido mediante `AssistantRepository.user_display_names`, permitiendo a la IA dirigirse a los integrantes por su nombre real.
+- **Historial de Actividad del Equipo**: `ContextBuilder` agrupa las últimas 50 entradas de Redis Streams (o PostgreSQL fallback) por actor en `TeamActivityItem`, limitando a 10 acciones por persona y preservando el presupuesto `ContextBudget`.
+- **Clasificación de Intención `coordinate_team`**: Expresiones como «¿Qué hizo cada uno?», «quién modificó el modelo», «resumen del equipo» u «organiza el trabajo» se clasifican con confianza 0.9.
+- **Moderación y Coordinación**: `RuleEngineProvider` responde detallando la actividad reciente de cada persona y, si dos o más integrantes editaron la misma clase, emite una sugerencia proactiva de coordinación y reparto de tareas para prevenir sobreescrituras concurrentes.
+
