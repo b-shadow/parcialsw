@@ -1,8 +1,11 @@
 """Hooks de SQLAlchemy para captura de eventos del registro de cambios (NoSQL/Redis)."""
 
+import logging
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 from app.core.changelog.contracts import PendingChange
 
+logger = logging.getLogger(__name__)
 _installed: bool = False
 
 
@@ -12,7 +15,8 @@ def install_change_log_hooks() -> None:
     if _installed:
         return
     _installed = True
-    # En Ola 0 queda registrado de forma segura; en Ola 1 (V1.1) se conectan los listeners reales.
+    event.listen(Session, "after_commit", flush_pending_changes)
+    event.listen(Session, "after_rollback", clear_pending_changes)
 
 
 def queue_change(db: Session, entry: PendingChange) -> None:
@@ -23,7 +27,14 @@ def queue_change(db: Session, entry: PendingChange) -> None:
 
 def flush_pending_changes(session: Session) -> None:
     """Vacía los cambios pendientes hacia Redis Streams."""
-    session.info.pop("change_log_pending", [])
+    changes: list[PendingChange] = session.info.pop("change_log_pending", [])
+    if not changes:
+        return
+    try:
+        from app.core.changelog.service import ChangeLogService
+        ChangeLogService().append_many(changes)
+    except Exception as exc:
+        logger.warning("Error al volcar cambios a Redis Streams: %s", exc)
 
 
 def clear_pending_changes(session: Session) -> None:

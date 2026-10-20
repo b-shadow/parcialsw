@@ -4,7 +4,23 @@ Registro cronológico de tareas ejecutadas por los agentes A1, A2, A3 y A4 en el
 
 ---
 
-## Ola 0 · Cimientos
+
+## Ola 1 · Rebanadas Base
+
+### [A1] V1.1 · Registro de cambios NoSQL con Redis Streams
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - Implementado `app/core/changelog/service.py` con `ChangeLogService`:
+    - Escritura asíncrona no bloqueante en Redis Streams (`XADD` con límite `redis_change_log_maxlen`) en `case:changelog:project:{id}`.
+    - Lectura paginada (`XREVRANGE`) con filtros por tipo de evento y miembro.
+    - Respaldo / fallback automático contra PostgreSQL (`audit_logs`) cuando Redis no está disponible o para eventos históricos anteriores a la creación del stream.
+  - Implementados hooks SQLAlchemy en `app/core/changelog/hooks.py` conectados tras cada commit para auditar automáticamente cambios de diagramas, clases, relaciones y miembros.
+  - Creado script de retrollenado `app/core/changelog/backfill.py` (`backfill_project_changelog`).
+  - Integrado hook en `AuditService.log_action` para replicar acciones de auditoría en Redis Streams.
+  - Completado router `app/modules/proyectos_colaboracion/routers/change_log.py` con endpoint `GET /projects/{project_id}/change-log`.
+  - Documentada la arquitectura en `docs/segundo_parcial/mejoras-2p/redis.md`.
+  - Escrita suite `backend/tests/test_mejoras_v1_registro_cambios.py` (4/4 pruebas pasando).
+
 
 ### [A1] V0.1 · Migración única: timestamps, proveedor Gemini e índice de invitaciones
 - **Fecha:** 2026-10-20
