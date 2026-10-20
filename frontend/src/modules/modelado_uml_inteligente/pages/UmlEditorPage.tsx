@@ -1,4 +1,4 @@
-﻿import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowUpRight,
@@ -42,9 +42,10 @@ import { UmlToolbar } from "../components/UmlToolbar";
 import { ProjectAiAssistant } from "../../gestion_proyectos_colaboracion/components/ProjectAiAssistant";
 import { ProjectHistoryPanel } from "../../gestion_proyectos_colaboracion/components/ProjectHistoryPanel";
 import { aiService } from "../services/aiService";
+import { ElementTypeSelect } from "../components/ElementTypeSelect";
 import { umlService } from "../services/umlService";
 import { useUmlStore } from "../store/umlStore";
-import type { DiagramModel, UmlAttribute, UmlMethod } from "../types/uml";
+import type { DiagramModel, UmlAttribute, UmlElementType, UmlMethod } from "../types/uml";
 
 type UmlTool =
   | "select"
@@ -53,11 +54,15 @@ type UmlTool =
   | "inheritance"
   | "aggregation"
   | "composition"
-  | "associationClass";
+  | "associationClass"
+  | "dependency"
+  | "realization";
 
 const visibilityOptions = [
   { value: "public", label: "Publico", symbol: "+" },
-  { value: "private", label: "Privado", symbol: "-" }
+  { value: "private", label: "Privado", symbol: "-" },
+  { value: "protected", label: "Protegido", symbol: "#" },
+  { value: "package", label: "Paquete", symbol: "~" }
 ];
 
 const multiplicityOptions = ["", "0", "0..1", "1", "1..*", "0..*", "*"];
@@ -66,7 +71,9 @@ const relationshipTypeOptions = [
   { value: "association", label: "Association" },
   { value: "inheritance", label: "Generalization" },
   { value: "aggregation", label: "Aggregation" },
-  { value: "composition", label: "Composition" }
+  { value: "composition", label: "Composition" },
+  { value: "dependency", label: "Dependency" },
+  { value: "realization", label: "Realization" }
 ] as const;
 
 const springDataTypes = [
@@ -491,6 +498,20 @@ export function UmlEditorPage() {
     }
   }
 
+  async function handleElementTypeChange(nextType: UmlElementType) {
+    if (!selectedClass) return;
+    try {
+      const updated = await umlService.updateClass(
+        selectedClass.id,
+        { element_type: nextType } as unknown as Parameters<typeof umlService.updateClass>[1]
+      );
+      updateClass({ ...selectedClass, ...updated, element_type: nextType });
+      publishChange({ action: "UPDATE_CLASS", class_id: selectedClass.id });
+    } catch {
+      setAiObservation("No se pudo actualizar el tipo de elemento.");
+    }
+  }
+
   async function createRelationshipBetween(sourceId: string, targetId: string, tool: UmlTool) {
     if (sourceId === targetId) {
       return;
@@ -546,12 +567,23 @@ export function UmlEditorPage() {
       });
       return;
     }
-    const type = tool === "inheritance" || tool === "aggregation" || tool === "composition" ? tool : "association";
+    const type =
+      tool === "inheritance" ||
+      tool === "aggregation" ||
+      tool === "composition" ||
+      tool === "dependency" ||
+      tool === "realization"
+        ? tool === "realization"
+          ? "implementation"
+          : tool
+        : "association";
     const defaultLabels: Record<string, string> = {
       association: "asocia",
       inheritance: "generaliza",
       aggregation: "agrega",
-      composition: "compone"
+      composition: "compone",
+      dependency: "depende",
+      implementation: "realiza"
     };
     const created = await umlService.createRelationship(diagramId, {
       source_class_id: sourceId,
@@ -1102,18 +1134,23 @@ export function UmlEditorPage() {
       inheritance: "generaliza",
       aggregation: "agrega",
       composition: "compone",
-      associationClass: "detalle"
+      associationClass: "detalle",
+      dependency: "depende",
+      realization: "realiza"
     };
     setRelationshipLabel(labels[tool] ?? "");
     if (tool === "associationClass") {
       setSourceMultiplicity("*");
       setTargetMultiplicity("*");
-    } else if (tool === "inheritance") {
+    } else if (tool === "inheritance" || tool === "realization") {
       setSourceMultiplicity("1");
       setTargetMultiplicity("1");
     } else if (tool === "aggregation" || tool === "composition") {
       setSourceMultiplicity("0..*");
       setTargetMultiplicity("1");
+    } else if (tool === "dependency") {
+      setSourceMultiplicity("");
+      setTargetMultiplicity("");
     } else {
       setSourceMultiplicity((current) => current || "1");
       setTargetMultiplicity((current) => current || "0..*");
@@ -1238,17 +1275,18 @@ export function UmlEditorPage() {
                       ["class", isCreatingClass ? "Creando" : "Clase", Square],
                       ["association", "Asociacion", ArrowUpRight],
                       ["inheritance", "Generalize", GitBranch],
-                      ["associationClass", "Association Class", Table2],
+                      ["associationClass", "Assoc. Class", Table2],
                       ["composition", "Compose", Diamond],
-                      ["aggregation", "Aggregate", Diamond]
-                    ] as const).map(([tool, label, Icon], index) => {
+                      ["aggregation", "Aggregate", Diamond],
+                      ["dependency", "Dependencia", ArrowUpRight],
+                      ["realization", "Realizacion", GitBranch]
+                    ] as const).map(([tool, label, Icon]) => {
                       const active = activeTool === tool;
                       return (
                         <button
                           aria-label={label}
                           className={cn(
-                            "flex min-h-[72px] min-w-0 flex-col items-center justify-center gap-2 rounded-md border px-1 py-2 text-center text-[11px] font-semibold leading-3 transition",
-                            index < 2 || index >= 5 ? "col-span-3" : "col-span-2",
+                            "flex min-h-[72px] min-w-0 flex-col items-center justify-center gap-2 rounded-md border px-1 py-2 text-center text-[11px] font-semibold leading-3 transition col-span-2",
                             active
                               ? "border-teal-500 bg-teal-50 text-teal-800 shadow-sm dark:border-teal-400 dark:bg-teal-500/15 dark:text-teal-200"
                               : "border-slate-200 bg-white text-slate-700 hover:border-teal-300 hover:bg-teal-50/60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-teal-700 dark:hover:bg-teal-950/30"
@@ -1414,12 +1452,26 @@ export function UmlEditorPage() {
             </div>
 
             {elementDetailsTab === "properties" ? (
-            <div className="grid gap-3 p-4 pt-3 xl:grid-cols-2" role="tabpanel">
+            <div className="grid gap-3 p-4 pt-3" role="tabpanel">
+              {selectedClass && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                  <ElementTypeSelect
+                    value={selectedClass.element_type}
+                    onChange={handleElementTypeChange}
+                  />
+                  {selectedClass.element_type === "enum" && (
+                    <span className="text-xs text-amber-700 dark:text-amber-300">
+                      En los enumerados, los atributos se definen como literales y los metodos se omiten.
+                    </span>
+                  )}
+                </div>
+              )}
+              <div className="grid gap-3 xl:grid-cols-2">
               <div className="overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
                 <div className="flex min-h-11 items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
                   <div className="flex items-center gap-2 font-semibold text-ink dark:text-white">
                     <List className="text-indigo-600 dark:text-indigo-300" size={18} aria-hidden="true" />
-                    Atributos
+                    {selectedClass?.element_type === "enum" ? "Literales" : "Atributos"}
                   </div>
                   <Button
                     className="h-8 px-3 text-xs"
@@ -1428,7 +1480,7 @@ export function UmlEditorPage() {
                     onClick={() => attributeNameInputRef.current?.focus()}
                     variant="secondary"
                   >
-                    Agregar atributo
+                    {selectedClass?.element_type === "enum" ? "Agregar literal" : "Agregar atributo"}
                   </Button>
                 </div>
                 <div className="overflow-x-auto">
@@ -1542,16 +1594,23 @@ export function UmlEditorPage() {
                     <Settings2 className="text-indigo-600 dark:text-indigo-300" size={18} aria-hidden="true" />
                     Metodos
                   </div>
-                  <Button
-                    className="h-8 px-3 text-xs"
-                    disabled={!selectedClass}
-                    icon={<Plus size={14} aria-hidden="true" />}
-                    onClick={() => methodNameInputRef.current?.focus()}
-                    variant="secondary"
-                  >
-                    Agregar metodo
-                  </Button>
+                  {selectedClass?.element_type !== "enum" && (
+                    <Button
+                      className="h-8 px-3 text-xs"
+                      disabled={!selectedClass}
+                      icon={<Plus size={14} aria-hidden="true" />}
+                      onClick={() => methodNameInputRef.current?.focus()}
+                      variant="secondary"
+                    >
+                      Agregar metodo
+                    </Button>
+                  )}
                 </div>
+                {selectedClass?.element_type === "enum" ? (
+                  <div className="flex h-36 items-center justify-center p-4 text-xs italic text-slate-500 dark:text-slate-400">
+                    Los enumerados en UML no contienen metodos.
+                  </div>
+                ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[500px] text-left text-sm">
                     <thead className="bg-slate-100 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
@@ -1652,8 +1711,10 @@ export function UmlEditorPage() {
                     </tbody>
                   </table>
                 </div>
+                )}
               </div>
             </div>
+          </div>
             ) : (
               <div className="p-4 pt-3" role="tabpanel">
                 {relationships.length === 0 ? (

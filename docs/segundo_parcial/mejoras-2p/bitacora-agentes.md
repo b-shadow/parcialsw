@@ -7,6 +7,27 @@ Registro cronológico de tareas ejecutadas por los agentes A1, A2, A3 y A4 en el
 
 ## Ola 1 · Rebanadas Base
 
+### [A3] V1.5 · Editor: interfaz, enum, abstracta, dependencia, realización y visibilidades
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - `uml.ts`: ampliados tipos `UmlElementType` (`class`, `interface`, `enum`, `abstract_class`), `UmlVisibility` (`public`, `private`, `protected`, `package`), y `UmlRelationshipType` (`association`, `inheritance`, `aggregation`, `composition`, `dependency`, `realization`).
+  - `ElementTypeSelect.tsx`: componente accesible para alternar el tipo de clasificador desde el panel de propiedades.
+  - `JointUmlCanvas.tsx`:
+    - Marcador visual `«interface»` y `«enumeration»` sobre el nombre de la clase.
+    - Nombre de clase en cursiva (`italic`) para clases abstractas.
+    - Omitido compartimento de métodos para clasificadores tipo `enum`.
+    - Soporte completo para 4 visibilidades (`+`, `-`, `#`, `~`) en atributos y métodos.
+    - Nuevos marcadores SVG y estilos de línea: dependencia (flecha abierta punteada) y realización (triángulo hueco punteado).
+    - Prop `lockedElements` que renderiza borde ámbar punteado y píldora `🔒 {nombre} editando`.
+  - `UmlEditorPage.tsx`:
+    - Incorporadas herramientas de paleta `dependency` y `realization`.
+    - Selector `ElementTypeSelect` en el panel de propiedades.
+    - Modo literales y ocultamiento de métodos cuando el elemento seleccionado es `enum`.
+  - `JointUmlCanvas.test.tsx`:
+    - 5 nuevas pruebas unitarias: `interfaz muestra «interface» sobre el nombre`, `clase abstracta muestra el nombre en cursiva`, `visibilidades se dibujan como + - # ~`, `realización usa línea punteada con marcador de triángulo hueco`, y `lockedElements con la clase -> muestra candado con el nombre`.
+  - Documentado en `docs/segundo_parcial/mejoras-2p/editor-uml.md`.
+  - Pruebas Vitest: 61 pasadas; ESLint y Build de TypeScript en verde con código 0.
+
 ### [A2] V1.4 · Hook de permisos y PermissionGate en el frontend
 - **Fecha:** 2026-10-20
 - **Cambios realizados:**

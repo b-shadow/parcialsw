@@ -1,3 +1,13 @@
+export type UmlElementType = "class" | "interface" | "enum" | "abstract_class";
+export type UmlVisibility = "public" | "private" | "protected" | "package";
+export type UmlRelationshipType =
+  | "association"
+  | "inheritance"
+  | "aggregation"
+  | "composition"
+  | "dependency"
+  | "realization";
+
 export type UmlDiagram = {
   id: string;
   project_id: string;
@@ -15,8 +25,8 @@ export type UmlClass = {
   id: string;
   diagram_id: string;
   name: string;
-  visibility: string;
-  element_type: string;
+  visibility: UmlVisibility | string;
+  element_type: UmlElementType | string;
   stereotype: string | null;
   description: string | null;
   metadata_json: Record<string, unknown>;
