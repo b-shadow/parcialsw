@@ -7,6 +7,22 @@ Registro cronológico de tareas ejecutadas por los agentes A1, A2, A3 y A4 en el
 
 ## Ola 1 · Rebanadas Base
 
+### [A1] V1.2 · Panel «Registro de cambios» en el espacio colaborativo
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - Implementado `frontend/src/modules/gestion_proyectos_colaboracion/services/changeLogService.ts` con método `list(projectId, params)`.
+  - Creado `frontend/src/modules/gestion_proyectos_colaboracion/components/ChangeLogPanel.tsx` según `maqueta.html#registro`:
+    - Timeline con avatar (`Avatar` de V0.5), nombre, summary, relative time (`Intl.RelativeTimeFormat 'es'`) y chips semánticos (`StatusBadge` con variantes `neutral`, `info`, `success`, `ai`).
+    - Agrupación por días («Hoy», «Ayer», fecha formateada).
+    - Filtro de integrantes con select poblado dinámicamente y filtros de tipo de cambio por chips («Todo», «Clases», «Relaciones», «IA», «Versiones», «Generación»).
+    - Banner de advertencia «Registro en modo respaldo» cuando `source === 'postgres_fallback'`.
+    - Paginación continua con botón «Cargar más» usando `next_cursor` como `before_id`.
+    - Suscripción WebSocket a eventos `CHANGE_LOGGED` para anteponer entradas en tiempo real sin duplicar por `id`, y recarga con debounce en eventos `UML_EVENT`, `AI_ACTION_STATUS_CHANGED` y `PROJECT_VERSION_*`.
+    - Integración de `EmptyState` y `Skeleton` para los diferentes estados de carga y vacío.
+  - Actualizado `ProjectWorkspacePage.tsx` para integrar las pestañas «Chats del proyecto» y «Registro de cambios» acordes a la maqueta con soporte de `?tab=changelog`.
+  - Escrita suite `frontend/src/modules/gestion_proyectos_colaboracion/components/ChangeLogPanel.test.tsx` (5/5 pruebas pasando).
+  - Pruebas frontend completas: 52 pasadas, 0 fallos; lint y build limpios con código 0.
+
 ### [A1] V1.1 · Registro de cambios NoSQL con Redis Streams
 - **Fecha:** 2026-10-20
 - **Cambios realizados:**
