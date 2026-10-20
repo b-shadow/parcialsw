@@ -25,6 +25,7 @@ from app.modules.proyectos_colaboracion.services.project_mutation_guard import P
 from app.modules.proyectos_colaboracion.validators.project_validator import (
     ensure_membership,
     ensure_project_exists,
+    ensure_project_permission,
 )
 
 
@@ -168,10 +169,8 @@ class ThemeService:
         return ensure_membership(self.members.get_membership(project_id, user_id))
 
     def _require_editor(self, project_id: UUID, user_id: UUID):
-        member = self._require_member(project_id, user_id)
-        if member.project_role not in {"ORGANIZADOR", "EDITOR"}:
-            raise HTTPException(status_code=403, detail="Se requiere permiso de edicion")
-        return member
+        ensure_project_exists(self.projects.get(project_id))
+        return ensure_project_permission(self.db, project_id, user_id, "theme.edit")
 
     @staticmethod
     def _check_revision(theme: FlutterThemeSettings | None, expected: int | None) -> None:

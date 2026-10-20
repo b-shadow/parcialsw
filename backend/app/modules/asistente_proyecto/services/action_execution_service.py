@@ -25,6 +25,7 @@ from app.modules.modelado_uml.services.method_specification_service import (
 from app.modules.modelado_uml.services.uml_service import UmlService
 from app.modules.proyectos_colaboracion.schemas.project import VersionCreateRequest
 from app.modules.proyectos_colaboracion.services.project_service import ProjectService
+from app.modules.proyectos_colaboracion.validators.project_validator import ensure_project_permission
 
 
 class AiActionExecutionService:
@@ -38,6 +39,7 @@ class AiActionExecutionService:
         self.uml = UmlService(db)
 
     def confirm(self, project_id: UUID, action_id: UUID, user_id: UUID) -> tuple[AiAction, bool]:
+        ensure_project_permission(self.db, project_id, user_id, "ai.confirm_actions")
         project, member = self.contracts._project_and_member(project_id, user_id)
         action = self.repository.get_action(project_id, action_id, for_update=True)
         if action is None:
@@ -53,18 +55,6 @@ class AiActionExecutionService:
             raise HTTPException(status_code=409, detail=action.error_message)
         if action.status == "failed":
             raise HTTPException(status_code=409, detail="La accion fallo y requiere una nueva propuesta")
-        if member.project_role not in {"EDITOR", "ORGANIZADOR"}:
-            raise HTTPException(
-                status_code=403,
-                detail="Se requiere permiso de edicion para confirmar cambios UML",
-            )
-        can_confirm = (
-            action.requested_by_user_id == user_id
-            or project.owner_id == user_id
-            or member.project_role == "ORGANIZADOR"
-        )
-        if not can_confirm:
-            raise HTTPException(status_code=403, detail="No puedes confirmar esta accion")
         self._ensure_dependencies(action)
         self._ensure_diagram_version(action)
         action.status = "confirmed"
@@ -74,7 +64,11 @@ class AiActionExecutionService:
         action.status = "executing"
         self.db.commit()
         try:
-            result = self._execute(action, user_id)
+            self.db.info["change_origin"] = "ai"
+            try:
+                result = self._execute(action, user_id)
+            finally:
+                self.db.info.pop("change_origin", None)
             diagram_id = self._uuid((action.payload.get("_plan") or {}).get("diagram_id"))
             if diagram_id is not None and action.action_type not in {
                 "prepare_backend_generation",
@@ -98,7 +92,7 @@ class AiActionExecutionService:
             raise HTTPException(status_code=422, detail="No se pudo aplicar la accion propuesta") from exc
 
     def reject(self, project_id: UUID, action_id: UUID, user_id: UUID) -> tuple[AiAction, bool]:
-        project, member = self.contracts._project_and_member(project_id, user_id)
+        ensure_project_permission(self.db, project_id, user_id, "ai.confirm_actions")
         action = self.repository.get_action(project_id, action_id, for_update=True)
         if action is None:
             raise HTTPException(status_code=404, detail="Accion de IA no encontrada")
@@ -106,13 +100,6 @@ class AiActionExecutionService:
             return action, True
         if action.status != "proposed":
             raise HTTPException(status_code=409, detail="Solo se rechazan acciones propuestas")
-        can_reject = (
-            action.requested_by_user_id == user_id
-            or project.owner_id == user_id
-            or member.project_role == "ORGANIZADOR"
-        )
-        if not can_reject:
-            raise HTTPException(status_code=403, detail="No puedes rechazar esta accion")
         action.status = "rejected"
         self.db.commit()
         self.db.refresh(action)

@@ -25,6 +25,7 @@ from app.modules.proyectos_colaboracion.services.project_mutation_guard import P
 from app.modules.proyectos_colaboracion.validators.project_validator import (
     ensure_membership,
     ensure_project_exists,
+    ensure_project_permission,
 )
 
 
@@ -68,12 +69,8 @@ class AssistantContractService:
     def update_settings(
         self, project_id: UUID, user_id: UUID, payload: AiProjectSettingsUpdate
     ) -> AiProjectSettings:
+        ensure_project_permission(self.db, project_id, user_id, "ai.settings")
         project, member = self._project_and_member(project_id, user_id)
-        if not self._can_organize(project, member, user_id):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Se requiere rol Organizador del proyecto",
-            )
         locked_project = ProjectMutationGuard(self.db).acquire(project_id)
         settings = self.repository.get_settings(project_id)
         values = payload.model_dump()
@@ -161,6 +158,8 @@ class AssistantContractService:
     ) -> tuple[AiMessage, bool]:
         if user_id is not None:
             self._project_and_member(project_id, user_id)
+            if payload.role == "user":
+                ensure_project_permission(self.db, project_id, user_id, "ai.chat")
         conversation = self.repository.get_conversation(project_id, conversation_id)
         if conversation is None:
             if user_id is None:

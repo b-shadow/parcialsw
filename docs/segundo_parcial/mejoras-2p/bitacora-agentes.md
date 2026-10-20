@@ -7,6 +7,23 @@ Registro cronológico de tareas ejecutadas por los agentes A1, A2, A3 y A4 en el
 
 ## Ola 1 · Rebanadas Base
 
+### [A2] V1.3 · Permisos por rol aplicados en el backend (incluye Lector)
+- **Fecha:** 2026-10-20
+- **Cambios realizados:**
+  - `permissions.py`: formalizados `PERMISSION_CODES` (11 códigos), `PROJECT_ROLES` (`ORGANIZADOR`, `EDITOR`, `LECTOR`), `ROLE_DEFAULTS` y cálculo de `effective_permissions`.
+  - `project_validator.py`: implementados `ensure_project_permission(db, project_id, user_id, code)` y `member_permissions(db, member)`, manteniendo `ensure_organizer(member)` para compatibilidad con código existente.
+  - `project_service.py`: método `my_membership(project_id, user_id)` retornando `{project_id, user_id, project_role, permissions}`, soporte de rol `LECTOR` en altas/ediciones de miembros, validación de códigos autorizados en `set_permission` (422 si inválido), y permisos `project.update`, `members.manage`, `versions.create`, `versions.restore`.
+  - `projects.py`: expuesto `GET /{project_id}/members/me` posicionado antes de `{member_id}` para prevenir colisiones de ruta en FastAPI.
+  - Servicios protegidos con permisos específicos:
+    - `uml_service.py`: protegido con `uml.edit` en mutaciones (crear/editar/borrar clases, atributos, métodos, relaciones, posiciones, paquetes).
+    - `action_execution_service.py`: protegido con `ai.confirm_actions` en confirmar/rechazar acciones propuestas por la IA.
+    - `assistant_service.py`: protegido con `ai.settings` en configuración de IA y `ai.chat` en envío de mensajes.
+    - `generation_service.py`: protegido con `generation.run` en disparar generación coordinada.
+    - `theme_service.py`: protegido con `theme.edit` en crear/actualizar estilos y presets.
+    - `method_specification_service.py`: protegido con `uml.edit` al guardar especificaciones.
+  - Escrita suite `backend/tests/test_mejoras_v1_permisos.py` con 6 casos exhaustivos verificando permisos por rol y LECTOR.
+  - Suite completa del backend: 124 pasadas, 3 omitidas, 0 fallos.
+
 ### [A1] V1.2 · Panel «Registro de cambios» en el espacio colaborativo
 - **Fecha:** 2026-10-20
 - **Cambios realizados:**

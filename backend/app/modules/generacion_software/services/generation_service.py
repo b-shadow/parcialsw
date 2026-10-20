@@ -41,7 +41,10 @@ from app.modules.modelado_uml.services.method_specification_service import (
 from app.modules.modelado_uml.validators.uml_validator import ensure_diagram_exists
 from app.modules.proyectos_colaboracion.repositories.member_repository import MemberRepository
 from app.modules.proyectos_colaboracion.repositories.project_repository import ProjectRepository
-from app.modules.proyectos_colaboracion.validators.project_validator import ensure_membership
+from app.modules.proyectos_colaboracion.validators.project_validator import (
+    ensure_membership,
+    ensure_project_permission,
+)
 
 
 class GenerationService:
@@ -55,7 +58,7 @@ class GenerationService:
 
     def transform(self, payload: TransformationRequest, user_id: UUID) -> UmlTransformation:
         diagram = ensure_diagram_exists(self.uml.get_diagram(payload.diagram_id))
-        member = ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "generation.run")
         classes = self.uml.list_classes(diagram.id)
         relationships = self.uml.list_relationships(diagram.id)
         intermediate_model = {
@@ -185,7 +188,7 @@ class GenerationService:
         transformation = ensure_transformation_exists(
             self.generations.get_transformation(payload.transformation_id)
         )
-        ensure_membership(self.members.get_membership(transformation.project_id, user_id))
+        ensure_project_permission(self.db, transformation.project_id, user_id, "generation.run")
         project = self.projects.get_for_update(transformation.project_id)
         version_label = f"v{len(self.generations.list_backends(transformation.project_id)) + 1}"
         generated_name = f"{project.name}_{version_label}"
@@ -261,7 +264,7 @@ class GenerationService:
         generated = self.generations.get_backend(backend_id)
         if generated is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backend generado no encontrado")
-        ensure_membership(self.members.get_membership(generated.project_id, user_id))
+        ensure_project_permission(self.db, generated.project_id, user_id, "generation.run")
         zip_path = generated.manifest.get("zip_path") if generated.manifest else None
         if not zip_path:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ZIP de backend no encontrado")
@@ -273,7 +276,7 @@ class GenerationService:
         transformation = ensure_transformation_exists(
             self.generations.get_transformation(payload.transformation_id)
         )
-        ensure_membership(self.members.get_membership(transformation.project_id, user_id))
+        ensure_project_permission(self.db, transformation.project_id, user_id, "generation.run")
         project = self.projects.get_for_update(transformation.project_id)
         backend = None
         if payload.backend_id is not None:
@@ -360,7 +363,7 @@ class GenerationService:
         generated = self.generations.get_frontend(frontend_id)
         if generated is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Frontend generado no encontrado")
-        ensure_membership(self.members.get_membership(generated.project_id, user_id))
+        ensure_project_permission(self.db, generated.project_id, user_id, "generation.run")
         zip_path = generated.manifest.get("zip_path") if generated.manifest else None
         if not zip_path:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ZIP de Flutter no encontrado")
@@ -372,7 +375,7 @@ class GenerationService:
         transformation = ensure_transformation_exists(
             self.generations.get_transformation(payload.transformation_id)
         )
-        ensure_membership(self.members.get_membership(transformation.project_id, user_id))
+        ensure_project_permission(self.db, transformation.project_id, user_id, "generation.run")
         plan = CoordinatedGeneratorService().preflight(
             transformation.intermediate_model,
             payload.name,
@@ -394,7 +397,7 @@ class GenerationService:
         transformation = ensure_transformation_exists(
             self.generations.get_transformation(payload.transformation_id)
         )
-        ensure_membership(self.members.get_membership(transformation.project_id, user_id))
+        ensure_project_permission(self.db, transformation.project_id, user_id, "generation.run")
         existing = self.generations.get_coordinated_by_request(
             transformation.id, user_id, payload.client_request_id
         )
@@ -480,7 +483,7 @@ class GenerationService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Generacion coordinada no encontrada",
             )
-        ensure_membership(self.members.get_membership(generated.project_id, user_id))
+        ensure_project_permission(self.db, generated.project_id, user_id, "generation.run")
         return generated
 
     def get_coordinated_artifact_path(self, generation_id: UUID, user_id: UUID) -> str:
@@ -518,7 +521,7 @@ class GenerationService:
 
     def get_ui_manifest(self, transformation_id: UUID, user_id: UUID, name: str = "Preview") -> dict:
         transformation = ensure_transformation_exists(self.generations.get_transformation(transformation_id))
-        ensure_membership(self.members.get_membership(transformation.project_id, user_id))
+        ensure_project_permission(self.db, transformation.project_id, user_id, "generation.run")
         plan = CoordinatedGeneratorService().preflight(
             transformation.intermediate_model, name,
             source_transformation_id=str(transformation.id),

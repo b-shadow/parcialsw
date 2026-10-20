@@ -31,7 +31,10 @@ from app.modules.modelado_uml.schemas.method_specification import (
 )
 from app.modules.proyectos_colaboracion.repositories.member_repository import MemberRepository
 from app.modules.proyectos_colaboracion.services.project_mutation_guard import ProjectMutationGuard
-from app.modules.proyectos_colaboracion.validators.project_validator import ensure_membership
+from app.modules.proyectos_colaboracion.validators.project_validator import (
+    ensure_membership,
+    ensure_project_permission,
+)
 
 
 @dataclass
@@ -391,9 +394,10 @@ class MethodSpecificationService:
         diagram = self.uml.get_diagram(uml_class.diagram_id) if uml_class else None
         if diagram is None:
             raise HTTPException(status_code=404, detail="Metodo UML no encontrado")
-        member = ensure_membership(self.members.get_membership(diagram.project_id, user_id))
-        if require_edit and member.project_role not in {"EDITOR", "ORGANIZADOR"}:
-            raise HTTPException(status_code=403, detail="Se requiere permiso de edicion UML")
+        if require_edit:
+            member = ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
+        else:
+            member = ensure_membership(self.members.get_membership(diagram.project_id, user_id))
         return MethodContext(method, uml_class, diagram, member)
 
     def _assert_structural_references(

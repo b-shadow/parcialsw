@@ -50,11 +50,20 @@ class ProjectMemberCandidateResponse(BaseModel):
 
 class AddMemberRequest(BaseModel):
     user_id: UUID
-    project_role: str = Field(pattern="^(ORGANIZADOR|EDITOR)$")
+    project_role: str = Field(pattern="^(ORGANIZADOR|EDITOR|LECTOR)$")
 
 
 class UpdateMemberRequest(BaseModel):
-    project_role: str = Field(pattern="^(ORGANIZADOR|EDITOR)$")
+    project_role: str = Field(pattern="^(ORGANIZADOR|EDITOR|LECTOR)$")
+
+
+class MyMembershipResponse(BaseModel):
+    project_id: UUID
+    user_id: UUID
+    project_role: str
+    permissions: list[str]
+
+    model_config = {"from_attributes": True}
 
 
 class PermissionRequest(BaseModel):
