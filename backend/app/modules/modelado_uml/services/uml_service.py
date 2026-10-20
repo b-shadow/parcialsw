@@ -128,11 +128,29 @@ class UmlService:
         )
         self.db.commit()
 
+    def _ensure_unique_class_name(
+        self, diagram_id: UUID, name: str, exclude_id: UUID | None = None
+    ) -> None:
+        normalized_target = name.strip().casefold()
+        existing_classes = self.uml.list_classes(diagram_id)
+        for cls in existing_classes:
+            if exclude_id and cls.id == exclude_id:
+                continue
+            if cls.name.strip().casefold() == normalized_target:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "CLASS_NAME_DUPLICATED",
+                        "message": "Ya existe una clase con ese nombre en el diagrama",
+                    },
+                )
+
     def create_class(
         self, diagram_id: UUID, payload: UmlClassCreateRequest, user_id: UUID
     ) -> UmlClass:
         diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        self._ensure_unique_class_name(diagram_id, payload.name)
         self._begin_mutation(diagram.project_id)
         uml_class = self.uml.add_class(
             UmlClass(
@@ -195,6 +213,8 @@ class UmlService:
         uml_class = ensure_class_exists(self.uml.get_class(class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        if payload.name is not None:
+            self._ensure_unique_class_name(diagram.id, payload.name, exclude_id=class_id)
         self._begin_mutation(diagram.project_id)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(uml_class, field, value)

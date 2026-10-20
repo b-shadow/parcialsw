@@ -11,6 +11,8 @@ import { AssistantWidget } from "../components/AssistantWidget";
 import { PushNotificationButton } from "../components/PushNotificationButton";
 import { NotificationCenter } from "../components/NotificationCenter";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { Toaster } from "../components/Toaster";
+import { ConfirmDialogHost } from "../components/ConfirmDialog";
 import { cn } from "../utils/cn";
 
 const navItems = [
@@ -281,6 +283,8 @@ export function AppLayout() {
         <ProjectAiAssistant projectId={currentProjectId} diagramId={currentDiagramId} />
       )}
       {!currentDiagramId && <AssistantWidget />}
+      <Toaster />
+      <ConfirmDialogHost />
     </div>
   );
 }
