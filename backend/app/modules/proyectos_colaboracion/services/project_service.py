@@ -18,6 +18,7 @@ from app.modules.notificaciones.services.notification_service import (
 from app.modules.proyectos_colaboracion.models import (
     CollaborationEvent,
     Project,
+    ProjectInvitation,
     ProjectMember,
     ProjectPermission,
     ProjectRestoreOperation,
@@ -235,6 +236,65 @@ class ProjectService:
                 route_name="project_management", params={"project_id": str(project_id)}
             ),
         ))
+        self.db.commit()
+        self.db.refresh(member)
+        return member
+
+    def add_member_from_invitation(self, invitation: ProjectInvitation, user_id: UUID) -> ProjectMember:
+        ensure_project_exists(self.projects.get(invitation.project_id))
+        existing = self.members.get_membership(invitation.project_id, user_id)
+        if existing is not None:
+            return existing
+        member = self.members.add(
+            ProjectMember(
+                project_id=invitation.project_id,
+                user_id=user_id,
+                project_role=invitation.project_role,
+                joined_at=datetime.now(UTC),
+            )
+        )
+        self.audit.record(
+            module="proyectos_colaboracion",
+            action="ADD_PROJECT_MEMBER",
+            user_id=invitation.invited_by_user_id,
+            project_id=invitation.project_id,
+            metadata={
+                "member_user_id": str(user_id),
+                "origin": "invitation",
+                "invitation_id": str(invitation.id),
+            },
+        )
+        self._activity_event(
+            project_id=invitation.project_id,
+            user_id=invitation.invited_by_user_id,
+            event_type="PROJECT_MEMBER_ADDED",
+            resource_type="project_member",
+            resource_id=member.id,
+            summary_key="activity.member_added",
+            payload={
+                "member_id": str(member.id),
+                "project_role": member.project_role,
+                "origin": "invitation",
+            },
+        )
+        NotificationService(self.db).record(
+            DomainNotificationEvent(
+                type="PROJECT_MEMBER_ADDED",
+                category="access",
+                title="Nuevo proyecto compartido",
+                body=f"Te agregaron al proyecto como {member.project_role}.",
+                recipient_user_ids={member.user_id},
+                dedup_entity_id=member.id,
+                project_id=invitation.project_id,
+                actor_user_id=invitation.invited_by_user_id,
+                resource_type="project_member",
+                resource_id=member.id,
+                deep_link=NotificationDeepLink(
+                    route_name="project_management",
+                    params={"project_id": str(invitation.project_id)},
+                ),
+            )
+        )
         self.db.commit()
         self.db.refresh(member)
         return member

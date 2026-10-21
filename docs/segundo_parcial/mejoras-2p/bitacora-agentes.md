@@ -248,3 +248,14 @@ Registro cronológico de tareas ejecutadas por los agentes A1, A2, A3 y A4 en el
   - Actualizado prompt de sistema `unified_system.md` instruyendo a la IA a comportarse como un desarrollador integrante del equipo y moderar modificaciones concurrentes.
   - Creada suite `ai-engine/tests/test_mejoras_equipo.py` con 4 pruebas al 100% verde (67 pruebas totales en ai-engine sin regresiones).
   - Actualizada documentación en `ia-equipo.md`.
+
+### [A2] V2.3 · Invitaciones al proyecto (backend)
+- **Fecha:** 2026-10-21
+- **Cambios realizados:**
+  - Creados esquemas `InvitationCreateRequest` e `InvitationResponse` en `schemas/invitation.py`.
+  - Implementado `InvitationRepository` en `repositories/invitation_repository.py` con búsquedas normalizadas (`func.lower(invited_email)`) y listados por estado y correo.
+  - Implementado `InvitationService` en `services/invitation_service.py` con verificación de permisos `members.manage`, vencimiento a los 7 días con transición a `expired`, prevención de duplicados (`409 INVITATION_ALREADY_PENDING`, `409 MEMBER_ALREADY_EXISTS`), expiración en lectura y acciones de aceptar/rechazar con emisión de eventos durables en `NotificationService`.
+  - Agregado método `add_member_from_invitation` a `ProjectService` reutilizando la lógica de miembros, auditoría con `origin='invitation'` y actividad.
+  - Implementados routers `router` (`/projects/{id}/invitations`) y `my_router` (`/invitations`) en `routers/invitations.py` exponiendo los 6 endpoints requeridos.
+  - Creada suite de pruebas `test_mejoras_v2_invitaciones.py` con 9 pruebas pasando al 100% (152 pruebas de backend en verde).
+  - Actualizada documentación en `permisos.md`.

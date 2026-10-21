@@ -80,3 +80,17 @@ import { PermissionGate } from "@/core/permissions/PermissionGate";
   <button onClick={handleOpenInviteModal}>Invitar integrante</button>
 </PermissionGate>
 ```
+
+---
+
+## 3. Flujo de Invitaciones al Proyecto (V2.3)
+
+- **Creación de Invitaciones (`POST /projects/{id}/invitations`)**: Restringida a organizadores con permiso `members.manage`. Requiere correo y rol asignado (`EDITOR` o `LECTOR`).
+- **Validación y Normalización**: Los correos se normalizan con `strip().lower()`. Se previene invitar a usuarios que ya son miembros (`409 MEMBER_ALREADY_EXISTS`) o que ya tienen una invitación pendiente (`409 INVITATION_ALREADY_PENDING`).
+- **Vigencia y Expiración**: Toda invitación se emite con un vencimiento de 7 días (`expires_at = created_at + 7 días`). Al intentar aceptar una invitación expirada, se marca con estado `expired` y se devuelve `410 INVITATION_EXPIRED`.
+- **Bandeja del Invitado (`/invitations/me`)**: Lista todas las invitaciones pendientes asociadas al correo del usuario autenticado.
+- **Aceptación y Rechazo**:
+  - `POST /invitations/{id}/accept`: Crea la membresía con el rol asignado (`add_member_from_invitation`), cambia el estado a `accepted` y despacha notificación `PROJECT_INVITATION_ACCEPTED` al organizador.
+  - `POST /invitations/{id}/reject`: Cambia el estado a `rejected` y notifica al organizador con `PROJECT_INVITATION_REJECTED`.
+  - Intentos de acceso por correos no coincidentes responden con `404 INVITATION_NOT_FOUND`.
+- **Revocación (`DELETE /projects/{id}/invitations/{id}`)**: El organizador puede revocar invitaciones pendientes (`status='revoked'`), desapareciendo de la bandeja del usuario.
