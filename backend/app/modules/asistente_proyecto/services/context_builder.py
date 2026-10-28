@@ -17,7 +17,11 @@ from app.modules.acceso_usuarios.models import User
 from app.modules.asistente_proyecto.models import AiConversation, AiProjectSettings
 from app.modules.asistente_proyecto.repositories.assistant_repository import AssistantRepository
 from app.modules.asistente_proyecto.schemas.assistant import RequestedContext
+from app.modules.asistente_proyecto.services.conversation_document_store import (
+    ConversationDocumentStore,
+)
 from app.modules.modelado_uml.repositories.uml_repository import UmlRepository
+from app.modules.modelado_uml.services.uml_service import UmlService
 from app.modules.proyectos_colaboracion.models import Project, ProjectMember, ProjectVersion
 
 
@@ -28,8 +32,9 @@ class ProjectContextBuilder:
         self.db = db
         self.assistant = AssistantRepository(db)
         self.uml = UmlRepository(db)
+        self.documents = ConversationDocumentStore()
 
-    def build(
+    async def build(
         self,
         *,
         project: Project,
@@ -42,9 +47,7 @@ class ProjectContextBuilder:
     ) -> AiProjectContext:
         user = self.db.get(User, user_id)
         permissions = sorted(
-            permission.permission_code
-            for permission in member.permissions
-            if permission.is_allowed
+            permission.permission_code for permission in member.permissions if permission.is_allowed
         )
         diagram_context = None
         if requested.include_diagram and diagram_id is not None:
@@ -54,12 +57,12 @@ class ProjectContextBuilder:
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Diagrama no encontrado en el proyecto",
                 )
-            classes = self.uml.list_classes(diagram.id)
+            model = UmlService(self.db)._build_internal_model(diagram)
             diagram_context = DiagramContext(
                 id=diagram.id,
-                name=diagram.name,
-                current_version=diagram.current_version,
-                classes=[self._serialize_class(item) for item in classes],
+                name=model.name,
+                current_version=model.current_version,
+                classes=[self._serialize_class(item) for item in model.classes],
                 relationships=[
                     {
                         "id": str(item.id),
@@ -72,17 +75,12 @@ class ProjectContextBuilder:
                         "label": item.label,
                         "metadata_json": item.metadata_json,
                     }
-                    for item in self.uml.list_relationships(diagram.id)
+                    for item in model.relationships
                 ],
             )
         recent_messages: list[RecentMessageContext] = []
         if requested.include_recent_messages:
-            messages = self.assistant.list_messages(
-                conversation.id,
-                before_sequence=None,
-                after_sequence=None,
-                limit=settings.max_context_messages,
-            )
+            messages = await self._messages(conversation.id, settings.max_context_messages)
             recent_messages = [
                 RecentMessageContext(
                     sequence_number=item.sequence_number,
@@ -109,9 +107,7 @@ class ProjectContextBuilder:
                 for item in records
             ]
         pending_actions = self.assistant.list_actions(project.id, "proposed", 50)
-        pending_recommendations = self.assistant.list_recommendations(
-            project.id, "open", None, 50
-        )
+        pending_recommendations = self.assistant.list_recommendations(project.id, "open", None, 50)
         generation_state = {
             "pending_actions": [
                 {
@@ -149,9 +145,7 @@ class ProjectContextBuilder:
             ),
             active_diagram=diagram_context,
             recent_messages=recent_messages,
-            conversation_summary=self._project_conversation_memory(
-                project.id, conversation
-            ),
+            conversation_summary=await self._project_conversation_memory(project.id, conversation),
             available_versions=versions,
             generation_state=generation_state,
             constraints=ContextConstraints(
@@ -162,20 +156,18 @@ class ProjectContextBuilder:
             ),
         )
 
-    def _project_conversation_memory(
+    async def _project_conversation_memory(
         self, project_id: UUID, current: AiConversation
     ) -> str | None:
         sections: list[str] = []
         for conversation in self.assistant.list_conversations(project_id):
-            if conversation.summary:
+            snapshot = await self.documents.safe_latest_context(conversation.id)
+            if snapshot is not None:
+                memory = snapshot.summary
+            elif conversation.summary:
                 memory = conversation.summary
             elif conversation.id != current.id:
-                messages = self.assistant.list_messages(
-                    conversation.id,
-                    before_sequence=None,
-                    after_sequence=None,
-                    limit=20,
-                )
+                messages = await self._messages(conversation.id, 20)
                 memory = "\n".join(
                     f"{item.role}: {sanitize_untrusted_text(item.content, 600)}"
                     for item in messages
@@ -191,6 +183,26 @@ class ProjectContextBuilder:
             return None
         joined = "\n\n".join(sections)
         return joined[-10000:]
+
+    async def _messages(self, conversation_id: UUID, limit: int):
+        sql_items = self.assistant.list_messages(
+            conversation_id,
+            before_sequence=None,
+            after_sequence=None,
+            limit=limit,
+        )
+        mongo_items = await self.documents.safe_list_messages(
+            conversation_id,
+            before_sequence=None,
+            after_sequence=None,
+            limit=limit,
+        )
+        if mongo_items is None:
+            return sql_items
+        by_sequence = {item.sequence_number: item for item in mongo_items}
+        for item in sql_items:
+            by_sequence.setdefault(item.sequence_number, item)
+        return sorted(by_sequence.values(), key=lambda item: item.sequence_number)[-limit:]
 
     @staticmethod
     def _serialize_class(item) -> dict:

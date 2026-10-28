@@ -66,6 +66,7 @@ infra/aws/terraform/*.tfplan
 # Material privado de trabajo y automatizacion local.
 /scripts/
 /docs/documentar/
+/docs/documentar_v2/
 /docs/ejemplos/
 /docs/pruebas/
 /docs/guias_comandos/

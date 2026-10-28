@@ -1,4 +1,5 @@
 from app.core.database.session import Base
+from app.core.nosql.outbox_model import NoSqlOutboxEvent
 from app.modules.acceso_usuarios.models import AuditLog, Role, User, UserRole, UserSession
 from app.modules.asistente_proyecto.models import (
     AiAction,
@@ -60,6 +61,7 @@ __all__ = [
     "GeneratedArtifact",
     "GeneratedBackend",
     "GeneratedFrontend",
+    "NoSqlOutboxEvent",
     "Notification",
     "NotificationOutbox",
     "NotificationPreference",
@@ -85,4 +87,3 @@ __all__ = [
     "UserSession",
     "XmiExchange",
 ]
-

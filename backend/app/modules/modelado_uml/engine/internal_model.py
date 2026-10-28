@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 
 
 class UmlVisualModel(BaseModel):
+    id: str | None = None
     x: float = 0
     y: float = 0
     width: float | None = None

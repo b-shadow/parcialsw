@@ -14,13 +14,63 @@ services:
       retries: 5
     restart: unless-stopped
 
+  mongodb:
+    image: mongo:8.0
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-case_user}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGODB_DATABASE:-case_inteligente_nosql}
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--username", "${MONGO_ROOT_USERNAME:-case_user}", "--password", "${MONGO_ROOT_PASSWORD}", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  database-migrations:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      RUN_MIGRATIONS: "false"
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-case_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-case_inteligente}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
     environment:
+      RUN_MIGRATIONS: "false"
       APP_ENV: production
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-case_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-case_inteligente}
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-case_user}:${MONGO_ROOT_PASSWORD}@mongodb:27017/?authSource=admin
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-case_inteligente_nosql}
+      MONGODB_ENABLED: "true"
+      MONGODB_REQUIRED: "true"
+      AI_MESSAGES_MONGODB_READ_ENABLED: "true"
+      AI_MESSAGES_SQL_FALLBACK_ENABLED: "false"
+      AI_MESSAGES_COMPARE_READS: "false"
+      AI_MESSAGES_MIGRATION_REQUIRED: "false"
+      UML_VERSIONS_MONGODB_READ_ENABLED: "true"
+      UML_VERSIONS_SQL_FALLBACK_ENABLED: "false"
+      UML_VERSIONS_COMPARE_READS: "false"
+      UML_VERSIONS_MIGRATION_REQUIRED: "false"
+      UML_DIAGRAMS_MONGODB_READ_ENABLED: "true"
+      UML_DIAGRAMS_SQL_FALLBACK_ENABLED: "false"
+      UML_DIAGRAMS_COMPARE_READS: "false"
+      UML_DIAGRAMS_DUAL_WRITE_ENABLED: "false"
+      UML_DIAGRAMS_MIGRATION_REQUIRED: "false"
+      NOSQL_CONSOLIDATED_MODE: "true"
+      NOSQL_RECONCILIATION_REQUIRED: "true"
+      NOSQL_RECONCILIATION_MAX_AGE_SECONDS: ${NOSQL_RECONCILIATION_MAX_AGE_SECONDS:-900}
+      PHASE14_CONSOLIDATION_REQUIRED: "true"
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       CORS_ORIGINS: ${CORS_ORIGINS}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS}
@@ -34,8 +84,116 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      database-migrations:
+        condition: service_completed_successfully
+      phase14-consolidation:
+        condition: service_completed_successfully
     volumes:
       - generated_artifacts:/storage/generated
+      - coordinated_backups:/storage/backups
+    restart: unless-stopped
+
+  nosql-outbox-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "app.core.nosql.commands.dispatch_outbox", "--watch"]
+    environment:
+      RUN_MIGRATIONS: "false"
+      APP_ENV: production
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-case_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-case_inteligente}
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-case_user}:${MONGO_ROOT_PASSWORD}@mongodb:27017/?authSource=admin
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-case_inteligente_nosql}
+      MONGODB_ENABLED: "true"
+      MONGODB_REQUIRED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      phase14-consolidation:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  nosql-outbox-drain:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "app.core.nosql.commands.dispatch_outbox", "--drain"]
+    environment:
+      RUN_MIGRATIONS: "false"
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-case_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-case_inteligente}
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-case_user}:${MONGO_ROOT_PASSWORD}@mongodb:27017/?authSource=admin
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-case_inteligente_nosql}
+      MONGODB_ENABLED: "true"
+      MONGODB_REQUIRED: "true"
+    depends_on:
+      database-migrations:
+        condition: service_completed_successfully
+    restart: "no"
+
+  nosql-reconciliation-check:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "app.core.nosql.commands.reconcile", "--operational", "--require-complete"]
+    environment:
+      RUN_MIGRATIONS: "false"
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-case_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-case_inteligente}
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-case_user}:${MONGO_ROOT_PASSWORD}@mongodb:27017/?authSource=admin
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-case_inteligente_nosql}
+      MONGODB_ENABLED: "true"
+      MONGODB_REQUIRED: "true"
+      NOSQL_CONSOLIDATED_MODE: "true"
+    depends_on:
+      nosql-outbox-drain:
+        condition: service_completed_successfully
+    restart: "no"
+
+  phase14-consolidation:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "app.core.nosql.commands.consolidate", "--minimum-healthy-audits", "1"]
+    environment:
+      RUN_MIGRATIONS: "false"
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-case_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-case_inteligente}
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-case_user}:${MONGO_ROOT_PASSWORD}@mongodb:27017/?authSource=admin
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-case_inteligente_nosql}
+      MONGODB_ENABLED: "true"
+      MONGODB_REQUIRED: "true"
+      NOSQL_CONSOLIDATED_MODE: "true"
+    depends_on:
+      nosql-reconciliation-check:
+        condition: service_completed_successfully
+    restart: "no"
+
+  nosql-reconciliation-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "app.core.nosql.commands.reconcile", "--operational", "--watch", "--interval-seconds", "${NOSQL_RECONCILIATION_INTERVAL_SECONDS:-300}"]
+    environment:
+      RUN_MIGRATIONS: "false"
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-case_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-case_inteligente}
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-case_user}:${MONGO_ROOT_PASSWORD}@mongodb:27017/?authSource=admin
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-case_inteligente_nosql}
+      MONGODB_ENABLED: "true"
+      MONGODB_REQUIRED: "true"
+      NOSQL_CONSOLIDATED_MODE: "true"
+      NOSQL_ALERT_PENDING_OUTBOX: ${NOSQL_ALERT_PENDING_OUTBOX:-100}
+      NOSQL_ALERT_DEAD_OUTBOX: ${NOSQL_ALERT_DEAD_OUTBOX:-1}
+      NOSQL_ALERT_MAX_DOCUMENT_BYTES: ${NOSQL_ALERT_MAX_DOCUMENT_BYTES:-12000000}
+      NOSQL_ALERT_MAX_REVISION_LAG: ${NOSQL_ALERT_MAX_REVISION_LAG:-0}
+    depends_on:
+      backend:
+        condition: service_healthy
+      phase14-consolidation:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   frontend:
@@ -56,4 +214,6 @@ services:
 
 volumes:
   postgres_data:
+  mongodb_data:
   generated_artifacts:
+  coordinated_backups:

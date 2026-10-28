@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.config.settings import settings
 from app.modules.asistente_proyecto.models import AiAction
 from app.modules.asistente_proyecto.repositories.assistant_repository import AssistantRepository
 from app.modules.asistente_proyecto.services.assistant_service import AssistantContractService
@@ -34,7 +35,14 @@ class AiActionExecutionService:
         self.db = db
         self.repository = AssistantRepository(db)
         self.contracts = AssistantContractService(db)
-        self.uml_repository = UmlRepository(db)
+        if settings.nosql_consolidated_mode:
+            from app.modules.modelado_uml.repositories.mongo_uml_repository import (
+                MongoUmlRepository,
+            )
+
+            self.uml_repository = MongoUmlRepository(db)
+        else:
+            self.uml_repository = UmlRepository(db)
         self.uml = UmlService(db)
 
     def confirm(self, project_id: UUID, action_id: UUID, user_id: UUID) -> tuple[AiAction, bool]:

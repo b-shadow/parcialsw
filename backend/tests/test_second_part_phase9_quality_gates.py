@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
@@ -44,11 +44,34 @@ def test_phase9_unknown_cors_origin_is_not_authorized() -> None:
 
 
 def test_phase9_readiness_uses_503_when_database_is_unavailable() -> None:
-    with patch("app.main.SessionLocal") as session_factory:
+    mongo_health = type(
+        "Health",
+        (),
+        {
+            "available": False,
+            "required": False,
+            "status": "unavailable",
+            "database": "case_inteligente_nosql",
+        },
+    )()
+    with (
+        patch("app.main.SessionLocal") as session_factory,
+        patch.object(
+            app.state.mongo_manager,
+            "ping",
+            AsyncMock(return_value=mongo_health),
+        ),
+    ):
         session_factory.return_value.__enter__.return_value.execute.side_effect = OperationalError(
             "SELECT 1", {}, Exception("database unavailable")
         )
         response = TestClient(app).get("/ready")
 
     assert response.status_code == 503
-    assert response.json() == {"status": "degraded", "database": "unavailable"}
+    payload = response.json()
+    assert payload["status"] == "degraded"
+    assert payload["components"]["postgresql"] == {
+        "status": "unavailable",
+        "required": True,
+    }
+    assert payload["components"]["mongodb"]["required"] is False

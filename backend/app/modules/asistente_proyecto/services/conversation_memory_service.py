@@ -5,9 +5,14 @@ from uuid import UUID, uuid4
 from ai_engine.context.sanitizer import sanitize_context_data, sanitize_untrusted_text
 from pydantic import BaseModel, Field
 
+from app.core.config.settings import settings as app_settings
 from app.core.database.session import SessionLocal
 from app.modules.asistente_proyecto.repositories.assistant_repository import AssistantRepository
 from app.modules.asistente_proyecto.services.assistant_service import AssistantContractService
+from app.modules.asistente_proyecto.services.conversation_document_store import (
+    ConversationDocumentStore,
+    context_snapshot_document,
+)
 from app.modules.asistente_proyecto.services.event_publisher import ProjectAiEventPublisher
 
 logger = logging.getLogger(__name__)
@@ -28,48 +33,76 @@ class ConversationMemoryService:
     def __init__(self, db) -> None:
         self.db = db
         self.repository = AssistantRepository(db)
+        self.documents = ConversationDocumentStore()
 
-    def summarize_if_needed(
-        self, project_id: UUID, user_id: UUID,
-        conversation_id: UUID | None = None, *, force: bool = False,
+    async def summarize_if_needed(
+        self,
+        project_id: UUID,
+        user_id: UUID,
+        conversation_id: UUID | None = None,
+        *,
+        force: bool = False,
     ) -> tuple[ConversationMemorySummary, UUID] | None:
         contracts = AssistantContractService(self.db)
         settings = contracts.get_settings(project_id, user_id)
         conversation = contracts.get_conversation(project_id, user_id, conversation_id)
         unsummarized = conversation.last_message_sequence - conversation.summary_until_sequence
-        if unsummarized <= 0 or (
-            not force and unsummarized < settings.summary_trigger_messages
-        ):
+        if unsummarized <= 0 or (not force and unsummarized < settings.summary_trigger_messages):
             return None
         initial_boundary = conversation.summary_until_sequence
-        messages = self.repository.list_messages(
+        sql_messages = (
+            self.repository.list_messages(
+                conversation.id,
+                before_sequence=None,
+                after_sequence=initial_boundary,
+                limit=min(settings.summary_trigger_messages * 2, 200),
+            )
+            if app_settings.ai_messages_sql_fallback_enabled
+            or app_settings.ai_messages_compare_reads
+            else []
+        )
+        mongo_messages = await self.documents.safe_list_messages(
             conversation.id,
             before_sequence=None,
             after_sequence=initial_boundary,
             limit=min(settings.summary_trigger_messages * 2, 200),
         )
+        if mongo_messages is None:
+            messages = sql_messages
+        else:
+            by_sequence = {item.sequence_number: item for item in mongo_messages}
+            for item in sql_messages:
+                by_sequence.setdefault(item.sequence_number, item)
+            messages = sorted(by_sequence.values(), key=lambda item: item.sequence_number)
         completed = [item for item in messages if item.status == "completed"]
-        if not completed or (
-            not force and len(completed) < settings.summary_trigger_messages
-        ):
+        if not completed or (not force and len(completed) < settings.summary_trigger_messages):
             return None
         target_sequence = completed[-1].sequence_number
         conversation_id = conversation.id
-        previous = self._parse_previous(conversation.summary)
+        previous_snapshot = await self.documents.safe_latest_context(conversation.id)
+        previous = self._parse_previous(
+            previous_snapshot.summary if previous_snapshot else conversation.summary
+        )
         actions = self.repository.list_actions(project_id, "proposed", 100)
         summary = self._deterministic_summary(previous, completed, actions, target_sequence)
         self.db.rollback()
-        locked = self.repository.get_conversation(
-            project_id, conversation.id, for_update=True
-        )
+        locked = self.repository.get_conversation(project_id, conversation.id, for_update=True)
         if locked is None or locked.summary_until_sequence != initial_boundary:
             self.db.rollback()
             return None
-        locked.summary = json.dumps(
+        serialized_summary = json.dumps(
             sanitize_context_data(summary.model_dump(mode="json")),
             ensure_ascii=False,
             separators=(",", ":"),
         )
+        document = context_snapshot_document(
+            locked,
+            summary=serialized_summary,
+            context=sanitize_context_data(summary.model_dump(mode="json")),
+            until_sequence=target_sequence,
+        )
+        await self.documents.upsert_context(document)
+        locked.summary = None
         locked.summary_until_sequence = target_sequence
         self.db.commit()
         return summary, conversation_id
@@ -100,7 +133,9 @@ class ConversationMemoryService:
                 decisions.append(clean)
             if "?" in clean and message.role == "user":
                 questions.append(clean)
-            if any(intent in message.detected_intents for intent in ("modify_uml", "specify_method")):
+            if any(
+                intent in message.detected_intents for intent in ("modify_uml", "specify_method")
+            ):
                 changes.append(clean)
             for reference in message.references_json:
                 label = str(reference.get("label") or "").strip()
@@ -134,7 +169,7 @@ async def summarize_project_conversation(
 ) -> None:
     try:
         with SessionLocal() as db:
-            result = ConversationMemoryService(db).summarize_if_needed(
+            result = await ConversationMemoryService(db).summarize_if_needed(
                 project_id, user_id, conversation_id, force=True
             )
         if result is None:

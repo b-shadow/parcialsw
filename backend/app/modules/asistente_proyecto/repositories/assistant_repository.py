@@ -1,8 +1,10 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config.settings import settings
 from app.modules.acceso_usuarios.models import User
 from app.modules.asistente_proyecto.models import (
     AiAction,
@@ -11,14 +13,22 @@ from app.modules.asistente_proyecto.models import (
     AiProjectSettings,
     AiRecommendation,
 )
+from app.modules.asistente_proyecto.services.conversation_document_store import (
+    SyncConversationDocumentStore,
+    enqueue_message_document,
+    message_content_hash,
+)
 
 
 class AssistantRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
+        self.messages = SyncConversationDocumentStore()
 
     def get_settings(self, project_id: UUID) -> AiProjectSettings | None:
-        return self.db.scalar(select(AiProjectSettings).where(AiProjectSettings.project_id == project_id))
+        return self.db.scalar(
+            select(AiProjectSettings).where(AiProjectSettings.project_id == project_id)
+        )
 
     def get_conversation(
         self, project_id: UUID, conversation_id: UUID | None = None, for_update: bool = False
@@ -44,6 +54,8 @@ class AssistantRepository:
     def get_message_by_client_id(
         self, conversation_id: UUID, author_user_id: UUID, client_message_id: UUID
     ) -> AiMessage | None:
+        if settings.nosql_consolidated_mode:
+            return self.messages.by_client_id(conversation_id, author_user_id, client_message_id)
         return self.db.scalar(
             select(AiMessage).where(
                 AiMessage.conversation_id == conversation_id,
@@ -55,6 +67,8 @@ class AssistantRepository:
     def get_assistant_message_by_correlation(
         self, conversation_id: UUID, correlation_id: UUID
     ) -> AiMessage | None:
+        if settings.nosql_consolidated_mode:
+            return self.messages.assistant_by_correlation(conversation_id, correlation_id)
         return self.db.scalar(
             select(AiMessage).where(
                 AiMessage.conversation_id == conversation_id,
@@ -71,6 +85,13 @@ class AssistantRepository:
         after_sequence: int | None,
         limit: int,
     ) -> list[AiMessage]:
+        if settings.nosql_consolidated_mode:
+            return self.messages.list_messages(
+                conversation_id,
+                before_sequence=before_sequence,
+                after_sequence=after_sequence,
+                limit=limit,
+            )
         statement = select(AiMessage).where(AiMessage.conversation_id == conversation_id)
         if before_sequence is not None:
             statement = statement.where(AiMessage.sequence_number < before_sequence)
@@ -83,20 +104,47 @@ class AssistantRepository:
         return list(reversed(list(self.db.scalars(statement))))
 
     def message_exists_before(self, conversation_id: UUID, sequence: int) -> bool:
-        return self.db.scalar(
-            select(AiMessage.id).where(
-                AiMessage.conversation_id == conversation_id,
-                AiMessage.sequence_number < sequence,
-            ).limit(1)
-        ) is not None
+        if settings.nosql_consolidated_mode:
+            return self.messages.exists_before(conversation_id, sequence)
+        return (
+            self.db.scalar(
+                select(AiMessage.id)
+                .where(
+                    AiMessage.conversation_id == conversation_id,
+                    AiMessage.sequence_number < sequence,
+                )
+                .limit(1)
+            )
+            is not None
+        )
 
     def message_exists_after(self, conversation_id: UUID, sequence: int) -> bool:
-        return self.db.scalar(
-            select(AiMessage.id).where(
-                AiMessage.conversation_id == conversation_id,
-                AiMessage.sequence_number > sequence,
-            ).limit(1)
-        ) is not None
+        if settings.nosql_consolidated_mode:
+            return self.messages.exists_after(conversation_id, sequence)
+        return (
+            self.db.scalar(
+                select(AiMessage.id)
+                .where(
+                    AiMessage.conversation_id == conversation_id,
+                    AiMessage.sequence_number > sequence,
+                )
+                .limit(1)
+            )
+            is not None
+        )
+
+    def get_message(self, message_id: UUID):
+        if settings.nosql_consolidated_mode:
+            return self.messages.get(message_id)
+        return self.db.get(AiMessage, message_id)
+
+    def save_message(self, message) -> None:
+        if settings.nosql_consolidated_mode:
+            message.updated_at = datetime.now(UTC)
+            message.content_hash = message_content_hash(message)
+            self.messages.upsert(message)
+            return
+        enqueue_message_document(self.db, message)
 
     def user_display_names(self, user_ids: set[UUID]) -> dict[UUID, str]:
         if not user_ids:
@@ -105,7 +153,10 @@ class AssistantRepository:
         return {user.id: user.full_name or user.email for user in users}
 
     def list_actions(
-        self, project_id: UUID, status: str | None, limit: int,
+        self,
+        project_id: UUID,
+        status: str | None,
+        limit: int,
         conversation_id: UUID | None = None,
     ) -> list[AiAction]:
         statement = select(AiAction).where(AiAction.project_id == project_id)
@@ -152,7 +203,11 @@ class AssistantRepository:
         )
 
     def list_recommendations(
-        self, project_id: UUID, status: str | None, severity: str | None, limit: int,
+        self,
+        project_id: UUID,
+        status: str | None,
+        severity: str | None,
+        limit: int,
         conversation_id: UUID | None = None,
     ) -> list[AiRecommendation]:
         statement = select(AiRecommendation).where(AiRecommendation.project_id == project_id)

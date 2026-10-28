@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -18,6 +18,12 @@ if TYPE_CHECKING:
 
 class UmlDiagram(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "uml_diagrams"
+    __table_args__ = (
+        CheckConstraint(
+            "content_storage = 'mongodb'",
+            name="ck_uml_diagrams_content_storage",
+        ),
+    )
 
     project_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("projects.id"), index=True
@@ -29,6 +35,9 @@ class UmlDiagram(UuidPrimaryKeyMixin, TimestampMixin, Base):
     current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     description: Mapped[str | None] = mapped_column(Text)
     metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    content_storage: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="mongodb", server_default="mongodb"
+    )
 
     classes: Mapped[list[UmlClass]] = relationship(
         back_populates="diagram", cascade="all, delete-orphan"

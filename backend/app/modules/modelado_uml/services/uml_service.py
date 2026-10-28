@@ -1,20 +1,15 @@
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fastapi import HTTPException, status
 from pydantic import ValidationError
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from app.core.config.settings import settings
 from app.modules.acceso_usuarios.services.audit_service import AuditService
 from app.modules.generacion_software.repositories.generation_repository import GenerationRepository
 from app.modules.modelado_uml.engine.internal_model import (
-    UmlAttributeModel,
-    UmlClassModel,
     UmlDiagramModel,
-    UmlMethodModel,
-    UmlParameterModel,
-    UmlRelationshipModel,
-    UmlVisualModel,
 )
 from app.modules.modelado_uml.engine.text_parser import build_uml_from_text
 from app.modules.modelado_uml.engine.validator import validate_internal_model
@@ -38,7 +33,6 @@ from app.modules.modelado_uml.schemas.uml import (
     UmlAttributeCreateRequest,
     UmlAttributeUpdateRequest,
     UmlClassCreateRequest,
-    UmlClassDetailResponse,
     UmlClassUpdateRequest,
     UmlMethodCreateRequest,
     UmlMethodUpdateRequest,
@@ -49,6 +43,12 @@ from app.modules.modelado_uml.schemas.uml import (
     UmlValidationResponse,
     XmiExportResponse,
     XmiImportRequest,
+)
+from app.modules.modelado_uml.services.active_diagram_store import (
+    ActiveUmlDocumentStore,
+    build_sql_diagram_model,
+    mark_uml_diagram_for_delete,
+    mark_uml_project_for_sync,
 )
 from app.modules.modelado_uml.validators.uml_validator import (
     ensure_class_belongs_to_diagram,
@@ -64,11 +64,19 @@ from app.modules.proyectos_colaboracion.validators.project_validator import ensu
 class UmlService:
     def __init__(self, db: Session) -> None:
         self.db = db
-        self.uml = UmlRepository(db)
+        if settings.nosql_consolidated_mode:
+            from app.modules.modelado_uml.repositories.mongo_uml_repository import (
+                MongoUmlRepository,
+            )
+
+            self.uml = MongoUmlRepository(db)
+        else:
+            self.uml = UmlRepository(db)
         self.generations = GenerationRepository(db)
         self.members = MemberRepository(db)
         self.audit = AuditService(db)
         self.mutations = ProjectMutationGuard(db)
+        self.documents = ActiveUmlDocumentStore()
 
     def create_diagram(self, payload: DiagramCreateRequest, user_id: UUID) -> UmlDiagram:
         ensure_membership(self.members.get_membership(payload.project_id, user_id))
@@ -101,7 +109,7 @@ class UmlService:
             metadata={"diagram_id": str(diagram.id)},
         )
         self.db.commit()
-        self.db.refresh(diagram)
+        self._refresh(diagram)
         return diagram
 
     def list_diagrams(self, project_id: UUID, user_id: UUID) -> list[UmlDiagram]:
@@ -112,6 +120,7 @@ class UmlService:
         diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
         self._begin_mutation(diagram.project_id)
+        mark_uml_diagram_for_delete(self.db, diagram.id)
         self.generations.delete_generation_tree_by_diagram(diagram_id)
         self.uml.delete_visual_elements_by_diagram(diagram_id)
         self.uml.delete_relationships_by_diagram(diagram_id)
@@ -162,7 +171,7 @@ class UmlService:
             metadata={"diagram_id": str(diagram_id), "class_id": str(uml_class.id)},
         )
         self.db.commit()
-        self.db.refresh(uml_class)
+        self._refresh(uml_class)
         return uml_class
 
     def list_classes(self, diagram_id: UUID, user_id: UUID) -> list[UmlClass]:
@@ -173,20 +182,85 @@ class UmlService:
     def get_diagram_model(self, diagram_id: UUID, user_id: UUID) -> DiagramModelResponse:
         diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
-        classes = self.uml.list_classes(diagram_id)
-        visuals = {
-            visual.element_id: visual for visual in self.uml.list_visual_elements(diagram_id)
-        }
-        class_details = [
-            UmlClassDetailResponse.model_validate(uml_class).model_copy(
-                update={"visual": visuals.get(uml_class.id)}
+        model = self._build_internal_model(diagram)
+        class_details = []
+        for item in model.classes:
+            class_id = UUID(item.id) if item.id else uuid5(NAMESPACE_URL, item.name)
+            visual_id = (
+                UUID(item.visual.id)
+                if item.visual.id
+                else uuid5(NAMESPACE_URL, f"visual:{diagram_id}:{class_id}")
             )
-            for uml_class in classes
-        ]
-        return DiagramModelResponse(
-            diagram=diagram,
-            classes=class_details,
-            relationships=self.uml.list_relationships(diagram_id),
+            class_details.append(
+                {
+                    **item.model_dump(exclude={"attributes", "methods", "visual"}),
+                    "id": class_id,
+                    "diagram_id": diagram_id,
+                    "attributes": [
+                        {**attribute.model_dump(), "id": UUID(attribute.id), "class_id": class_id}
+                        for attribute in item.attributes
+                        if attribute.id
+                    ],
+                    "methods": [
+                        {
+                            **method.model_dump(
+                                exclude={"parameters", "specification", "readiness"}
+                            ),
+                            "id": UUID(method.id),
+                            "class_id": class_id,
+                            "parameters": [
+                                {
+                                    **parameter.model_dump(),
+                                    "id": UUID(parameter.id),
+                                    "method_id": UUID(method.id),
+                                }
+                                for parameter in method.parameters
+                                if parameter.id
+                            ],
+                        }
+                        for method in item.methods
+                        if method.id
+                    ],
+                    "visual": {
+                        "id": visual_id,
+                        "diagram_id": diagram_id,
+                        "element_type": "class",
+                        "element_id": class_id,
+                        "position_x": item.visual.x,
+                        "position_y": item.visual.y,
+                        "width": item.visual.width,
+                        "height": item.visual.height,
+                        "style": item.visual.style,
+                    },
+                }
+            )
+        return DiagramModelResponse.model_validate(
+            {
+                "diagram": {
+                    "id": diagram.id,
+                    "project_id": diagram.project_id,
+                    "created_by_user_id": diagram.created_by_user_id,
+                    "name": model.name,
+                    "diagram_type": model.diagram_type,
+                    "status": model.status,
+                    "current_version": model.current_version,
+                    "description": model.description,
+                    "metadata_json": model.metadata_json,
+                    "created_at": diagram.created_at,
+                },
+                "classes": class_details,
+                "relationships": [
+                    {
+                        **item.model_dump(),
+                        "id": UUID(item.id),
+                        "diagram_id": diagram_id,
+                        "source_class_id": UUID(item.source_class_id),
+                        "target_class_id": UUID(item.target_class_id),
+                    }
+                    for item in model.relationships
+                    if item.id
+                ],
+            }
         )
 
     def update_class(
@@ -206,7 +280,7 @@ class UmlService:
             metadata={"class_id": str(class_id)},
         )
         self.db.commit()
-        self.db.refresh(uml_class)
+        self._refresh(uml_class)
         return uml_class
 
     def delete_class(self, class_id: UUID, user_id: UUID) -> None:
@@ -245,7 +319,7 @@ class UmlService:
             metadata={"class_id": str(class_id), "attribute_id": str(attribute.id)},
         )
         self.db.commit()
-        self.db.refresh(attribute)
+        self._refresh(attribute)
         return attribute
 
     def update_attribute(
@@ -255,7 +329,9 @@ class UmlService:
 
         attribute = self.uml.get_attribute(attribute_id)
         if attribute is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Atributo UML no encontrado")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Atributo UML no encontrado"
+            )
         uml_class = ensure_class_exists(self.uml.get_class(attribute.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
@@ -270,7 +346,7 @@ class UmlService:
             metadata={"attribute_id": str(attribute_id), "class_id": str(attribute.class_id)},
         )
         self.db.commit()
-        self.db.refresh(attribute)
+        self._refresh(attribute)
         return attribute
 
     def delete_attribute(self, attribute_id: UUID, user_id: UUID) -> None:
@@ -278,7 +354,9 @@ class UmlService:
 
         attribute = self.uml.get_attribute(attribute_id)
         if attribute is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Atributo UML no encontrado")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Atributo UML no encontrado"
+            )
         uml_class = ensure_class_exists(self.uml.get_class(attribute.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
@@ -309,7 +387,7 @@ class UmlService:
             metadata={"class_id": str(class_id), "method_id": str(method.id)},
         )
         self.db.commit()
-        self.db.refresh(method)
+        self._refresh(method)
         return method
 
     def update_method(
@@ -319,7 +397,9 @@ class UmlService:
 
         method = self.uml.get_method(method_id)
         if method is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Metodo UML no encontrado")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Metodo UML no encontrado"
+            )
         uml_class = ensure_class_exists(self.uml.get_class(method.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
@@ -334,7 +414,7 @@ class UmlService:
             metadata={"method_id": str(method_id), "class_id": str(method.class_id)},
         )
         self.db.commit()
-        self.db.refresh(method)
+        self._refresh(method)
         return method
 
     def delete_method(self, method_id: UUID, user_id: UUID) -> None:
@@ -342,7 +422,9 @@ class UmlService:
 
         method = self.uml.get_method(method_id)
         if method is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Metodo UML no encontrado")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Metodo UML no encontrado"
+            )
         uml_class = ensure_class_exists(self.uml.get_class(method.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
@@ -364,13 +446,17 @@ class UmlService:
         if method is None:
             from fastapi import HTTPException, status
 
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Metodo UML no encontrado")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Metodo UML no encontrado"
+            )
         uml_class = ensure_class_exists(self.uml.get_class(method.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
         self._begin_mutation(diagram.project_id)
         self._validate_parameter(method, payload.name, payload.data_type, payload.default_value)
-        parameter = self.uml.add_parameter(UmlParameter(method_id=method_id, **payload.model_dump()))
+        parameter = self.uml.add_parameter(
+            UmlParameter(method_id=method_id, **payload.model_dump())
+        )
         self.audit.record(
             module="modelado_uml",
             action="CREATE_PARAMETER",
@@ -379,7 +465,7 @@ class UmlService:
             metadata={"method_id": str(method_id), "parameter_id": str(parameter.id)},
         )
         self.db.commit()
-        self.db.refresh(parameter)
+        self._refresh(parameter)
         return parameter
 
     def update_parameter(
@@ -411,7 +497,7 @@ class UmlService:
             metadata={"method_id": str(method.id), "parameter_id": str(parameter.id)},
         )
         self.db.commit()
-        self.db.refresh(parameter)
+        self._refresh(parameter)
         return parameter
 
     def delete_parameter(self, parameter_id: UUID, user_id: UUID) -> None:
@@ -424,7 +510,9 @@ class UmlService:
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
         self._begin_mutation(diagram.project_id)
         specification = self.uml.get_method_specification(method.id)
-        if specification and self._parameter_is_referenced(specification, parameter.id, parameter.name):
+        if specification and self._parameter_is_referenced(
+            specification, parameter.id, parameter.name
+        ):
             raise HTTPException(
                 status_code=409,
                 detail="El parametro esta referenciado por la especificacion funcional",
@@ -452,7 +540,9 @@ class UmlService:
             item.id != exclude_id and item.name.casefold() == name.casefold()
             for item in method.parameters
         ):
-            raise HTTPException(status_code=409, detail="El metodo ya contiene un parametro con ese nombre")
+            raise HTTPException(
+                status_code=409, detail="El metodo ya contiene un parametro con ese nombre"
+            )
         normalized = data_type.casefold()
         if default_value not in {None, ""}:
             compatible = True
@@ -466,7 +556,9 @@ class UmlService:
             except ValueError:
                 compatible = False
             if not compatible:
-                raise HTTPException(status_code=422, detail="El valor por defecto no coincide con el tipo")
+                raise HTTPException(
+                    status_code=422, detail="El valor por defecto no coincide con el tipo"
+                )
 
     @staticmethod
     def _parameter_is_referenced(specification, parameter_id: UUID, name: str) -> bool:
@@ -480,7 +572,11 @@ class UmlService:
                 "frontend_contract": specification.frontend_contract,
             }
         )
-        return str(parameter_id) in serialized or f"'{name}'" in serialized or f'"{name}"' in serialized
+        return (
+            str(parameter_id) in serialized
+            or f"'{name}'" in serialized
+            or f'"{name}"' in serialized
+        )
 
     def create_relationship(
         self, diagram_id: UUID, payload: UmlRelationshipCreateRequest, user_id: UUID
@@ -503,7 +599,7 @@ class UmlService:
             metadata={"relationship_id": str(relationship.id)},
         )
         self.db.commit()
-        self.db.refresh(relationship)
+        self._refresh(relationship)
         return relationship
 
     def update_relationship(
@@ -513,7 +609,9 @@ class UmlService:
         if relationship is None:
             from fastapi import HTTPException, status
 
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Relacion UML no encontrada")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Relacion UML no encontrada"
+            )
         diagram = ensure_diagram_exists(self.uml.get_diagram(relationship.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
         self._begin_mutation(diagram.project_id)
@@ -527,7 +625,7 @@ class UmlService:
             metadata={"relationship_id": str(relationship_id)},
         )
         self.db.commit()
-        self.db.refresh(relationship)
+        self._refresh(relationship)
         return relationship
 
     def delete_relationship(self, relationship_id: UUID, user_id: UUID) -> None:
@@ -535,7 +633,9 @@ class UmlService:
         if relationship is None:
             from fastapi import HTTPException, status
 
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Relacion UML no encontrada")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Relacion UML no encontrada"
+            )
         diagram = ensure_diagram_exists(self.uml.get_diagram(relationship.diagram_id))
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
         self._begin_mutation(diagram.project_id)
@@ -584,7 +684,7 @@ class UmlService:
             metadata={"element_type": payload.element_type, "element_id": str(payload.element_id)},
         )
         self.db.commit()
-        self.db.refresh(visual)
+        self._refresh(visual)
         return visual
 
     def validate_diagram(self, diagram_id: UUID, user_id: UUID) -> UmlValidationResponse:
@@ -652,7 +752,7 @@ class UmlService:
             metadata={"diagram_id": str(diagram.id), "file_name": payload.file_name},
         )
         self.db.commit()
-        self.db.refresh(diagram)
+        self._refresh(diagram)
         return diagram
 
     def import_diagram_xmi_into_existing(
@@ -704,7 +804,7 @@ class UmlService:
             metadata={"diagram_id": str(diagram.id), "file_name": payload.file_name},
         )
         self.db.commit()
-        self.db.refresh(diagram)
+        self._refresh(diagram)
         return diagram
 
     def generate_from_prompt(self, payload: TextToUmlRequest, user_id: UUID) -> UmlDiagram:
@@ -746,7 +846,7 @@ class UmlService:
             metadata={"diagram_id": str(diagram.id), "source_type": payload.source_type},
         )
         self.db.commit()
-        self.db.refresh(diagram)
+        self._refresh(diagram)
         return diagram
 
     def restore_project_snapshot(
@@ -762,7 +862,10 @@ class UmlService:
                 raise ValueError("Todos los diagramas del snapshot deben tener identificador")
             if len(set(desired_ids)) != len(desired_ids):
                 raise ValueError("El snapshot contiene diagramas duplicados")
-            if any(model.project_id and UUID(model.project_id) != project_id for model in snapshot_models):
+            if any(
+                model.project_id and UUID(model.project_id) != project_id
+                for model in snapshot_models
+            ):
                 raise ValueError("El snapshot pertenece a otro proyecto")
         except (TypeError, ValueError, ValidationError) as exc:
             raise HTTPException(
@@ -824,6 +927,11 @@ class UmlService:
     def _begin_mutation(self, project_id: UUID) -> None:
         project = self.mutations.acquire(project_id)
         self.mutations.advance(project)
+        mark_uml_project_for_sync(self.db, project_id)
+
+    def _refresh(self, item) -> None:
+        if not settings.nosql_consolidated_mode or isinstance(item, UmlDiagram):
+            self.db.refresh(item)
 
     def _detach_collaboration_events(self, diagram_id: UUID) -> None:
         self.db.execute(
@@ -833,111 +941,14 @@ class UmlService:
         )
 
     def _build_internal_model(self, diagram: UmlDiagram) -> UmlDiagramModel:
-        visuals = {
-            visual.element_id: visual for visual in self.uml.list_visual_elements(diagram.id)
-        }
-        classes = []
-        for uml_class in self.uml.list_classes(diagram.id):
-            visual = visuals.get(uml_class.id)
-            classes.append(
-                UmlClassModel(
-                    id=str(uml_class.id),
-                    name=uml_class.name,
-                    visibility=uml_class.visibility,
-                    element_type=uml_class.element_type,
-                    stereotype=uml_class.stereotype,
-                    description=uml_class.description,
-                    attributes=[
-                        UmlAttributeModel(
-                            id=str(attribute.id),
-                            name=attribute.name,
-                            data_type=attribute.data_type,
-                            visibility=attribute.visibility,
-                            initial_value=attribute.initial_value,
-                            multiplicity=attribute.multiplicity,
-                            is_required=attribute.is_required,
-                            order_index=attribute.order_index,
-                            constraints=attribute.constraints,
-                        )
-                        for attribute in uml_class.attributes
-                    ],
-                    methods=[
-                        UmlMethodModel(
-                            id=str(method.id),
-                            name=method.name,
-                            return_type=method.return_type,
-                            visibility=method.visibility,
-                            order_index=method.order_index,
-                            metadata_json=method.metadata_json,
-                            specification=(
-                                {
-                                    "description": method.specification.description,
-                                    "operation_kind": method.specification.operation_kind,
-                                    "exposure": method.specification.exposure,
-                                    "preconditions": method.specification.preconditions,
-                                    "postconditions": method.specification.postconditions,
-                                    "business_rules": method.specification.business_rules,
-                                    "validations": method.specification.validations,
-                                    "side_effects": method.specification.side_effects,
-                                    "required_permissions": method.specification.required_permissions,
-                                    "related_entities": method.specification.related_entities,
-                                    "backend_contract": method.specification.backend_contract,
-                                    "frontend_contract": method.specification.frontend_contract,
-                                    "schema_version": method.specification.schema_version,
-                                    "revision": method.specification.revision,
-                                }
-                                if method.specification
-                                else None
-                            ),
-                            parameters=[
-                                UmlParameterModel(
-                                    id=str(parameter.id),
-                                    name=parameter.name,
-                                    data_type=parameter.data_type,
-                                    default_value=parameter.default_value,
-                                    order_index=parameter.order_index,
-                                )
-                                for parameter in method.parameters
-                            ],
-                        )
-                        for method in uml_class.methods
-                    ],
-                    visual=UmlVisualModel(
-                        x=visual.position_x if visual else 0,
-                        y=visual.position_y if visual else 0,
-                        width=visual.width if visual else None,
-                        height=visual.height if visual else None,
-                        style=visual.style if visual else {},
-                    ),
-                    metadata_json=uml_class.metadata_json,
-                )
-            )
-        relationships = [
-            UmlRelationshipModel(
-                id=str(relationship.id),
-                source_class_id=str(relationship.source_class_id),
-                target_class_id=str(relationship.target_class_id),
-                relationship_type=relationship.relationship_type,
-                source_cardinality=relationship.source_cardinality,
-                target_cardinality=relationship.target_cardinality,
-                direction=relationship.direction,
-                label=relationship.label,
-                metadata_json=relationship.metadata_json,
-            )
-            for relationship in self.uml.list_relationships(diagram.id)
-        ]
-        return UmlDiagramModel(
-            id=str(diagram.id),
-            project_id=str(diagram.project_id),
-            name=diagram.name,
-            diagram_type=diagram.diagram_type,
-            status=diagram.status,
-            current_version=diagram.current_version,
-            description=diagram.description,
-            classes=classes,
-            relationships=relationships,
-            metadata_json=diagram.metadata_json,
-        )
+        if settings.nosql_consolidated_mode:
+            return self.uml.model(diagram)
+        return self.documents.model_for(self.db, diagram)
+
+    def _build_sql_internal_model(self, diagram: UmlDiagram) -> UmlDiagramModel:
+        if settings.nosql_consolidated_mode:
+            return self.uml.model(diagram)
+        return build_sql_diagram_model(self.db, diagram)
 
     def _persist_internal_model(
         self,
@@ -993,7 +1004,11 @@ class UmlService:
                 )
             )
             for attribute_model in uml_class_model.attributes:
-                self.uml.add_attribute(UmlAttribute(class_id=uml_class.id, **attribute_model.model_dump(exclude={"id"})))
+                self.uml.add_attribute(
+                    UmlAttribute(
+                        class_id=uml_class.id, **attribute_model.model_dump(exclude={"id"})
+                    )
+                )
             for method_model in uml_class_model.methods:
                 method = self.uml.add_method(
                     UmlMethod(
@@ -1033,7 +1048,9 @@ class UmlService:
                         pass
                 for parameter_model in method_model.parameters:
                     self.uml.add_parameter(
-                        UmlParameter(method_id=method.id, **parameter_model.model_dump(exclude={"id"}))
+                        UmlParameter(
+                            method_id=method.id, **parameter_model.model_dump(exclude={"id"})
+                        )
                     )
         for relationship_model in model.relationships:
             source_id = id_by_external_ref.get(relationship_model.source_class_id)
@@ -1042,7 +1059,9 @@ class UmlService:
                 metadata_json = dict(relationship_model.metadata_json)
                 association_class_id = metadata_json.get("association_class_id")
                 if association_class_id in id_by_external_ref:
-                    metadata_json["association_class_id"] = str(id_by_external_ref[association_class_id])
+                    metadata_json["association_class_id"] = str(
+                        id_by_external_ref[association_class_id]
+                    )
                 self.uml.add_relationship(
                     UmlRelationship(
                         diagram_id=diagram.id,

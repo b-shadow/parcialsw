@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.acceso_usuarios.models import User
 from app.modules.generacion_software.models import CoordinatedGeneration
-from app.modules.modelado_uml.models import UmlClass, UmlDiagram, UmlRelationship
+from app.modules.modelado_uml.models import UmlDiagram
 from app.modules.modelado_uml.services.uml_service import UmlService
 from app.modules.notificaciones.models import Notification
 from app.modules.proyectos_colaboracion.models import ProjectMember
@@ -30,25 +30,32 @@ class MobileReadService:
     def list_projects(self, user_id: UUID) -> list[MobileProjectSummary]:
         summaries: list[MobileProjectSummary] = []
         for project in self.projects.list_for_user(user_id):
-            membership = ensure_membership(
-                self.members.get_membership(project.id, user_id)
+            membership = ensure_membership(self.members.get_membership(project.id, user_id))
+            diagram_count = (
+                self.db.scalar(
+                    select(func.count(UmlDiagram.id)).where(UmlDiagram.project_id == project.id)
+                )
+                or 0
             )
-            diagram_count = self.db.scalar(
-                select(func.count(UmlDiagram.id)).where(UmlDiagram.project_id == project.id)
-            ) or 0
-            member_count = self.db.scalar(
-                select(func.count(ProjectMember.id)).where(
-                    ProjectMember.project_id == project.id
+            member_count = (
+                self.db.scalar(
+                    select(func.count(ProjectMember.id)).where(
+                        ProjectMember.project_id == project.id
+                    )
                 )
-            ) or 0
-            unread_notification_count = self.db.scalar(
-                select(func.count(Notification.id)).where(
-                    Notification.project_id == project.id,
-                    Notification.recipient_user_id == user_id,
-                    Notification.read_at.is_(None),
-                    Notification.archived_at.is_(None),
+                or 0
+            )
+            unread_notification_count = (
+                self.db.scalar(
+                    select(func.count(Notification.id)).where(
+                        Notification.project_id == project.id,
+                        Notification.recipient_user_id == user_id,
+                        Notification.read_at.is_(None),
+                        Notification.archived_at.is_(None),
+                    )
                 )
-            ) or 0
+                or 0
+            )
             summaries.append(
                 MobileProjectSummary(
                     id=project.id,
@@ -69,35 +76,36 @@ class MobileReadService:
         rows = self.db.execute(
             select(
                 UmlDiagram,
-                func.count(func.distinct(UmlClass.id)),
-                func.count(func.distinct(UmlRelationship.id)),
                 User.full_name,
             )
-            .outerjoin(UmlClass, UmlClass.diagram_id == UmlDiagram.id)
-            .outerjoin(UmlRelationship, UmlRelationship.diagram_id == UmlDiagram.id)
             .outerjoin(User, User.id == UmlDiagram.created_by_user_id)
             .where(UmlDiagram.project_id == project_id)
-            .group_by(UmlDiagram.id, User.full_name)
             .order_by(UmlDiagram.updated_at.desc())
         ).all()
-        return [
-            MobileDiagramSummary(
-                id=diagram.id,
-                project_id=diagram.project_id,
-                name=diagram.name,
-                diagram_type=diagram.diagram_type,
-                class_count=class_count,
-                relationship_count=relationship_count,
-                updated_at=diagram.updated_at,
-                updated_by_display_name=display_name,
+        summaries = []
+        uml_service = UmlService(self.db)
+        for diagram, display_name in rows:
+            model = uml_service.get_diagram_model(diagram.id, user_id)
+            summaries.append(
+                MobileDiagramSummary(
+                    id=diagram.id,
+                    project_id=diagram.project_id,
+                    name=diagram.name,
+                    diagram_type=diagram.diagram_type,
+                    class_count=len(model.classes),
+                    relationship_count=len(model.relationships),
+                    updated_at=diagram.updated_at,
+                    updated_by_display_name=display_name,
+                )
             )
-            for diagram, class_count, relationship_count, display_name in rows
-        ]
+        return summaries
 
     def get_diagram(self, diagram_id: UUID, user_id: UUID) -> MobileDiagramDetail:
         diagram = self.db.get(UmlDiagram, diagram_id)
         if diagram is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Diagrama no encontrado")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Diagrama no encontrado"
+            )
         ensure_membership(self.members.get_membership(diagram.project_id, user_id))
         model = UmlService(self.db).get_diagram_model(diagram_id, user_id)
         return MobileDiagramDetail(
@@ -132,4 +140,3 @@ class MobileReadService:
             )
             for item in generations
         ]
-
