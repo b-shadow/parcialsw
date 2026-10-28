@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.modules.proyectos_colaboracion.models import Project, ProjectMember, ProjectPermission
 from app.modules.proyectos_colaboracion.permissions import (
-    PERMISSION_CODES,
     ROLE_DEFAULTS,
     effective_permissions,
 )

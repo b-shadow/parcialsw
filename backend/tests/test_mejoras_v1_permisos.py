@@ -3,34 +3,25 @@
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
+
 import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app.modules.asistente_proyecto.models import AiAction
-from app.modules.asistente_proyecto.services.action_execution_service import AiActionExecutionService
-from app.modules.modelado_uml.models import UmlClass, UmlDiagram
-from app.modules.modelado_uml.schemas.uml import UmlClassCreateRequest
-from app.modules.modelado_uml.services.uml_service import UmlService
-from app.modules.proyectos_colaboracion.models import Project, ProjectMember, ProjectPermission
-from app.modules.proyectos_colaboracion.permissions import (
-    PERMISSION_CODES,
-    ROLE_DEFAULTS,
-    effective_permissions,
+from app.modules.asistente_proyecto.services.action_execution_service import (
+    AiActionExecutionService,
 )
+from app.modules.proyectos_colaboracion.models import Project, ProjectMember, ProjectPermission
 from app.modules.proyectos_colaboracion.schemas.project import (
     AddMemberRequest,
     MyMembershipResponse,
     PermissionRequest,
     UpdateMemberRequest,
-    VersionCreateRequest,
 )
 from app.modules.proyectos_colaboracion.services.project_service import ProjectService
 from app.modules.proyectos_colaboracion.validators.project_validator import (
-    ensure_membership,
-    ensure_organizer,
     ensure_project_permission,
-    member_permissions,
 )
 
 

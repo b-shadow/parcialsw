@@ -1,19 +1,14 @@
 """Pruebas completas del registro de cambios en NoSQL (Redis Streams) y fallback (V1.1)."""
 
-import json
 from uuid import uuid4
+
 import fakeredis
 import pytest
-from fastapi.testclient import TestClient
 
 from app.core.changelog.contracts import PendingChange
-from app.core.changelog.service import ChangeLogService
 from app.core.changelog.hooks import clear_pending_changes, flush_pending_changes, queue_change
-from app.core.changelog.backfill import backfill_project
+from app.core.changelog.service import ChangeLogService
 from app.core.redis.client import redis_key, set_test_client
-from app.main import app
-from app.modules.acceso_usuarios.models import AuditLog, User
-from app.modules.proyectos_colaboracion.models import Project, ProjectMember
 
 
 @pytest.fixture
@@ -59,7 +54,7 @@ def test_queue_and_flush_writes_to_streams(fake_redis_client):
     assert len(p_entries) == 1
     assert len(g_entries) == 1
 
-    entry_id, fields = p_entries[0]
+    _entry_id, fields = p_entries[0]
     assert fields["action"] == "CREATE_CLASS"
     assert fields["summary"] == "Creó la clase Factura"
     assert "secret_pwd" not in fields["metadata"]

@@ -1,6 +1,7 @@
 """Repositorio de base de datos para invitaciones a proyectos (V2.3)."""
 
 from uuid import UUID
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 

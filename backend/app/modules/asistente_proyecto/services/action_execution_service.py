@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.config.settings import settings
 from app.modules.asistente_proyecto.models import AiAction
 from app.modules.asistente_proyecto.repositories.assistant_repository import AssistantRepository
 from app.modules.asistente_proyecto.services.assistant_service import AssistantContractService
@@ -25,7 +26,9 @@ from app.modules.modelado_uml.services.method_specification_service import (
 from app.modules.modelado_uml.services.uml_service import UmlService
 from app.modules.proyectos_colaboracion.schemas.project import VersionCreateRequest
 from app.modules.proyectos_colaboracion.services.project_service import ProjectService
-from app.modules.proyectos_colaboracion.validators.project_validator import ensure_project_permission
+from app.modules.proyectos_colaboracion.validators.project_validator import (
+    ensure_project_permission,
+)
 
 
 class AiActionExecutionService:
@@ -35,12 +38,19 @@ class AiActionExecutionService:
         self.db = db
         self.repository = AssistantRepository(db)
         self.contracts = AssistantContractService(db)
-        self.uml_repository = UmlRepository(db)
+        if settings.nosql_consolidated_mode:
+            from app.modules.modelado_uml.repositories.mongo_uml_repository import (
+                MongoUmlRepository,
+            )
+
+            self.uml_repository = MongoUmlRepository(db)
+        else:
+            self.uml_repository = UmlRepository(db)
         self.uml = UmlService(db)
 
     def confirm(self, project_id: UUID, action_id: UUID, user_id: UUID) -> tuple[AiAction, bool]:
         ensure_project_permission(self.db, project_id, user_id, "ai.confirm_actions")
-        project, member = self.contracts._project_and_member(project_id, user_id)
+        _project, _member = self.contracts._project_and_member(project_id, user_id)
         action = self.repository.get_action(project_id, action_id, for_update=True)
         if action is None:
             raise HTTPException(status_code=404, detail="Accion de IA no encontrada")

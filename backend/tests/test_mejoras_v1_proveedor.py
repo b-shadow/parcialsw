@@ -5,15 +5,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
-import pytest
-
-from ai_engine.context import ActorContext, AiProjectContext, ProjectContext
-from ai_engine.orchestration.contracts import UnifiedAiResult
 from ai_engine.providers.gemini_provider import GeminiProvider
+
 from app.core.config.settings import settings
 from app.modules.asistente_proyecto.models import AiProjectSettings
 from app.modules.asistente_proyecto.schemas.assistant import (
-    AiInteractionRequest,
     AiProjectSettingsUpdate,
 )
 from app.modules.asistente_proyecto.services.assistant_service import AssistantContractService

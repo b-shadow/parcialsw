@@ -33,6 +33,7 @@ class AiMessage(UuidPrimaryKeyMixin, TimestampMixin, Base):
         ),
         Index("ix_ai_messages_project_sequence", "project_id", "sequence_number"),
         Index("ix_ai_messages_correlation_id", "correlation_id"),
+        Index("ix_ai_messages_created_id", "created_at", "id"),
     )
 
     conversation_id: Mapped[UUID] = mapped_column(

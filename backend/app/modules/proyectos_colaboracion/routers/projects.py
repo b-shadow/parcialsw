@@ -182,15 +182,22 @@ async def create_version(
     version = ProjectService(db).create_version(
         project_id, payload, current_user.id, idempotency_key
     )
-    await manager.broadcast(str(project_id), {
-        "protocol_version": 2, "type": "PROJECT_VERSION_CREATED",
-        "event_id": str(version.id), "project_id": str(project_id),
-        "sequence_number": 0, "conversation_sequence": 0,
-        "correlation_id": str(version.id), "occurred_at": version.created_at.isoformat(),
-        "persistent": True,
-        "actor": {"user_id": str(current_user.id), "display_name": current_user.full_name},
-        "payload": {"version_id": str(version.id), "version_number": version.version_number},
-    })
+    await manager.broadcast(
+        str(project_id),
+        {
+            "protocol_version": 2,
+            "type": "PROJECT_VERSION_CREATED",
+            "event_id": str(version.id),
+            "project_id": str(project_id),
+            "sequence_number": 0,
+            "conversation_sequence": 0,
+            "correlation_id": str(version.id),
+            "occurred_at": version.created_at.isoformat(),
+            "persistent": True,
+            "actor": {"user_id": str(current_user.id), "display_name": current_user.full_name},
+            "payload": {"version_id": str(version.id), "version_number": version.version_number},
+        },
+    )
     return version
 
 
@@ -207,13 +214,13 @@ def list_versions(
     "/{project_id}/versions/{version_id}/restore-preview",
     response_model=RestorePreviewResponse,
 )
-def restore_preview(
+async def restore_preview(
     project_id: UUID,
     version_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> dict:
-    return ProjectService(db).restore_preview(project_id, version_id, current_user.id)
+    return await ProjectService(db).restore_preview(project_id, version_id, current_user.id)
 
 
 @router.post(
@@ -228,9 +235,12 @@ async def restore_version(
     db: Annotated[Session, Depends(get_db)],
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
 ) -> dict:
-    result = ProjectService(db).restore_version(
-        project_id, version_id, current_user.id,
-        idempotency_key=idempotency_key, payload=payload,
+    result = await ProjectService(db).restore_version(
+        project_id,
+        version_id,
+        current_user.id,
+        idempotency_key=idempotency_key,
+        payload=payload,
     )
     if result["idempotent_replay"]:
         return result
@@ -256,16 +266,25 @@ async def restore_version(
             },
         },
     )
-    await manager.broadcast(str(project_id), {
-        "protocol_version": 2, "type": "PROJECT_STATE_INVALIDATED",
-        "event_id": str(uuid4()), "project_id": str(project_id),
-        "sequence_number": result["event_sequence"] or 0, "conversation_sequence": 0,
-        "correlation_id": str(result["restore_operation_id"]),
-        "occurred_at": datetime.now(UTC).isoformat(),
-        "persistent": False,
-        "actor": {"user_id": str(current_user.id), "display_name": current_user.full_name},
-        "payload": {"project_revision": result["project_revision"], "reason": "version_restored"},
-    })
+    await manager.broadcast(
+        str(project_id),
+        {
+            "protocol_version": 2,
+            "type": "PROJECT_STATE_INVALIDATED",
+            "event_id": str(uuid4()),
+            "project_id": str(project_id),
+            "sequence_number": result["event_sequence"] or 0,
+            "conversation_sequence": 0,
+            "correlation_id": str(result["restore_operation_id"]),
+            "occurred_at": datetime.now(UTC).isoformat(),
+            "persistent": False,
+            "actor": {"user_id": str(current_user.id), "display_name": current_user.full_name},
+            "payload": {
+                "project_revision": result["project_revision"],
+                "reason": "version_restored",
+            },
+        },
+    )
     return result
 
 
@@ -279,8 +298,11 @@ def list_activity(
     type: Annotated[list[str] | None, Query()] = None,
 ) -> dict:
     return ProjectService(db).list_activity(
-        project_id, current_user.id, before_sequence=before_sequence,
-        limit=limit, event_types=set(type or []),
+        project_id,
+        current_user.id,
+        before_sequence=before_sequence,
+        limit=limit,
+        event_types=set(type or []),
     )
 
 
@@ -292,6 +314,4 @@ def list_changes(
     limit: int = 100,
     after_sequence: int | None = None,
 ) -> list[dict]:
-    return ProjectService(db).list_changes(
-        project_id, current_user.id, limit, after_sequence
-    )
+    return ProjectService(db).list_changes(project_id, current_user.id, limit, after_sequence)

@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, Index, String, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -11,6 +11,15 @@ from app.core.database.session import Base
 
 class ProjectInvitation(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "project_invitations"
+    __table_args__ = (
+        Index(
+            "uq_project_invitations_pending",
+            "project_id",
+            text("lower(invited_email)"),
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
 
     project_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("projects.id"), index=True

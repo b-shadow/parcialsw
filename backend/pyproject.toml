@@ -21,6 +21,7 @@ dependencies = [
   "opencv-python-headless>=4.10.0",
   "pillow>=10.0.0",
   "pytesseract>=0.3.13",
+  "pymongo>=4.11.0,<5.0.0",
   "pywebpush>=2.0.3,<3.0.0",
   "redis>=5.0,<7"
 ]
@@ -45,6 +46,15 @@ exclude = ["migrations*"]
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.lint.per-file-ignores]
+# Estos adaptadores son fronteras de tolerancia a fallos: Redis, WebSocket y
+# enriquecimientos opcionales nunca deben interrumpir la transaccion principal.
+"app/core/changelog/*.py" = ["BLE001", "S110"]
+"app/core/redis/client.py" = ["BLE001"]
+"app/modules/acceso_usuarios/services/audit_service.py" = ["BLE001", "S110"]
+"app/modules/asistente_proyecto/services/context_builder.py" = ["BLE001"]
+"app/modules/asistente_proyecto/services/proactive_advisor_service.py" = ["BLE001", "S110"]
+"app/modules/proyectos_colaboracion/validators/project_validator.py" = ["BLE001", "S110"]
+
 [tool.pytest.ini_options]
 pythonpath = ["../ai-engine"]
-addopts = "--basetemp=C:/Users/joseg_iog5jdg/AppData/Local/Temp/p"

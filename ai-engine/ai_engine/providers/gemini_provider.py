@@ -5,7 +5,6 @@ import time
 from typing import Any
 
 import httpx
-from pydantic import BaseModel
 
 from ai_engine.orchestration.response_validator import StructuredOutputValidator
 from ai_engine.providers.base import (
@@ -16,7 +15,6 @@ from ai_engine.providers.base import (
 )
 from ai_engine.providers.errors import (
     InvalidStructuredOutputError,
-    ProviderProtocolError,
     ProviderTimeoutError,
     ProviderUnavailableError,
 )
@@ -215,7 +213,7 @@ class GeminiProvider:
 
             try:
                 data = response.json()
-            except (json.JSONDecodeError, ValueError) as exc:
+            except (json.JSONDecodeError, ValueError):
                 last_error = "Respuesta no es JSON válido"
                 continue
 

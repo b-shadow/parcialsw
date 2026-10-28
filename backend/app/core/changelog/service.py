@@ -2,20 +2,20 @@
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config.settings import settings
-from app.core.redis.client import get_redis, redis_key, redis_status
 from app.core.changelog.contracts import (
     ChangeLogEntry,
     ChangeLogPage,
     PendingChange,
     build_summary,
 )
+from app.core.config.settings import settings
+from app.core.redis.client import get_redis, redis_key, redis_status
 from app.modules.acceso_usuarios.models import AuditLog, User
 from app.modules.acceso_usuarios.services.audit_service import sanitize_audit_metadata
 
@@ -44,7 +44,7 @@ class ChangeLogService:
 
                 payload = {
                     "project_id": str(change.project_id),
-                    "occurred_at": datetime.now(timezone.utc).isoformat(),
+                    "occurred_at": datetime.now(UTC).isoformat(),
                     "actor_user_id": str(change.actor_user_id) if change.actor_user_id else "",
                     "source": change.source,
                     "module": change.module,

@@ -32,5 +32,5 @@ async def start_background_workers(app: FastAPI) -> AsyncIterator[None]:
             stop_event.set()
             try:
                 await asyncio.wait_for(worker_task, timeout=5.0)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
+            except (TimeoutError, asyncio.CancelledError):
                 worker_task.cancel()

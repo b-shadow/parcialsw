@@ -9,27 +9,26 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
+from ai_engine.orchestration.contracts import PlannedRecommendation
 from fastapi import HTTPException
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ai_engine.orchestration.contracts import PlannedRecommendation
 from app.core.changelog.contracts import ChangeLogEntry
 from app.core.config.settings import settings
 from app.core.database.session import SessionLocal
 from app.core.redis.client import get_redis, redis_key
-from app.modules.asistente_proyecto.models import AiMessage, AiRecommendation
+from app.modules.asistente_proyecto.models import AiRecommendation
 from app.modules.asistente_proyecto.schemas.assistant import AiMessageCreateInternal
 from app.modules.asistente_proyecto.services.assistant_service import AssistantContractService
 from app.modules.asistente_proyecto.services.event_publisher import ProjectAiEventPublisher
+from app.modules.modelado_uml.engine.internal_model import UmlDiagramModel
 from app.modules.modelado_uml.engine.validator import validate_internal_model
 from app.modules.modelado_uml.repositories.uml_repository import UmlRepository
 from app.modules.modelado_uml.services.uml_service import UmlService
-from app.modules.proyectos_colaboracion.models import Project
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +38,13 @@ _MEMORY_COOLDOWN: dict[str, float] = {}
 
 
 class ProactiveAdvisorService:
-    def __init__(self, db_factory=SessionLocal) -> None:
+    def __init__(
+        self,
+        db_factory=SessionLocal,
+        diagram_model_loader: Callable[[Session, UUID], UmlDiagramModel] | None = None,
+    ) -> None:
         self.db_factory = db_factory
+        self.diagram_model_loader = diagram_model_loader
 
     async def on_change(self, entry: ChangeLogEntry) -> None:
         if not settings.ai_proactive_enabled:
@@ -156,8 +160,11 @@ class ProactiveAdvisorService:
         if not diagram:
             return []
 
-        uml_service = UmlService(db)
-        model = uml_service._build_internal_model(diagram)
+        model = (
+            self.diagram_model_loader(db, diagram_id)
+            if self.diagram_model_loader is not None
+            else UmlService(db)._build_internal_model(diagram)
+        )
         errors, warnings, recs = validate_internal_model(model)
 
         findings: list[PlannedRecommendation] = []

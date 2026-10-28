@@ -45,4 +45,3 @@ La plataforma CASE Inteligente integra la Inteligencia Artificial como un **desa
 - **Historial de Actividad del Equipo**: `ContextBuilder` agrupa las últimas 50 entradas de Redis Streams (o PostgreSQL fallback) por actor en `TeamActivityItem`, limitando a 10 acciones por persona y preservando el presupuesto `ContextBudget`.
 - **Clasificación de Intención `coordinate_team`**: Expresiones como «¿Qué hizo cada uno?», «quién modificó el modelo», «resumen del equipo» u «organiza el trabajo» se clasifican con confianza 0.9.
 - **Moderación y Coordinación**: `RuleEngineProvider` responde detallando la actividad reciente de cada persona y, si dos o más integrantes editaron la misma clase, emite una sugerencia proactiva de coordinación y reparto de tareas para prevenir sobreescrituras concurrentes.
-

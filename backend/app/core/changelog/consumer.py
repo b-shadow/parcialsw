@@ -9,11 +9,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from app.core.changelog.contracts import ChangeLogEntry
-from app.core.config.settings import settings
 from app.core.database.session import SessionLocal
 from app.core.redis.client import get_redis, redis_key
 from app.modules.acceso_usuarios.repositories.user_repository import UserRepository
@@ -68,8 +67,7 @@ class ChangeLogConsumer:
         try:
             occurred = datetime.fromisoformat(occurred_str)
         except Exception:
-            from datetime import timezone
-            occurred = datetime.now(timezone.utc)
+            occurred = datetime.now(UTC)
 
         actor_str = get_val("actor_user_id")
         actor_id = UUID(actor_str) if actor_str else None
@@ -175,8 +173,8 @@ class ChangeLogConsumer:
                             await asyncio.to_thread(
                                 client.xack, global_stream, CONSUMER_GROUP, msg_id
                             )
-                        except Exception as item_err:
-                            logger.exception("Error procesando entrada %s: %s", msg_id, item_err)
+                        except Exception:
+                            logger.exception("Error procesando entrada %s", msg_id)
 
             except Exception as stream_err:
                 if stop.is_set():

@@ -1,6 +1,6 @@
 """Pruebas de la IA consciente del equipo y coordinación de integrantes (V2.2)."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from ai_engine.context.contracts import (
@@ -60,13 +60,13 @@ def test_rule_engine_names_both_members_and_their_actions() -> None:
             user_id=uuid4(),
             display_name="Ana",
             actions=["creó Producto y Categoria", "relacionó Producto con Categoria"],
-            last_at=datetime.now(timezone.utc),
+            last_at=datetime.now(UTC),
         ),
         TeamActivityItem(
             user_id=uuid4(),
             display_name="Beto",
             actions=["creó Factura", "agregó atributo total"],
-            last_at=datetime.now(timezone.utc),
+            last_at=datetime.now(UTC),
         ),
     ]
 
@@ -88,13 +88,13 @@ def test_two_members_touching_same_class_suggests_coordination() -> None:
             user_id=uuid4(),
             display_name="Ana",
             actions=["creó Producto y Categoria"],
-            last_at=datetime.now(timezone.utc),
+            last_at=datetime.now(UTC),
         ),
         TeamActivityItem(
             user_id=uuid4(),
             display_name="Beto",
             actions=["modificó Producto y agregó precio"],
-            last_at=datetime.now(timezone.utc),
+            last_at=datetime.now(UTC),
         ),
     ]
 

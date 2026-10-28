@@ -1275,7 +1275,7 @@ export function UmlEditorPage() {
                       ["class", isCreatingClass ? "Creando" : "Clase", Square],
                       ["association", "Asociacion", ArrowUpRight],
                       ["inheritance", "Generalize", GitBranch],
-                      ["associationClass", "Assoc. Class", Table2],
+                      ["associationClass", "Association Class", Table2],
                       ["composition", "Compose", Diamond],
                       ["aggregation", "Aggregate", Diamond],
                       ["dependency", "Dependencia", ArrowUpRight],
@@ -1286,7 +1286,10 @@ export function UmlEditorPage() {
                         <button
                           aria-label={label}
                           className={cn(
-                            "flex min-h-[72px] min-w-0 flex-col items-center justify-center gap-2 rounded-md border px-1 py-2 text-center text-[11px] font-semibold leading-3 transition col-span-2",
+                            "flex min-h-[72px] min-w-0 flex-col items-center justify-center gap-2 rounded-md border px-1 py-2 text-center text-[11px] font-semibold leading-3 transition",
+                            ["select", "class", "composition", "aggregation", "dependency", "realization"].includes(tool)
+                              ? "col-span-3"
+                              : "col-span-2",
                             active
                               ? "border-teal-500 bg-teal-50 text-teal-800 shadow-sm dark:border-teal-400 dark:bg-teal-500/15 dark:text-teal-200"
                               : "border-slate-200 bg-white text-slate-700 hover:border-teal-300 hover:bg-teal-50/60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-teal-700 dark:hover:bg-teal-950/30"

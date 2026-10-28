@@ -1,8 +1,10 @@
 """Hooks de SQLAlchemy para captura de eventos del registro de cambios (NoSQL/Redis)."""
 
 import logging
+
 from sqlalchemy import event
 from sqlalchemy.orm import Session
+
 from app.core.changelog.contracts import PendingChange
 
 logger = logging.getLogger(__name__)

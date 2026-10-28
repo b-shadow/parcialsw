@@ -1,0 +1,8 @@
+title = "CASE Inteligente gitleaks configuration"
+
+[allowlist]
+description = "Valores ficticios usados exclusivamente por pruebas automatizadas"
+regexes = [
+  '''diagram-upsert-1''',
+  '''secret-api-key-123''',
+]

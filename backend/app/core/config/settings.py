@@ -8,7 +8,43 @@ class Settings(BaseSettings):
     app_name: str = "Plataforma CASE Inteligente"
     app_env: str = "development"
     api_prefix: str = "/api/v1"
-    database_url: str = "postgresql+psycopg://case_user:case_password@localhost:5433/case_inteligente"
+    database_url: str = (
+        "postgresql+psycopg://case_user:case_password@localhost:5433/case_inteligente"
+    )
+    mongodb_uri: str = "mongodb://case_user:case_password@localhost:27018/?authSource=admin"
+    mongodb_database: str = Field(default="case_inteligente_nosql", min_length=1)
+    mongodb_enabled: bool = True
+    mongodb_required: bool = True
+    mongodb_connect_timeout_ms: int = Field(default=3000, ge=100, le=60000)
+    mongodb_server_selection_timeout_ms: int = Field(default=3000, ge=100, le=60000)
+    mongodb_outbox_batch_size: int = Field(default=50, ge=1, le=500)
+    mongodb_outbox_max_attempts: int = Field(default=8, ge=1, le=100)
+    ai_messages_mongodb_read_enabled: bool = True
+    ai_messages_sql_fallback_enabled: bool = False
+    ai_messages_compare_reads: bool = False
+    ai_messages_migration_batch_size: int = Field(default=200, ge=10, le=2000)
+    ai_messages_migration_required: bool = False
+    uml_versions_mongodb_read_enabled: bool = True
+    uml_versions_sql_fallback_enabled: bool = False
+    uml_versions_compare_reads: bool = False
+    uml_versions_migration_batch_size: int = Field(default=200, ge=10, le=2000)
+    uml_versions_migration_required: bool = False
+    uml_diagrams_mongodb_read_enabled: bool = True
+    uml_diagrams_sql_fallback_enabled: bool = False
+    uml_diagrams_compare_reads: bool = False
+    uml_diagrams_dual_write_enabled: bool = False
+    uml_diagrams_migration_batch_size: int = Field(default=100, ge=10, le=1000)
+    uml_diagrams_migration_required: bool = False
+    nosql_reconciliation_interval_seconds: int = Field(default=300, ge=30, le=86400)
+    nosql_reconciliation_required: bool = False
+    nosql_reconciliation_max_age_seconds: int = Field(default=900, ge=60, le=86400)
+    nosql_alert_pending_outbox: int = Field(default=100, ge=0)
+    nosql_alert_dead_outbox: int = Field(default=1, ge=0)
+    nosql_alert_max_document_bytes: int = Field(default=12_000_000, ge=1024)
+    nosql_alert_max_revision_lag: int = Field(default=0, ge=0)
+    nosql_backup_path: str = "../storage/backups"
+    phase14_consolidation_required: bool = False
+    nosql_consolidated_mode: bool = True
     jwt_secret_key: str = "change-me-in-development"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60

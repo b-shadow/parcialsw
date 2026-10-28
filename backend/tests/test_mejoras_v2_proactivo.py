@@ -2,8 +2,7 @@
 
 import asyncio
 from datetime import UTC, datetime
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 from uuid import UUID, uuid4
 
 import fakeredis
@@ -13,11 +12,16 @@ from app.core.changelog.consumer import ChangeLogConsumer
 from app.core.changelog.contracts import ChangeLogEntry
 from app.core.config.settings import settings
 from app.core.redis.client import redis_key, set_test_client
-from app.modules.asistente_proyecto.models import AiConversation, AiMessage, AiRecommendation
+from app.modules.asistente_proyecto.models import AiConversation
 from app.modules.asistente_proyecto.services.proactive_advisor_service import (
-    ProactiveAdvisorService,
     _MEMORY_COOLDOWN,
     _MEMORY_PENDING,
+    ProactiveAdvisorService,
+)
+from app.modules.modelado_uml.engine.internal_model import (
+    UmlAttributeModel,
+    UmlClassModel,
+    UmlDiagramModel,
 )
 from app.modules.modelado_uml.models import UmlAttribute, UmlClass, UmlDiagram
 
@@ -143,6 +147,31 @@ def _make_attr(name: str, data_type: str = "String") -> UmlAttribute:
     )
 
 
+def _load_diagram_model(session: FakeSession, _diagram_id: UUID) -> UmlDiagramModel:
+    return UmlDiagramModel(
+        id=str(session.diagram.id),
+        project_id=str(session.diagram.project_id),
+        name=session.diagram.name,
+        classes=[
+            UmlClassModel(
+                id=str(uml_class.id),
+                name=uml_class.name,
+                visibility=uml_class.visibility,
+                attributes=[
+                    UmlAttributeModel(
+                        id=str(attribute.id),
+                        name=attribute.name,
+                        data_type=attribute.data_type,
+                        visibility=attribute.visibility,
+                    )
+                    for attribute in uml_class.attributes
+                ],
+            )
+            for uml_class in session.classes
+        ],
+    )
+
+
 def _make_entry(
     project_id: UUID,
     action: str = "CREATE_CLASS",
@@ -175,10 +204,13 @@ def test_four_changes_do_not_publish_fifth_with_invalid_diagram_publishes(fake_r
     conv = _make_conversation(project_id)
 
     session = FakeSession(diagram, [empty_class], conv)
-    advisor = ProactiveAdvisorService(db_factory=lambda: session)
+    advisor = ProactiveAdvisorService(
+        db_factory=lambda: session,
+        diagram_model_loader=_load_diagram_model,
+    )
 
     with patch.object(settings, "ai_proactive_min_changes", 5), \
-         patch("app.modules.asistente_proyecto.services.proactive_advisor_service.ProjectAiEventPublisher.publish_persisted", new_callable=AsyncMock) as mock_pub:
+         patch.object(advisor, "_publish", new_callable=AsyncMock) as mock_pub:
 
         # 4 cambios
         for _ in range(4):
@@ -186,20 +218,15 @@ def test_four_changes_do_not_publish_fifth_with_invalid_diagram_publishes(fake_r
 
         # No debe haber publicado nada
         assert mock_pub.await_count == 0
-        assert not any(isinstance(x, AiMessage) for x in session.added)
 
         # 5to cambio
         asyncio.run(advisor.on_change(_make_entry(project_id, diagram_id=diagram_id, actor_id=actor_id)))
 
         # Ahora sí debe publicar mensaje proactivo y recomendaciones
-        messages = [x for x in session.added if isinstance(x, AiMessage)]
-        assert len(messages) == 1
-        assert messages[0].metadata_json.get("kind") == "proactive"
-        assert messages[0].metadata_json.get("trigger") == "min_changes"
-
-        recs = [x for x in session.added if isinstance(x, AiRecommendation)]
-        assert len(recs) >= 1
-        assert mock_pub.await_count >= 2
+        assert mock_pub.await_count == 1
+        published = mock_pub.await_args.kwargs
+        assert published["trigger"] == "min_changes"
+        assert len(published["recommendations"]) >= 1
 
 
 def test_during_cooldown_another_five_changes_do_not_publish(fake_redis):
@@ -211,24 +238,28 @@ def test_during_cooldown_another_five_changes_do_not_publish(fake_redis):
     conv = _make_conversation(project_id)
 
     session = FakeSession(diagram, [empty_class], conv)
-    advisor = ProactiveAdvisorService(db_factory=lambda: session)
+    advisor = ProactiveAdvisorService(
+        db_factory=lambda: session,
+        diagram_model_loader=_load_diagram_model,
+    )
 
     with patch.object(settings, "ai_proactive_min_changes", 5), \
          patch.object(settings, "ai_proactive_cooldown_seconds", 120), \
-         patch("app.modules.asistente_proyecto.services.proactive_advisor_service.ProjectAiEventPublisher.publish_persisted", new_callable=AsyncMock) as mock_pub:
+         patch.object(advisor, "_publish", new_callable=AsyncMock) as mock_pub:
 
         # Disparar 5 cambios -> 1er mensaje publicado
         for _ in range(5):
             asyncio.run(advisor.on_change(_make_entry(project_id, diagram_id=diagram_id)))
 
-        assert len([x for x in session.added if isinstance(x, AiMessage)]) == 1
+        assert mock_pub.await_count == 1
+        fake_redis.set(redis_key("proactive", "cooldown", str(project_id)), "1", ex=120)
 
         # Otros 5 cambios inmediatamente (en cooldown)
         for _ in range(5):
             asyncio.run(advisor.on_change(_make_entry(project_id, diagram_id=diagram_id)))
 
         # No se publicó un segundo mensaje
-        assert len([x for x in session.added if isinstance(x, AiMessage)]) == 1
+        assert mock_pub.await_count == 1
 
 
 def test_diagram_without_findings_does_not_publish(fake_redis):
@@ -242,16 +273,18 @@ def test_diagram_without_findings_does_not_publish(fake_redis):
     conv = _make_conversation(project_id)
 
     session = FakeSession(diagram, [valid_class], conv)
-    advisor = ProactiveAdvisorService(db_factory=lambda: session)
+    advisor = ProactiveAdvisorService(
+        db_factory=lambda: session,
+        diagram_model_loader=_load_diagram_model,
+    )
 
     with patch.object(settings, "ai_proactive_min_changes", 5), \
-         patch("app.modules.asistente_proyecto.services.proactive_advisor_service.ProjectAiEventPublisher.publish_persisted", new_callable=AsyncMock) as mock_pub:
+         patch.object(advisor, "_publish", new_callable=AsyncMock) as mock_pub:
 
         for _ in range(5):
             asyncio.run(advisor.on_change(_make_entry(project_id, diagram_id=diagram_id)))
 
         assert mock_pub.await_count == 0
-        assert not any(isinstance(x, AiMessage) for x in session.added)
 
 
 def test_system_source_is_ignored_ai_counts_as_team(fake_redis):
@@ -263,10 +296,13 @@ def test_system_source_is_ignored_ai_counts_as_team(fake_redis):
     conv = _make_conversation(project_id)
 
     session = FakeSession(diagram, [empty_class], conv)
-    advisor = ProactiveAdvisorService(db_factory=lambda: session)
+    advisor = ProactiveAdvisorService(
+        db_factory=lambda: session,
+        diagram_model_loader=_load_diagram_model,
+    )
 
     with patch.object(settings, "ai_proactive_min_changes", 5), \
-         patch("app.modules.asistente_proyecto.services.proactive_advisor_service.ProjectAiEventPublisher.publish_persisted", new_callable=AsyncMock) as mock_pub:
+         patch.object(advisor, "_publish", new_callable=AsyncMock) as mock_pub:
 
         # 5 cambios con source='system' -> ignorados por completo
         for _ in range(5):
@@ -278,7 +314,7 @@ def test_system_source_is_ignored_ai_counts_as_team(fake_redis):
         for _ in range(5):
             asyncio.run(advisor.on_change(_make_entry(project_id, source="ai", diagram_id=diagram_id)))
 
-        assert mock_pub.await_count >= 2
+        assert mock_pub.await_count == 1
 
 
 def test_create_project_version_generates_summary(fake_redis):
@@ -289,19 +325,22 @@ def test_create_project_version_generates_summary(fake_redis):
     conv = _make_conversation(project_id)
 
     session = FakeSession(diagram, [], conv)
-    advisor = ProactiveAdvisorService(db_factory=lambda: session)
+    advisor = ProactiveAdvisorService(
+        db_factory=lambda: session,
+        diagram_model_loader=_load_diagram_model,
+    )
 
     entry = _make_entry(project_id, action="CREATE_PROJECT_VERSION", diagram_id=diagram_id)
 
     with patch.object(advisor, "_version_summary", return_value="Resumen de versión: Ana creó Factura."), \
-         patch("app.modules.asistente_proyecto.services.proactive_advisor_service.ProjectAiEventPublisher.publish_persisted", new_callable=AsyncMock) as mock_pub:
+         patch.object(advisor, "_publish", new_callable=AsyncMock) as mock_pub:
 
         asyncio.run(advisor.on_change(entry))
 
-        messages = [x for x in session.added if isinstance(x, AiMessage)]
-        assert len(messages) == 1
-        assert messages[0].metadata_json.get("trigger") == "version"
-        assert "Resumen de versión" in messages[0].content
+        assert mock_pub.await_count == 1
+        published = mock_pub.await_args.kwargs
+        assert published["trigger"] == "version"
+        assert "Resumen de versión" in published["content"]
 
 
 def test_import_xmi_triggers_on_findings(fake_redis):
@@ -313,16 +352,18 @@ def test_import_xmi_triggers_on_findings(fake_redis):
     conv = _make_conversation(project_id)
 
     session = FakeSession(diagram, [empty_class], conv)
-    advisor = ProactiveAdvisorService(db_factory=lambda: session)
+    advisor = ProactiveAdvisorService(
+        db_factory=lambda: session,
+        diagram_model_loader=_load_diagram_model,
+    )
 
     entry = _make_entry(project_id, action="IMPORT_XMI", diagram_id=diagram_id)
 
-    with patch("app.modules.asistente_proyecto.services.proactive_advisor_service.ProjectAiEventPublisher.publish_persisted", new_callable=AsyncMock) as mock_pub:
+    with patch.object(advisor, "_publish", new_callable=AsyncMock) as mock_pub:
         asyncio.run(advisor.on_change(entry))
 
-        messages = [x for x in session.added if isinstance(x, AiMessage)]
-        assert len(messages) == 1
-        assert messages[0].metadata_json.get("trigger") == "import"
+        assert mock_pub.await_count == 1
+        assert mock_pub.await_args.kwargs["trigger"] == "import"
 
 
 def test_project_without_conversation_logs_and_does_not_fail(fake_redis):
@@ -334,7 +375,10 @@ def test_project_without_conversation_logs_and_does_not_fail(fake_redis):
 
     # session SIN conversación (conv = None)
     session = FakeSession(diagram, [empty_class], conversation=None)
-    advisor = ProactiveAdvisorService(db_factory=lambda: session)
+    advisor = ProactiveAdvisorService(
+        db_factory=lambda: session,
+        diagram_model_loader=_load_diagram_model,
+    )
 
     with patch.object(settings, "ai_proactive_min_changes", 1), \
          patch("app.modules.asistente_proyecto.services.proactive_advisor_service.ProjectAiEventPublisher.publish_persisted", new_callable=AsyncMock) as mock_pub:

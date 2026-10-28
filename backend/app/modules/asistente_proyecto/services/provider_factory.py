@@ -63,7 +63,7 @@ async def select_provider(
     preferred: str, requested_model: str = ""
 ) -> tuple[AiProvider | None, str]:
     """Select the AI provider and resolve the model name.
-    
+
     Returns (provider, model_name). If provider is None, caller should use RuleEngine.
     """
     if preferred == "gemini":

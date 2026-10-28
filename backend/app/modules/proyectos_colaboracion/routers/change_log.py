@@ -6,10 +6,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.core.database.session import get_db
-from app.core.security.dependencies import get_current_user
 from app.core.changelog.contracts import ChangeLogPage
 from app.core.changelog.service import ChangeLogService
+from app.core.database.session import get_db
+from app.core.security.dependencies import get_current_user
 from app.modules.acceso_usuarios.models import User
 from app.modules.proyectos_colaboracion.repositories.member_repository import MemberRepository
 from app.modules.proyectos_colaboracion.validators.project_validator import ensure_membership

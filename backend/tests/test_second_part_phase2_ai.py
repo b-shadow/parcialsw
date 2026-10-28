@@ -1,6 +1,6 @@
-from uuid import uuid4
 from types import SimpleNamespace
 from unittest.mock import Mock
+from uuid import uuid4
 
 import pytest
 from ai_engine.providers.base import ProviderHealth
@@ -10,17 +10,17 @@ from pydantic import ValidationError
 from sqlalchemy import UniqueConstraint
 
 from app.main import app
+from app.modules.asistente_proyecto.models import AiConversation
 from app.modules.asistente_proyecto.schemas.assistant import (
     AiConversationCreate,
     AiInteractionRequest,
     AiProviderHealthResponse,
 )
-from app.modules.asistente_proyecto.models import AiConversation
-from app.modules.asistente_proyecto.services.provider_factory import resolve_ollama_model
+from app.modules.asistente_proyecto.services.assistant_service import AssistantContractService
 from app.modules.asistente_proyecto.services.project_ai_application_service import (
     ProjectAiApplicationService,
 )
-from app.modules.asistente_proyecto.services.assistant_service import AssistantContractService
+from app.modules.asistente_proyecto.services.provider_factory import resolve_ollama_model
 
 
 def test_phase2_openapi_contracts_are_registered() -> None:
@@ -31,18 +31,14 @@ def test_phase2_openapi_contracts_are_registered() -> None:
     assert "post" in paths["/api/v1/projects/{project_id}/ai/actions/{action_id}/reject"]
     assert "get" in paths["/api/v1/projects/{project_id}/ai/conversations"]
     assert "post" in paths["/api/v1/projects/{project_id}/ai/conversations"]
-    assert "patch" in paths[
-        "/api/v1/projects/{project_id}/ai/conversations/{conversation_id}"
-    ]
+    assert "patch" in paths["/api/v1/projects/{project_id}/ai/conversations/{conversation_id}"]
 
 
 def test_interaction_contract_normalizes_content_and_bounds_version() -> None:
     request = AiInteractionRequest(client_message_id=uuid4(), content="  revisa el modelo  ")
     assert request.content == "revisa el modelo"
     with pytest.raises(ValidationError):
-        AiInteractionRequest(
-            client_message_id=uuid4(), content="revisa", base_diagram_version=-1
-        )
+        AiInteractionRequest(client_message_id=uuid4(), content="revisa", base_diagram_version=-1)
 
 
 def test_project_can_store_multiple_named_conversations() -> None:
@@ -53,9 +49,12 @@ def test_project_can_store_multiple_named_conversations() -> None:
     }
     assert ("project_id",) not in unique_columns
     assert AiConversationCreate(title="  Revision de dominio  ").title == "Revision de dominio"
-    assert AssistantContractService._title_from_first_message(
-        "Analiza el diagrama de ventas y recomienda mejoras importantes"
-    ) == "Analiza el diagrama de ventas y recomienda mejoras"
+    assert (
+        AssistantContractService._title_from_first_message(
+            "Analiza el diagrama de ventas y recomienda mejoras importantes"
+        )
+        == "Analiza el diagrama de ventas y recomienda mejoras"
+    )
 
 
 def test_provider_health_contract_does_not_expose_internal_data() -> None:
@@ -97,9 +96,7 @@ def test_missing_configured_model_uses_an_installed_local_qwen_model() -> None:
 
     import asyncio
 
-    selected = asyncio.run(
-        resolve_ollama_model(FakeProvider(), "qwen2.5-coder:7b")
-    )
+    selected = asyncio.run(resolve_ollama_model(FakeProvider(), "qwen2.5-coder:7b"))
     assert selected == "qwen3-vl:2b-instruct"
 
 

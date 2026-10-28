@@ -1,8 +1,8 @@
 """Pruebas para validaciones del editor UML y XMI sin pérdida (V1.6)."""
 
 from pathlib import Path
-from types import SimpleNamespace
 from uuid import uuid4
+
 import pytest
 from pydantic import ValidationError
 

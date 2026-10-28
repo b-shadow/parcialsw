@@ -30,13 +30,18 @@ class AiAction(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     project_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+        PG_UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     conversation_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("ai_conversations.id", ondelete="CASCADE"), nullable=False
     )
     source_message_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("ai_messages.id", ondelete="CASCADE"), nullable=False
+        PG_UUID(as_uuid=True),
+        nullable=False,
+        index=True,
     )
     requested_by_user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False

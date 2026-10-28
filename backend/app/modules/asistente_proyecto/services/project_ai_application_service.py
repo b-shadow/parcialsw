@@ -10,7 +10,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config.settings import settings as app_settings
-from app.modules.asistente_proyecto.models import AiAction, AiMessage, AiRecommendation
+from app.modules.asistente_proyecto.models import AiAction, AiRecommendation
 from app.modules.asistente_proyecto.repositories.assistant_repository import AssistantRepository
 from app.modules.asistente_proyecto.schemas.assistant import (
     AiInteractionRequest,
@@ -22,8 +22,6 @@ from app.modules.asistente_proyecto.services.assistant_service import AssistantC
 from app.modules.asistente_proyecto.services.context_builder import ProjectContextBuilder
 from app.modules.asistente_proyecto.services.event_publisher import ProjectAiEventPublisher
 from app.modules.asistente_proyecto.services.provider_factory import (
-    get_ollama_provider,
-    resolve_ollama_model,
     select_provider,
 )
 from app.modules.asistente_proyecto.services.rate_limiter import project_ai_rate_limiter
@@ -122,10 +120,8 @@ class ProjectAiApplicationService:
         project_settings = self.contracts.get_settings(project_id, user_id)
         if not project_settings.enabled:
             raise HTTPException(status_code=409, detail="El asistente esta deshabilitado")
-        conversation = self.contracts.get_conversation(
-            project_id, user_id, payload.conversation_id
-        )
-        context = ProjectContextBuilder(self.db).build(
+        conversation = self.contracts.get_conversation(project_id, user_id, payload.conversation_id)
+        context = await ProjectContextBuilder(self.db).build(
             project=project,
             member=member,
             user_id=user_id,
@@ -162,6 +158,7 @@ class ProjectAiApplicationService:
             await project_ai_rate_limiter.acquire(rate_key)
         except HTTPException:
             user_message.status = "failed"
+            self.repository.save_message(user_message)
             self.db.commit()
             raise
         publisher = ProjectAiEventPublisher()
@@ -191,7 +188,9 @@ class ProjectAiApplicationService:
         preferred_provider, selected_model = await select_provider(
             project_settings.preferred_provider, project_settings.model_name
         )
-        fallback_enabled = project_settings.fallback_enabled and app_settings.ai_rule_fallback_enabled
+        fallback_enabled = (
+            project_settings.fallback_enabled and app_settings.ai_rule_fallback_enabled
+        )
         persisted_user_message_id = user_message.id
         persisted_correlation_id = user_message.correlation_id
         orchestrator = UnifiedAiOrchestrator(
@@ -211,9 +210,10 @@ class ProjectAiApplicationService:
                     fallback_enabled=fallback_enabled,
                 )
         except Exception as exc:
-            failed = self.db.get(AiMessage, persisted_user_message_id)
+            failed = self.repository.get_message(persisted_user_message_id)
             if failed is not None:
                 failed.status = "failed"
+                self.repository.save_message(failed)
                 self.db.commit()
             await self._safe_publish(
                 publisher.publish_ephemeral,
@@ -290,7 +290,7 @@ class ProjectAiApplicationService:
         conversation_id: UUID,
         user_id: UUID,
         actor_name: str,
-        assistant_message: AiMessage,
+        assistant_message,
         diagram_id: UUID | None,
     ) -> None:
         await self._safe_publish(
@@ -349,7 +349,7 @@ class ProjectAiApplicationService:
             logger.exception("No se pudo publicar un evento colaborativo de IA")
 
     @staticmethod
-    def _message_event_payload(message: AiMessage, author_name: str) -> dict:
+    def _message_event_payload(message, author_name: str) -> dict:
         return {
             "id": str(message.id),
             "conversation_id": str(message.conversation_id),
@@ -382,7 +382,7 @@ class ProjectAiApplicationService:
         diagram_id: UUID | None,
         base_diagram_version: int | None,
         outcome,
-    ) -> AiMessage:
+    ):
         conversation = self.repository.get_conversation(
             project_id, conversation_id, for_update=True
         )
@@ -393,40 +393,38 @@ class ProjectAiApplicationService:
         )
         if existing is not None:
             return existing
-        user_message = self.db.get(AiMessage, user_message_id)
+        user_message = self.repository.get_message(user_message_id)
         if user_message is None:
             raise HTTPException(status_code=409, detail="El mensaje original no esta disponible")
         result = outcome.result
-        conversation.last_message_sequence += 1
-        assistant_message = AiMessage(
-            conversation_id=conversation.id,
-            project_id=project_id,
-            author_user_id=None,
-            role="assistant",
-            content=result.answer,
-            sequence_number=conversation.last_message_sequence,
-            correlation_id=correlation_id,
-            status="completed",
-            detected_intents=[item.name for item in result.detected_intents],
-            references_json=result.references,
-            metadata_json={
-                "provider": result.provider,
-                "model": result.model,
-                "fallback_used": result.fallback_used,
-                "warnings": result.warnings,
-                "requires_user_input": result.requires_user_input,
-                "clarification_question": result.clarification_question,
-                "duration_ms": outcome.duration_ms,
-                "provider_duration_ms": outcome.provider_duration_ms,
-                "prompt_tokens": outcome.prompt_tokens,
-                "completion_tokens": outcome.completion_tokens,
-                "retries": outcome.retries,
-                "context_reduced": outcome.context_reduced,
-                "error_code": outcome.error_code,
-            },
+        assistant_message, _ = self.contracts.create_message(
+            project_id,
+            None,
+            AiMessageCreateInternal(
+                role="assistant",
+                content=result.answer,
+                correlation_id=correlation_id,
+                status="completed",
+                detected_intents=result.detected_intents,
+                references=result.references,
+                metadata_json={
+                    "provider": result.provider,
+                    "model": result.model,
+                    "fallback_used": result.fallback_used,
+                    "warnings": result.warnings,
+                    "requires_user_input": result.requires_user_input,
+                    "clarification_question": result.clarification_question,
+                    "duration_ms": outcome.duration_ms,
+                    "provider_duration_ms": outcome.provider_duration_ms,
+                    "prompt_tokens": outcome.prompt_tokens,
+                    "completion_tokens": outcome.completion_tokens,
+                    "retries": outcome.retries,
+                    "context_reduced": outcome.context_reduced,
+                    "error_code": outcome.error_code,
+                },
+            ),
+            conversation.id,
         )
-        self.db.add(assistant_message)
-        self.db.flush()
         for action in result.actions:
             effective_diagram_id = action.diagram_id or diagram_id
             action_payload = dict(action.payload)
@@ -474,12 +472,12 @@ class ProjectAiApplicationService:
             )
         user_message.status = "completed"
         user_message.detected_intents = [item.name for item in result.detected_intents]
+        self.repository.save_message(user_message)
         self.db.commit()
-        self.db.refresh(assistant_message)
         return assistant_message
 
     def _response_from_persistence(
-        self, message: AiMessage, *, idempotent: bool = False
+        self, message, *, idempotent: bool = False
     ) -> AiInteractionResponse:
         actions = self.repository.list_actions_for_message(message.id)
         recommendations = self.repository.list_recommendations_for_message(message.id)

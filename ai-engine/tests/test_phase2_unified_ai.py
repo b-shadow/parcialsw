@@ -532,4 +532,6 @@ def test_real_ollama_runtime_when_installed() -> None:
     provider = OllamaProvider(health_cache_seconds=0)
     health = asyncio.run(provider.health())
     asyncio.run(provider.aclose())
+    if not health.available:
+        pytest.skip("Ollama esta instalado, pero el servicio local no esta activo")
     assert health.available is True

@@ -7,11 +7,10 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config.settings import settings
-from app.core.database.session import SessionLocal
-from app.core.redis.client import get_redis, redis_key
 from app.core.changelog.contracts import PendingChange
 from app.core.changelog.service import ChangeLogService
+from app.core.database.session import SessionLocal
+from app.core.redis.client import get_redis, redis_key
 from app.modules.acceso_usuarios.models import AuditLog
 from app.modules.proyectos_colaboracion.models import Project
 

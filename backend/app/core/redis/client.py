@@ -1,6 +1,8 @@
 from typing import Literal
+
 import redis
 import redis.asyncio as aioredis
+
 from app.core.config.settings import settings
 
 _sync_client: redis.Redis | None = None

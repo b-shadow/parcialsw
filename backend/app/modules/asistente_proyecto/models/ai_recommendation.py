@@ -13,7 +13,9 @@ from app.core.database.session import Base
 class AiRecommendation(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "ai_recommendations"
     __table_args__ = (
-        CheckConstraint("severity IN ('info','warning','critical')", name="ck_ai_recommendations_severity"),
+        CheckConstraint(
+            "severity IN ('info','warning','critical')", name="ck_ai_recommendations_severity"
+        ),
         CheckConstraint(
             "status IN ('open','accepted','dismissed','resolved')",
             name="ck_ai_recommendations_status",
@@ -21,13 +23,18 @@ class AiRecommendation(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     project_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+        PG_UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     conversation_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("ai_conversations.id", ondelete="CASCADE"), nullable=False
     )
     source_message_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("ai_messages.id", ondelete="CASCADE"), nullable=False
+        PG_UUID(as_uuid=True),
+        nullable=False,
+        index=True,
     )
     category: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     severity: Mapped[str] = mapped_column(String(20), nullable=False, default="info")

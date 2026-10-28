@@ -7,7 +7,7 @@ import pytest
 from pydantic import BaseModel
 
 from ai_engine.providers.base import ProviderMessage, ProviderRequest
-from ai_engine.providers.errors import InvalidStructuredOutputError, ProviderUnavailableError
+from ai_engine.providers.errors import ProviderUnavailableError
 from ai_engine.providers.gemini_provider import GeminiProvider
 
 

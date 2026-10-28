@@ -11,11 +11,11 @@ from app.core.changelog.hooks import (
 )
 
 __all__ = [
-    "PendingChange",
     "ChangeLogEntry",
     "ChangeLogPage",
-    "queue_change",
-    "install_change_log_hooks",
+    "PendingChange",
     "build_summary",
+    "install_change_log_hooks",
     "project_stream_key",
+    "queue_change",
 ]

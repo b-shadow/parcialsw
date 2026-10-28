@@ -1,21 +1,21 @@
 """Pruebas de contratos compartidos y validaciones (V0.3 y V0.4)."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from unittest.mock import MagicMock
 from uuid import uuid4
+
 import pytest
-from pydantic import ValidationError
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.core.changelog.contracts import build_summary
 from app.modules.asistente_proyecto.schemas.websocket import WebSocketActorV2, WebSocketEventV2
+from app.modules.modelado_uml.services.uml_service import UmlService
 from app.modules.proyectos_colaboracion.permissions import (
     PERMISSION_CODES,
     ROLE_DEFAULTS,
     effective_permissions,
 )
-from app.modules.modelado_uml.services.uml_service import UmlService
-from app.modules.modelado_uml.schemas.uml import UmlClassCreateRequest
-from unittest.mock import MagicMock
 
 
 def test_role_defaults_lector():
@@ -35,7 +35,7 @@ def test_all_role_defaults_are_in_permission_codes():
 
 
 def test_websocket_event_v2_validation():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     ev_id = uuid4()
     proj_id = uuid4()
     corr_id = uuid4()

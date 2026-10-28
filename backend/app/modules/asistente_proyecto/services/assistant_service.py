@@ -1,12 +1,15 @@
+import logging
 import re
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config.settings import settings
+from app.core.nosql.contracts import AiMessageDocument
 from app.modules.asistente_proyecto.models import AiConversation, AiMessage, AiProjectSettings
 from app.modules.asistente_proyecto.repositories.assistant_repository import AssistantRepository
 from app.modules.asistente_proyecto.schemas import (
@@ -18,6 +21,12 @@ from app.modules.asistente_proyecto.schemas import (
     AiProjectSettingsUpdate,
     AiRecommendationStatusUpdate,
 )
+from app.modules.asistente_proyecto.services.conversation_document_store import (
+    ConversationDocumentStore,
+    SyncConversationDocumentStore,
+    enqueue_message_document,
+    message_content_hash,
+)
 from app.modules.proyectos_colaboracion.models import Project
 from app.modules.proyectos_colaboracion.repositories.member_repository import MemberRepository
 from app.modules.proyectos_colaboracion.repositories.project_repository import ProjectRepository
@@ -28,6 +37,8 @@ from app.modules.proyectos_colaboracion.validators.project_validator import (
     ensure_project_permission,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class AssistantContractService:
     def __init__(self, db: Session) -> None:
@@ -35,6 +46,8 @@ class AssistantContractService:
         self.repository = AssistantRepository(db)
         self.projects = ProjectRepository(db)
         self.members = MemberRepository(db)
+        self.documents = ConversationDocumentStore()
+        self.sync_documents = SyncConversationDocumentStore()
 
     def _project_and_member(self, project_id: UUID, user_id: UUID):
         project = ensure_project_exists(self.projects.get(project_id))
@@ -70,7 +83,7 @@ class AssistantContractService:
         self, project_id: UUID, user_id: UUID, payload: AiProjectSettingsUpdate
     ) -> AiProjectSettings:
         ensure_project_permission(self.db, project_id, user_id, "ai.settings")
-        project, member = self._project_and_member(project_id, user_id)
+        _project, _member = self._project_and_member(project_id, user_id)
         locked_project = ProjectMutationGuard(self.db).acquire(project_id)
         settings = self.repository.get_settings(project_id)
         values = payload.model_dump()
@@ -112,7 +125,10 @@ class AssistantContractService:
         return conversation
 
     def update_conversation(
-        self, project_id: UUID, conversation_id: UUID, user_id: UUID,
+        self,
+        project_id: UUID,
+        conversation_id: UUID,
+        user_id: UUID,
         payload: AiConversationUpdate,
     ) -> AiConversation:
         self._project_and_member(project_id, user_id)
@@ -187,28 +203,39 @@ class AssistantContractService:
                 return existing, False
         self._validate_references(project_id, payload)
         conversation.last_message_sequence += 1
-        message = AiMessage(
-            conversation_id=conversation.id,
-            project_id=project_id,
-            author_user_id=user_id,
-            role=payload.role,
-            content=payload.content.strip(),
-            sequence_number=conversation.last_message_sequence,
-            client_message_id=payload.client_message_id,
-            correlation_id=payload.correlation_id,
-            status=payload.status,
-            detected_intents=list(payload.detected_intents),
-            references_json=[item.model_dump(mode="json") for item in payload.references],
-            metadata_json=payload.metadata_json,
-        )
-        self.db.add(message)
+        values = {
+            "conversation_id": conversation.id,
+            "project_id": project_id,
+            "author_user_id": user_id,
+            "role": payload.role,
+            "content": payload.content.strip(),
+            "sequence_number": conversation.last_message_sequence,
+            "client_message_id": payload.client_message_id,
+            "correlation_id": payload.correlation_id,
+            "status": payload.status,
+            "detected_intents": [
+                item.name if hasattr(item, "name") else str(item)
+                for item in payload.detected_intents
+            ],
+            "references_json": [item.model_dump(mode="json") for item in payload.references],
+            "metadata_json": payload.metadata_json,
+        }
+        if settings.nosql_consolidated_mode:
+            message = AiMessageDocument(_id=uuid4(), content_hash="0" * 64, **values)
+            message.content_hash = message_content_hash(message)
+            self.sync_documents.upsert(message)
+        else:
+            message = AiMessage(**values)
+            self.db.add(message)
+            enqueue_message_document(self.db, message)
         if conversation.last_message_sequence == 1 and conversation.title in {
             "Nuevo chat",
             "Chat principal",
         }:
             conversation.title = self._title_from_first_message(payload.content)
         self.db.commit()
-        self.db.refresh(message)
+        if not settings.nosql_consolidated_mode:
+            self.db.refresh(message)
         return message, True
 
     @staticmethod
@@ -218,7 +245,7 @@ class AssistantContractService:
         title = " ".join(words).strip(" .,:;!?-_")
         return title[:80] or "Nuevo chat"
 
-    def list_messages(
+    async def list_messages(
         self,
         project_id: UUID,
         user_id: UUID,
@@ -228,13 +255,31 @@ class AssistantContractService:
         conversation_id: UUID | None = None,
     ) -> AiMessagePage:
         if before_sequence is not None and after_sequence is not None:
-            raise HTTPException(status_code=422, detail="Use before_sequence o after_sequence, no ambos")
+            raise HTTPException(
+                status_code=422, detail="Use before_sequence o after_sequence, no ambos"
+            )
         conversation = self.get_conversation(project_id, user_id, conversation_id)
-        items = self.repository.list_messages(
+        sql_items = (
+            self.repository.list_messages(
+                conversation.id,
+                before_sequence=before_sequence,
+                after_sequence=after_sequence,
+                limit=max(1, min(limit, 100)),
+            )
+            if settings.ai_messages_sql_fallback_enabled or settings.ai_messages_compare_reads
+            else []
+        )
+        mongo_items = await self.documents.safe_list_messages(
             conversation.id,
             before_sequence=before_sequence,
             after_sequence=after_sequence,
             limit=max(1, min(limit, 100)),
+        )
+        items = self._effective_messages(
+            sql_items,
+            mongo_items,
+            limit=max(1, min(limit, 100)),
+            after_sequence=after_sequence,
         )
         author_ids = {item.author_user_id for item in items if item.author_user_id}
         display_names = self.repository.user_display_names(author_ids)
@@ -250,20 +295,42 @@ class AssistantContractService:
             )
             for item in items
         ]
+        mongo_before = (
+            await self.documents.safe_message_exists_before(
+                conversation.id, items[0].sequence_number
+            )
+            if mongo_items is not None and items
+            else False
+        )
+        mongo_after = (
+            await self.documents.safe_message_exists_after(
+                conversation.id, items[-1].sequence_number
+            )
+            if mongo_items is not None and items
+            else False
+        )
         return AiMessagePage(
             items=responses,
             previous_cursor=items[0].sequence_number if items else None,
             next_cursor=items[-1].sequence_number if items else None,
             has_more_before=(
-                self.repository.message_exists_before(
-                    conversation.id, items[0].sequence_number
+                mongo_before
+                or (
+                    settings.ai_messages_sql_fallback_enabled
+                    and self.repository.message_exists_before(
+                        conversation.id, items[0].sequence_number
+                    )
                 )
                 if items
                 else False
             ),
             has_more_after=(
-                self.repository.message_exists_after(
-                    conversation.id, items[-1].sequence_number
+                mongo_after
+                or (
+                    settings.ai_messages_sql_fallback_enabled
+                    and self.repository.message_exists_after(
+                        conversation.id, items[-1].sequence_number
+                    )
                 )
                 if items
                 else False
@@ -272,8 +339,37 @@ class AssistantContractService:
             max_sequence=items[-1].sequence_number if items else None,
         )
 
+    @staticmethod
+    def _effective_messages(sql_items, mongo_items, *, limit: int, after_sequence: int | None):
+        if mongo_items is None:
+            return sql_items
+        by_sequence = {item.sequence_number: item for item in mongo_items}
+        missing_in_mongo = []
+        mismatches = []
+        for item in sql_items:
+            document = by_sequence.get(item.sequence_number)
+            if document is None:
+                by_sequence[item.sequence_number] = item
+                missing_in_mongo.append(item.id)
+            elif message_content_hash(item) != document.content_hash:
+                mismatches.append(item.id)
+        if (missing_in_mongo or mismatches) and settings.ai_messages_compare_reads:
+            logger.warning(
+                "ai_message_store_drift",
+                extra={
+                    "missing_in_mongo": [str(item) for item in missing_in_mongo],
+                    "hash_mismatches": [str(item) for item in mismatches],
+                },
+            )
+        ordered = sorted(by_sequence.values(), key=lambda item: item.sequence_number)
+        return ordered[:limit] if after_sequence is not None else ordered[-limit:]
+
     def list_actions(
-        self, project_id: UUID, user_id: UUID, action_status: str | None, limit: int,
+        self,
+        project_id: UUID,
+        user_id: UUID,
+        action_status: str | None,
+        limit: int,
         conversation_id: UUID | None = None,
     ):
         self._project_and_member(project_id, user_id)
@@ -289,8 +385,13 @@ class AssistantContractService:
         return action
 
     def list_recommendations(
-        self, project_id: UUID, user_id: UUID, item_status: str | None, severity: str | None,
-        limit: int, conversation_id: UUID | None = None,
+        self,
+        project_id: UUID,
+        user_id: UUID,
+        item_status: str | None,
+        severity: str | None,
+        limit: int,
+        conversation_id: UUID | None = None,
     ):
         self._project_and_member(project_id, user_id)
         return self.repository.list_recommendations(
@@ -322,9 +423,7 @@ class AssistantContractService:
         self.db.refresh(recommendation)
         return recommendation
 
-    def _validate_references(
-        self, project_id: UUID, payload: AiMessageCreateInternal
-    ) -> None:
+    def _validate_references(self, project_id: UUID, payload: AiMessageCreateInternal) -> None:
         from app.modules.generacion_software.models import (
             GeneratedBackend,
             GeneratedFrontend,
@@ -338,19 +437,43 @@ class AssistantContractService:
         )
         from app.modules.proyectos_colaboracion.models import ProjectVersion
 
+        document_uml = None
+        if settings.nosql_consolidated_mode:
+            from app.modules.modelado_uml.repositories.mongo_uml_repository import (
+                MongoUmlRepository,
+            )
+
+            document_uml = MongoUmlRepository(self.db)
+
         for reference in payload.references:
             belongs = False
             if reference.type == "uml_class":
-                item = self.db.get(UmlClass, reference.id)
+                item = (
+                    document_uml.get_class(reference.id)
+                    if document_uml
+                    else self.db.get(UmlClass, reference.id)
+                )
                 diagram = self.db.get(UmlDiagram, item.diagram_id) if item else None
                 belongs = diagram is not None and diagram.project_id == project_id
             elif reference.type == "uml_method":
-                item = self.db.get(UmlMethod, reference.id)
-                uml_class = self.db.get(UmlClass, item.class_id) if item else None
+                item = (
+                    document_uml.get_method(reference.id)
+                    if document_uml
+                    else self.db.get(UmlMethod, reference.id)
+                )
+                uml_class = (
+                    document_uml.get_class(item.class_id)
+                    if document_uml and item
+                    else self.db.get(UmlClass, item.class_id) if item else None
+                )
                 diagram = self.db.get(UmlDiagram, uml_class.diagram_id) if uml_class else None
                 belongs = diagram is not None and diagram.project_id == project_id
             elif reference.type == "uml_relationship":
-                item = self.db.get(UmlRelationship, reference.id)
+                item = (
+                    document_uml.get_relationship(reference.id)
+                    if document_uml
+                    else self.db.get(UmlRelationship, reference.id)
+                )
                 belongs = item is not None and item.diagram_id in {
                     diagram.id
                     for diagram in self.db.scalars(

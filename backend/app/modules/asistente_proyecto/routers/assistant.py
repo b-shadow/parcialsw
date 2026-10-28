@@ -11,8 +11,8 @@ from app.modules.asistente_proyecto.schemas import (
     AiActionDecisionResponse,
     AiActionResponse,
     AiConversationCreate,
-    AiConversationUpdate,
     AiConversationResponse,
+    AiConversationUpdate,
     AiInteractionRequest,
     AiInteractionResponse,
     AiMessagePage,
@@ -43,9 +43,7 @@ async def create_ai_interaction(
     db: Annotated[Session, Depends(get_db)],
     background_tasks: BackgroundTasks,
 ):
-    response = await ProjectAiApplicationService(db).interact(
-        project_id, current_user.id, payload
-    )
+    response = await ProjectAiApplicationService(db).interact(project_id, current_user.id, payload)
     background_tasks.add_task(
         summarize_project_conversation, project_id, current_user.id, payload.conversation_id
     )
@@ -99,9 +97,7 @@ async def confirm_ai_action(
                     "method_id": result.get("method_id") or str(action.target_id),
                     "class_id": result.get("class_id"),
                     "revision": result.get("revision"),
-                    "changed_fields": [
-                        key for key in action.payload if key != "_plan"
-                    ],
+                    "changed_fields": [key for key in action.payload if key != "_plan"],
                 },
                 correlation_id=uuid4(),
                 diagram_id=UUID(plan["diagram_id"]) if plan.get("diagram_id") else None,
@@ -120,9 +116,7 @@ async def reject_ai_action(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    action, idempotent = AiActionExecutionService(db).reject(
-        project_id, action_id, current_user.id
-    )
+    action, idempotent = AiActionExecutionService(db).reject(project_id, action_id, current_user.id)
     if not idempotent:
         await ProjectAiEventPublisher().publish_persisted(
             project_id=project_id,
@@ -188,9 +182,7 @@ def create_ai_conversation(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return AssistantContractService(db).create_conversation(
-        project_id, current_user.id, payload
-    )
+    return AssistantContractService(db).create_conversation(project_id, current_user.id, payload)
 
 
 @router.patch(
@@ -210,17 +202,21 @@ def update_ai_conversation(
 
 
 @router.get("/{project_id}/ai/messages", response_model=AiMessagePage)
-def list_ai_messages(
+async def list_ai_messages(
     project_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
     before_sequence: int | None = Query(default=None, ge=1),
     after_sequence: int | None = Query(default=None, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
-    conversation_id: UUID | None = Query(default=None),
+    conversation_id: Annotated[UUID | None, Query()] = None,
 ):
-    return AssistantContractService(db).list_messages(
-        project_id, current_user.id, before_sequence, after_sequence, limit,
+    return await AssistantContractService(db).list_messages(
+        project_id,
+        current_user.id,
+        before_sequence,
+        after_sequence,
+        limit,
         conversation_id,
     )
 
@@ -232,7 +228,7 @@ def list_ai_actions(
     db: Annotated[Session, Depends(get_db)],
     action_status: str | None = Query(default=None, alias="status", max_length=30),
     limit: int = Query(default=50, ge=1, le=200),
-    conversation_id: UUID | None = Query(default=None),
+    conversation_id: Annotated[UUID | None, Query()] = None,
 ):
     return AssistantContractService(db).list_actions(
         project_id, current_user.id, action_status, limit, conversation_id
@@ -257,7 +253,7 @@ def list_ai_recommendations(
     item_status: str | None = Query(default=None, alias="status", max_length=30),
     severity: str | None = Query(default=None, max_length=20),
     limit: int = Query(default=50, ge=1, le=200),
-    conversation_id: UUID | None = Query(default=None),
+    conversation_id: Annotated[UUID | None, Query()] = None,
 ):
     return AssistantContractService(db).list_recommendations(
         project_id, current_user.id, item_status, severity, limit, conversation_id

@@ -34,10 +34,12 @@ from app.modules.generacion_software.validators.generation_validator import (
     ensure_transformation_exists,
 )
 from app.modules.modelado_uml.repositories.uml_repository import UmlRepository
+from app.modules.modelado_uml.schemas.method_specification import UmlMethodSpecificationBase
 from app.modules.modelado_uml.services.method_specification_service import (
     MethodContext,
     MethodSpecificationService,
 )
+from app.modules.modelado_uml.services.uml_service import UmlService
 from app.modules.modelado_uml.validators.uml_validator import ensure_diagram_exists
 from app.modules.proyectos_colaboracion.repositories.member_repository import MemberRepository
 from app.modules.proyectos_colaboracion.repositories.project_repository import ProjectRepository
@@ -58,12 +60,17 @@ class GenerationService:
 
     def transform(self, payload: TransformationRequest, user_id: UUID) -> UmlTransformation:
         diagram = ensure_diagram_exists(self.uml.get_diagram(payload.diagram_id))
-        ensure_project_permission(self.db, diagram.project_id, user_id, "generation.run")
-        classes = self.uml.list_classes(diagram.id)
-        relationships = self.uml.list_relationships(diagram.id)
+        member = ensure_project_permission(self.db, diagram.project_id, user_id, "generation.run")
+        document_model = UmlService(self.db)._build_internal_model(diagram)
+        classes = document_model.classes
+        relationships = document_model.relationships
         intermediate_model = {
             "schema_version": 2,
-            "diagram": {"id": str(diagram.id), "name": diagram.name, "type": diagram.diagram_type},
+            "diagram": {
+                "id": str(diagram.id),
+                "name": document_model.name,
+                "type": document_model.diagram_type,
+            },
             "classes": [
                 {
                     "id": str(uml_class.id),
@@ -98,28 +105,9 @@ class GenerationService:
                                 for parameter in method.parameters
                             ],
                             "specification": (
-                                {
-                                    "schema_version": method.specification.schema_version,
-                                    "revision": method.specification.revision,
-                                    "description": method.specification.description,
-                                    "operation_kind": method.specification.operation_kind,
-                                    "exposure": method.specification.exposure,
-                                    "preconditions": method.specification.preconditions,
-                                    "postconditions": method.specification.postconditions,
-                                    "business_rules": method.specification.business_rules,
-                                    "validations": method.specification.validations,
-                                    "side_effects": method.specification.side_effects,
-                                    "required_permissions": method.specification.required_permissions,
-                                    "related_entities": method.specification.related_entities,
-                                    "backend_contract": method.specification.backend_contract or None,
-                                    "frontend_contract": method.specification.frontend_contract or None,
-                                }
-                                if method.specification
-                                else None
+                                dict(method.specification) if method.specification else None
                             ),
-                            "readiness": self._method_readiness(
-                                method, uml_class, diagram, member
-                            ),
+                            "readiness": self._method_readiness(method, uml_class, diagram, member),
                         }
                         for method in uml_class.methods
                     ],
@@ -163,6 +151,11 @@ class GenerationService:
         return transformation
 
     def _method_readiness(self, method, uml_class, diagram, member) -> dict:
+        specification = None
+        if method.specification:
+            raw = dict(method.specification)
+            raw.pop("revision", None)
+            specification = UmlMethodSpecificationBase.model_validate(raw)
         validation = MethodSpecificationService(self.db).validate_model(
             MethodContext(
                 method=method,
@@ -170,15 +163,14 @@ class GenerationService:
                 diagram=diagram,
                 member=member,
             ),
-            method.specification,
+            specification,
             strict=True,
         )
         return {
             "status": validation.status,
             "ready_for_generation": validation.ready_for_generation,
             "diagnostics": [
-                item.model_dump(mode="json")
-                for item in [*validation.errors, *validation.warnings]
+                item.model_dump(mode="json") for item in [*validation.errors, *validation.warnings]
             ],
         }
 
@@ -228,9 +220,7 @@ class GenerationService:
                     artifact_type="spring_boot_source",
                     file_name=file_path.name,
                     file_path=str(file_path),
-                    checksum=generation_result.manifest["checksums"][
-                        relative_path
-                    ],
+                    checksum=generation_result.manifest["checksums"][relative_path],
                     metadata_json={"relative_path": relative_path},
                 )
             )
@@ -263,11 +253,15 @@ class GenerationService:
     def get_backend_artifact_path(self, backend_id: UUID, user_id: UUID) -> str:
         generated = self.generations.get_backend(backend_id)
         if generated is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backend generado no encontrado")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Backend generado no encontrado"
+            )
         ensure_project_permission(self.db, generated.project_id, user_id, "generation.run")
         zip_path = generated.manifest.get("zip_path") if generated.manifest else None
         if not zip_path:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ZIP de backend no encontrado")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="ZIP de backend no encontrado"
+            )
         return str(zip_path)
 
     def generate_frontend(
@@ -302,7 +296,9 @@ class GenerationService:
             )
         )
         try:
-            api_base_url = payload.api_base_url or ("http://10.0.2.2:8080" if payload.backend_id else "http://localhost:8080")
+            api_base_url = payload.api_base_url or (
+                "http://10.0.2.2:8080" if payload.backend_id else "http://localhost:8080"
+            )
             theme_config = self._effective_theme(transformation.project_id, payload.theme_config)
             generation_result = FlutterGeneratorService().generate(
                 require_supported_intermediate_model(transformation.intermediate_model),
@@ -362,16 +358,18 @@ class GenerationService:
     def get_frontend_artifact_path(self, frontend_id: UUID, user_id: UUID) -> str:
         generated = self.generations.get_frontend(frontend_id)
         if generated is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Frontend generado no encontrado")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Frontend generado no encontrado"
+            )
         ensure_project_permission(self.db, generated.project_id, user_id, "generation.run")
         zip_path = generated.manifest.get("zip_path") if generated.manifest else None
         if not zip_path:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ZIP de Flutter no encontrado")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="ZIP de Flutter no encontrado"
+            )
         return str(zip_path)
 
-    def preflight_coordinated(
-        self, payload: CoordinatedPreflightRequest, user_id: UUID
-    ) -> dict:
+    def preflight_coordinated(self, payload: CoordinatedPreflightRequest, user_id: UUID) -> dict:
         transformation = ensure_transformation_exists(
             self.generations.get_transformation(payload.transformation_id)
         )
@@ -438,24 +436,28 @@ class GenerationService:
             generated.diagnostics = [item.model_dump(mode="json") for item in exc.plan.errors]
             generated.error_detail = str(exc)
             self.db.commit()
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
-                "code": "generation_preflight_failed",
-                "diagnostics": generated.diagnostics,
-            }) from exc
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "generation_preflight_failed",
+                    "diagnostics": generated.diagnostics,
+                },
+            ) from exc
         except ValueError as exc:
             generated.status = "failed"
             generated.stage = "verification_failed"
             generated.error_detail = str(exc)
             self.db.commit()
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
-                "code": "coordinated_generation_failed",
-                "message": str(exc),
-            }) from exc
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "coordinated_generation_failed",
+                    "message": str(exc),
+                },
+            ) from exc
         generated.plan_hash = result.plan.canonical_hash
         generated.plan_json = result.plan.model_dump(mode="json")
-        generated.diagnostics = [
-            item.model_dump(mode="json") for item in result.plan.diagnostics
-        ]
+        generated.diagnostics = [item.model_dump(mode="json") for item in result.plan.diagnostics]
         generated.manifest = result.manifest
         generated.artifact_path = str(result.bundle_path)
         generated.status = result.manifest["status"]
@@ -474,9 +476,7 @@ class GenerationService:
         self.db.refresh(generated)
         return generated
 
-    def get_coordinated(
-        self, generation_id: UUID, user_id: UUID
-    ) -> CoordinatedGeneration:
+    def get_coordinated(self, generation_id: UUID, user_id: UUID) -> CoordinatedGeneration:
         generated = self.generations.get_coordinated(generation_id)
         if generated is None:
             raise HTTPException(
@@ -506,10 +506,13 @@ class GenerationService:
         theme, diagnostics, _ = normalize_theme(source)
         errors = [item for item in diagnostics if item.severity == "error"]
         if errors:
-            raise HTTPException(status_code=422, detail={
-                "code": "invalid_flutter_theme",
-                "diagnostics": [item.model_dump(mode="json") for item in errors],
-            })
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "invalid_flutter_theme",
+                    "diagnostics": [item.model_dump(mode="json") for item in errors],
+                },
+            )
         return theme.model_dump(mode="json")
 
     @staticmethod
@@ -517,13 +520,19 @@ class GenerationService:
         from app.modules.generacion_software.coordinated_generator.contracts import (
             build_ui_manifest,
         )
+
         return build_ui_manifest(plan).model_dump(mode="json")
 
-    def get_ui_manifest(self, transformation_id: UUID, user_id: UUID, name: str = "Preview") -> dict:
-        transformation = ensure_transformation_exists(self.generations.get_transformation(transformation_id))
+    def get_ui_manifest(
+        self, transformation_id: UUID, user_id: UUID, name: str = "Preview"
+    ) -> dict:
+        transformation = ensure_transformation_exists(
+            self.generations.get_transformation(transformation_id)
+        )
         ensure_project_permission(self.db, transformation.project_id, user_id, "generation.run")
         plan = CoordinatedGeneratorService().preflight(
-            transformation.intermediate_model, name,
+            transformation.intermediate_model,
+            name,
             source_transformation_id=str(transformation.id),
             theme=self._effective_theme(transformation.project_id, None),
         )

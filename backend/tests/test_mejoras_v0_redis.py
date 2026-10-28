@@ -1,11 +1,13 @@
 """Pruebas de Redis opcional y salud (V0.2)."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import fakeredis
-from fastapi.testclient import TestClient
 import redis.exceptions
+from fastapi.testclient import TestClient
 
 from app.core.config.settings import settings
+from app.core.nosql.client import MongoHealth
 from app.core.redis.client import (
     get_redis,
     redis_key,
@@ -46,7 +48,15 @@ def test_redis_connection_error_returns_unavailable():
 
 def test_ready_endpoint_with_redis_disabled():
     set_test_client(None, None)
-    with patch("app.main.SessionLocal") as session_factory:
+    mongo_health = MongoHealth(
+        status="available",
+        required=True,
+        database="case_inteligente_nosql",
+    )
+    with (
+        patch("app.main.SessionLocal") as session_factory,
+        patch.object(app.state.mongo_manager, "ping", AsyncMock(return_value=mongo_health)),
+    ):
         session_factory.return_value.__enter__.return_value.execute.return_value = True
         client = TestClient(app)
         response = client.get("/ready")
