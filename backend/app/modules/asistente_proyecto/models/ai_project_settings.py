@@ -14,7 +14,7 @@ class AiProjectSettings(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("project_id", name="uq_ai_project_settings_project"),
         CheckConstraint(
-            "preferred_provider IN ('ollama','rule_engine')",
+            "preferred_provider IN ('ollama','gemini','rule_engine')",
             name="ck_ai_project_settings_provider",
         ),
         CheckConstraint(

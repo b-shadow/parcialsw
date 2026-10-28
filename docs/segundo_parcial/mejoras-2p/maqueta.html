@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- Maqueta de referencia del plan mejoras-2p (v1.1). No es código de producción:
+     cada pantalla se implementa en React con datos reales (ver PLAN.md, contrato «Pantallas de la maqueta»). -->
+<style>[hidden]{display:none!important}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}</style>
+<title>Maqueta Mejoras 2P</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Maqueta de referencia del 2.º parcial: reproduce el sistema visual real de CASE Inteligente
+   (tokens de frontend/src/styles.css, Tailwind slate + teal) para que cada bloque se copie a React.
+   Layout: barra de maqueta (pantallas, rol, archivos) + carcasa de la app (menú lateral + cabecera) + pantalla. */
+:root{
+  --panel:#f7f8fb; --surface:#ffffff; --surface-2:#f1f5f9; --ink:#172033; --muted:#475569; --faint:#94a3b8; --border:#e2e8f0; --border-strong:#cbd5e1;
+  --accent:#0f766e; --accent-strong:#115e59; --accent-soft:#f0fdfa; --accent-line:#99f6e4; --on-accent:#ffffff;
+  --signal:#b45309; --signal-soft:#fffbeb; --signal-line:#fcd34d;
+  --danger:#e11d48; --danger-soft:#fff1f2; --ok:#059669; --ok-soft:#ecfdf5; --info:#2563eb; --info-soft:#eff6ff;
+  --uml-canvas:#ffffff; --uml-dot:#cbd5e1; --uml-fill:#fff7ed; --uml-head:#ffffff; --uml-stroke:#334155; --uml-text:#7c2d12;
+  --shadow:0 1px 2px rgb(15 23 42 / .06), 0 8px 24px rgb(15 23 42 / .06);
+  --font:"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --panel:#0a0f1c; --surface:#0f172a; --surface-2:#1e293b; --ink:#e2e8f0; --muted:#94a3b8; --faint:#64748b; --border:#334155; --border-strong:#475569;
+  --accent:#14b8a6; --accent-strong:#2dd4bf; --accent-soft:#042f2e; --accent-line:#115e59; --on-accent:#03201d;
+  --signal:#f59e0b; --signal-soft:#2a1a05; --signal-line:#92400e;
+  --danger:#fb7185; --danger-soft:#2a0d14; --ok:#34d399; --ok-soft:#052e22; --info:#60a5fa; --info-soft:#0b1a33;
+  --uml-canvas:#0b1222; --uml-dot:#1e293b; --uml-fill:#1c1712; --uml-head:#111827; --uml-stroke:#94a3b8; --uml-text:#fdba74;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 8px 24px rgb(0 0 0 / .35); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --panel:#0a0f1c; --surface:#0f172a; --surface-2:#1e293b; --ink:#e2e8f0; --muted:#94a3b8; --faint:#64748b; --border:#334155; --border-strong:#475569;
+  --accent:#14b8a6; --accent-strong:#2dd4bf; --accent-soft:#042f2e; --accent-line:#115e59; --on-accent:#03201d;
+  --signal:#f59e0b; --signal-soft:#2a1a05; --signal-line:#92400e;
+  --danger:#fb7185; --danger-soft:#2a0d14; --ok:#34d399; --ok-soft:#052e22; --info:#60a5fa; --info-soft:#0b1a33;
+  --uml-canvas:#0b1222; --uml-dot:#1e293b; --uml-fill:#1c1712; --uml-head:#111827; --uml-stroke:#94a3b8; --uml-text:#fdba74;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 8px 24px rgb(0 0 0 / .35); color-scheme:dark}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--panel);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.5;margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:60;background:var(--surface)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
+code,.mono{font-family:var(--mono);font-size:.86em}
+svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- barra de la maqueta (no es parte de la app) */
+.mq{position:sticky;top:env(safe-area-inset-top,0px);z-index:50;background:var(--surface);border-bottom:1px solid var(--border);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px}
+.mq-row{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;max-width:1400px;margin:0 auto}
+.mq-name{font-weight:800;font-size:13px;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.mq-name small{font-weight:500;color:var(--muted)}
+@media (max-width:1600px){.mq-name small{display:none}}
+.mq-tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;flex:1 1 420px;min-width:0}
+.mq-tab{border:1px solid transparent;background:none;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap}
+.mq-tab:hover{background:var(--surface-2);color:var(--ink)}
+.mq-tab[aria-selected="true"]{background:var(--accent);color:var(--on-accent)}
+.mq-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:999px;padding:2px;background:var(--surface-2)}
+.seg button{border:0;background:none;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgb(0 0 0 / .12)}
+.switch{display:inline-flex;gap:6px;align-items:center;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer}
+.switch input{accent-color:var(--accent)}
+
+/* ---------- carcasa de la app */
+.app{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:calc(100vh - 56px)}
+.side{background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;gap:6px;padding:16px 14px}
+.brand{display:flex;gap:10px;align-items:center;padding:4px 6px 14px;border-bottom:1px solid var(--border);margin:0 -14px 8px;padding-inline:20px}
+.logo{width:40px;height:40px;border-radius:10px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center}
+.brand b{display:block;font-size:17px;font-weight:800;letter-spacing:-.02em}
+.brand small{color:var(--muted);font-size:12px}
+.nav-i{display:flex;gap:10px;align-items:center;padding:9px 12px;border-radius:var(--r);color:var(--ink);font-weight:600;font-size:14px;text-decoration:none}
+.nav-i.sub{padding-left:28px;font-weight:500}
+.nav-i[aria-current="page"]{background:var(--accent-soft);color:var(--accent)}
+.nav-i:hover{background:var(--surface-2)}
+.main{min-width:0;display:flex;flex-direction:column}
+.topbar{display:flex;align-items:center;gap:12px;padding:12px 24px;border-bottom:1px solid var(--border);background:var(--surface)}
+.topbar .who{min-width:0}
+.topbar .who b{display:block;font-size:15px}
+.topbar .who span{color:var(--muted);font-size:12px}
+.spacer{flex:1}
+.icon-btn{position:relative;width:38px;height:38px;border-radius:999px;border:1px solid var(--border);background:var(--surface);display:grid;place-items:center;cursor:pointer;color:var(--ink)}
+.icon-btn .badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:999px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;padding:0 4px}
+.content{padding:24px;display:grid;gap:20px;align-content:start;min-width:0}
+.crumb{color:var(--muted);font-size:13px;display:flex;gap:6px;align-items:center}
+.page-h{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-start;justify-content:space-between}
+.page-h h1{font-size:24px;font-weight:800}
+.page-h p{margin:4px 0 0;color:var(--muted)}
+
+/* ---------- piezas comunes */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);min-width:0}
+.card-h{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.card-h h2{font-size:16px;font-weight:700}
+.card-h p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.card-b{padding:16px 18px;display:grid;gap:14px;min-width:0}
+.card-b > *{min-width:0}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:38px;padding:0 14px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid transparent;white-space:nowrap}
+.btn-primary{background:var(--accent);color:var(--on-accent)}
+.btn-primary:hover{background:var(--accent-strong)}
+.btn-secondary{background:var(--surface);border-color:var(--border-strong);color:var(--ink)}
+.btn-secondary:hover{background:var(--surface-2)}
+.btn-ghost{background:none;color:var(--ink)}
+.btn-ghost:hover{background:var(--surface-2)}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-sm{height:30px;padding:0 10px;font-size:13px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.field{display:grid;gap:6px;min-width:0}
+.field label{font-size:13px;font-weight:600}
+.input,.select{height:38px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);padding:0 10px;min-width:0;width:100%}
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;border:1px solid var(--border);background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.chip.teal{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-line)}
+.chip.amber{background:var(--signal-soft);color:var(--signal);border-color:var(--signal-line)}
+.chip.red{background:var(--danger-soft);color:var(--danger);border-color:transparent}
+.chip.blue{background:var(--info-soft);color:var(--info);border-color:transparent}
+.chip.green{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.dot{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block}
+.av{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;flex:none;color:#fff}
+.av.sm{width:24px;height:24px;font-size:11px}
+.av.ana{background:#0f766e}.av.beto{background:#2563eb}.av.carla{background:#9333ea}.av.ia{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent-line)}
+.presence{display:flex;align-items:center;gap:8px}
+.stack{display:flex}
+.stack .av{border:2px solid var(--surface);margin-left:-8px}
+.stack .av:first-child{margin-left:0}
+.presence-txt{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
+.ia-state{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--accent)}
+.ia-state.thinking .dot{animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--surface-2);font-weight:600;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.muted{color:var(--muted)}
+.ftag{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10.5px;color:var(--accent);background:var(--accent-soft);border:1px dashed var(--accent-line);border-radius:4px;padding:1px 6px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+body:not(.show-files) .ftag{display:none}
+.tag-row{display:flex;flex-wrap:wrap;gap:6px}
+
+/* ---------- toasts y modal (componentes compartidos) */
+.toaster{position:fixed;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:80;display:grid;gap:8px;width:min(360px,calc(100vw - 32px))}
+.toast{display:flex;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:var(--r);padding:12px 14px;box-shadow:var(--shadow);animation:in .2s ease}
+.toast.warn{border-left-color:var(--signal)}
+.toast.err{border-left-color:var(--danger)}
+.toast b{display:block;font-size:13px}
+.toast span{font-size:13px;color:var(--muted)}
+.toast button{margin-left:auto;border:0;background:none;color:var(--muted);cursor:pointer;padding:2px}
+@keyframes in{from{transform:translateY(8px);opacity:0}}
+.modal-back{position:fixed;inset:0;z-index:90;background:rgb(15 23 42 / .45);display:grid;place-items:center;padding:16px}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);width:min(440px,100%);padding:20px;display:grid;gap:12px}
+.modal h3{font-size:17px}
+.modal p{margin:0;color:var(--muted)}
+.modal .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.modal .ic{width:40px;height:40px;border-radius:10px;background:var(--danger-soft);color:var(--danger);display:grid;place-items:center}
+
+/* ---------- editor */
+.ed-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);overflow:hidden}
+.ed-bar{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border)}
+.ed-bar .sep{width:1px;height:24px;background:var(--border);margin:0 4px}
+.ed-tabs{margin-left:auto;display:flex;gap:4px}
+.ed-tab{border:0;background:none;padding:7px 12px;border-radius:6px;font-weight:600;font-size:13px;display:inline-flex;gap:6px;align-items:center;color:var(--ink);cursor:pointer}
+.ed-tab[aria-selected="true"]{background:var(--accent);color:var(--on-accent)}
+.ed-left{display:grid;grid-template-columns:172px minmax(0,1fr);min-width:0;border-right:1px solid var(--border)}
+.palette{border-right:1px solid var(--border);padding:10px 8px;display:grid;gap:4px;align-content:start;background:var(--surface)}
+.palette h4{margin:8px 6px 2px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.tool{display:flex;align-items:center;gap:8px;border:1px solid transparent;background:none;border-radius:6px;padding:6px 8px;font-size:13px;font-weight:500;text-align:left;cursor:pointer;color:var(--ink)}
+.tool:hover{background:var(--surface-2)}
+.tool[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.tool .new{margin-left:auto;font-size:9px;font-weight:700;color:var(--signal);background:var(--signal-soft);border-radius:4px;padding:0 4px;letter-spacing:.02em}
+.tool svg{width:22px;height:14px}
+.canvas-wrap{overflow:auto;min-width:0;position:relative;background-color:var(--uml-canvas);background-image:radial-gradient(var(--uml-dot) 1px,transparent 1px);background-size:18px 18px;max-height:600px}
+.canvas{position:relative;width:650px;height:560px}
+.canvas svg.rels{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.rel{stroke:var(--uml-stroke);stroke-width:1.5;fill:none}
+.rel.dash{stroke-dasharray:6 5}
+.mk-fill{fill:var(--uml-stroke)}
+.mk-hollow{fill:var(--uml-canvas);stroke:var(--uml-stroke);stroke-width:1.3}
+.mk-line{fill:none;stroke:var(--uml-stroke);stroke-width:1.3}
+.mult{font-family:var(--mono);font-size:11px;fill:var(--muted)}
+.cls{position:absolute;background:var(--uml-fill);border:1.5px solid var(--uml-stroke);border-radius:2px;font-family:var(--mono);font-size:12px;color:var(--uml-text);cursor:pointer;user-select:none}
+.cls.sel{outline:3px solid var(--accent);outline-offset:2px}
+.cls .hd{background:var(--uml-head);border-bottom:1.5px solid var(--uml-stroke);text-align:center;padding:6px 8px;font-family:var(--font);color:var(--ink);font-weight:700;font-size:13px}
+.cls .st{display:block;font-weight:500;font-size:11px;color:var(--muted)}
+.cls .hd.abs .nm{font-style:italic}
+.cls .cp{padding:6px 10px;border-bottom:1.5px solid var(--uml-stroke);min-height:14px;line-height:1.55}
+.cls .cp:last-child{border-bottom:0}
+.cls.locked{border-style:dashed;border-color:var(--signal)}
+.lockpill{position:absolute;top:-13px;right:-10px;display:inline-flex;gap:5px;align-items:center;background:var(--signal);color:#fff;border-radius:999px;font-family:var(--font);font-size:11px;font-weight:700;padding:2px 9px 2px 3px;box-shadow:var(--shadow)}
+.lockpill .av{width:18px;height:18px;font-size:9.5px;border:0}
+.zoom{position:sticky;left:12px;bottom:12px;display:inline-flex;border:1px solid var(--border);border-radius:6px;background:var(--surface);margin:0 0 12px 12px;font-size:12px}
+.zoom span,.zoom button{padding:5px 10px;border:0;background:none;border-right:1px solid var(--border)}
+.zoom :last-child{border-right:0}
+.ro-banner{display:flex;gap:10px;align-items:center;padding:10px 14px;background:var(--info-soft);color:var(--info);font-size:13px;font-weight:600;border-bottom:1px solid var(--border);grid-column:1/-1}
+.props{grid-column:1/-1;border-top:1px solid var(--border);padding:16px;display:grid;gap:14px}
+.props-h{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.props-h h3{font-size:15px}
+.props.disabled .editable{opacity:.55;pointer-events:none}
+.lock-note{display:flex;gap:10px;align-items:center;padding:10px 12px;background:var(--signal-soft);border:1px solid var(--signal-line);color:var(--signal);border-radius:6px;font-size:13px;font-weight:600}
+.props-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.vis{font-family:var(--mono);font-weight:500}
+
+/* ---------- asistente */
+.chat{display:flex;flex-direction:column;min-width:0;background:var(--surface)}
+.chat-h{display:flex;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border);position:relative;flex-wrap:wrap}
+.chat-h .t b{display:block;font-size:14px}
+.chat-h .t span{font-size:12px;color:var(--muted)}
+.prov{display:inline-flex;gap:6px;align-items:center;font-size:11.5px;font-weight:600;border:1px solid var(--border);border-radius:999px;padding:3px 8px;background:var(--surface-2);color:var(--muted);cursor:pointer}
+.prov .dot{color:var(--ok)}
+.pop{position:absolute;right:10px;top:54px;z-index:20;width:min(300px,calc(100% - 20px));background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);padding:12px;display:grid;gap:8px}
+.pop h4{margin:0;font-size:13px}
+.opt{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer}
+.opt[aria-checked="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.opt b{font-size:13px;display:block}
+.opt small{color:var(--muted);font-size:11.5px}
+.radio{width:14px;height:14px;border-radius:50%;border:2px solid var(--border-strong)}
+.opt[aria-checked="true"] .radio{border-color:var(--accent);background:radial-gradient(var(--accent) 45%,transparent 50%)}
+.msgs{flex:1;overflow:auto;padding:14px;display:grid;gap:12px;align-content:start;max-height:640px;min-height:300px}
+.msg{display:grid;gap:4px;max-width:88%}
+.msg .who{font-size:11.5px;font-weight:600;color:var(--muted);display:flex;gap:6px;align-items:center}
+.bubble{padding:9px 12px;border-radius:10px;background:var(--surface-2);font-size:13.5px}
+.msg.me{justify-self:end}
+.msg.me .who{justify-content:flex-end}
+.msg.me .bubble{background:var(--accent);color:var(--on-accent)}
+.voice-tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;opacity:.85;margin-top:4px}
+.action{border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:10px 12px;display:grid;gap:8px;background:var(--surface)}
+.action .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.action code{background:var(--surface-2);padding:1px 6px;border-radius:4px}
+.proactive{border:1px solid var(--signal-line);background:var(--signal-soft);border-radius:10px;padding:12px;display:grid;gap:10px}
+.proactive-h{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.proactive-h b{color:var(--signal);font-size:13px}
+.proactive ul{margin:0;padding-left:18px;display:grid;gap:4px;font-size:13px}
+.typing{display:inline-flex;gap:3px;align-items:center;padding:10px 12px;background:var(--surface-2);border-radius:10px;width:max-content}
+.typing i{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:pulse 1s infinite}
+.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+.composer{border-top:1px solid var(--border);padding:10px 12px;display:grid;gap:8px}
+.comp-row{display:flex;gap:8px;align-items:flex-end}
+.comp-row textarea{flex:1;min-width:0;min-height:44px;max-height:120px;resize:vertical;border:1px solid var(--border-strong);border-radius:8px;padding:9px 10px;background:var(--surface)}
+.mic{width:40px;height:40px;border-radius:999px;border:1px solid var(--border-strong);background:var(--surface);display:grid;place-items:center;cursor:pointer;color:var(--ink);flex:none}
+.mic[aria-pressed="true"]{background:var(--danger);border-color:var(--danger);color:#fff;box-shadow:0 0 0 0 rgb(225 29 72 / .5);animation:ring 1.4s infinite}
+@keyframes ring{70%{box-shadow:0 0 0 10px rgb(225 29 72 / 0)}100%{box-shadow:0 0 0 0 rgb(225 29 72 / 0)}}
+.send{width:40px;height:40px;border-radius:8px;border:0;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;cursor:pointer;flex:none}
+.interim{font-size:12.5px;color:var(--muted);display:flex;gap:6px;align-items:center;min-height:18px}
+.interim em{font-style:normal;color:var(--faint)}
+.comp-opts{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+
+/* ---------- registro */
+.tabs-line{display:flex;gap:4px;border-bottom:1px solid var(--border);overflow-x:auto}
+.tl{border:0;background:none;padding:10px 14px;font-weight:600;font-size:14px;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.tl[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.fchip{border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink)}
+.fchip[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.fallback{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:8px;background:var(--signal-soft);border:1px solid var(--signal-line);color:var(--signal);font-size:13px;font-weight:600}
+.day{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:4px 0}
+.tline{display:grid;gap:0;position:relative}
+.ev{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border);align-items:start}
+.ev:last-child{border-bottom:0}
+.ev .txt{min-width:0}
+.ev .txt b{font-weight:600}
+.ev .meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;align-items:center;font-size:12px;color:var(--muted)}
+.ev time{font-size:12px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.ev.fresh{animation:fresh 2.4s ease}
+@keyframes fresh{0%{background:var(--accent-soft)}100%{background:transparent}}
+.stream-note{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+
+/* ---------- gestión */
+.two-col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);gap:20px;align-items:start}
+.stack-col{display:grid;gap:20px;min-width:0}
+.invite{display:grid;grid-template-columns:minmax(0,1fr) 150px auto;gap:10px;align-items:end;padding:14px;background:var(--accent-soft);border-radius:8px;border:1px solid var(--accent-line)}
+.member{display:flex;gap:10px;align-items:center;min-width:0}
+.member > div b{display:block;font-size:13.5px}
+.member > div span{font-size:12px;color:var(--muted)}
+.perm-yes{color:var(--ok);font-weight:700}
+.perm-no{color:var(--faint)}
+.note-ro{display:flex;gap:10px;align-items:center;padding:12px 14px;border-radius:8px;background:var(--surface-2);color:var(--muted);font-size:13px}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:rot .7s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+/* ---------- invitaciones y notificaciones */
+.inv-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px 16px;border:1px solid var(--accent-line);background:var(--accent-soft);border-radius:10px}
+.inv-card .acts{display:flex;gap:8px;flex-wrap:wrap}
+.notif-pop{position:absolute;right:0;top:46px;z-index:30;width:min(380px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+.notif-pop header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border)}
+.notif{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.notif:last-child{border-bottom:0}
+.notif.unread{background:var(--accent-soft)}
+.notif b{font-size:13px;display:block}
+.notif p{margin:2px 0 0;font-size:12.5px;color:var(--muted)}
+.notif .acts{display:flex;gap:6px;margin-top:8px}
+.proj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.proj{padding:16px;display:grid;gap:8px}
+.proj b{font-size:15px}
+
+/* ---------- componentes */
+.comp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.sk{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--surface-2),var(--border),var(--surface-2));background-size:200% 100%;animation:sk 1.4s infinite}
+@keyframes sk{to{background-position:-200% 0}}
+.empty{display:grid;justify-items:center;gap:8px;text-align:center;padding:24px;color:var(--muted)}
+.empty .ic{width:44px;height:44px;border-radius:12px;background:var(--surface-2);display:grid;place-items:center;color:var(--ink)}
+
+/* ---------- responsive */
+@media (max-width:1180px){.ed-grid{grid-template-columns:minmax(0,1fr)}.ed-left{border-right:0}.chat{border-top:1px solid var(--border)}}
+@media (max-width:980px){.app{grid-template-columns:minmax(0,1fr)}.side{display:none}.two-col{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){
+  .content{padding:16px}
+  .topbar{padding:10px 16px}
+  .ed-left{grid-template-columns:minmax(0,1fr)}
+  .palette{border-right:0;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:4px}
+  .palette h4{width:100%}
+  .invite{grid-template-columns:minmax(0,1fr)}
+  .props-grid{grid-template-columns:minmax(0,1fr)}
+  .inv-card{grid-template-columns:minmax(0,1fr)}
+  .ev{grid-template-columns:30px minmax(0,1fr)}
+  .ev time{grid-column:2}
+  .topbar .hide-sm{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M8 4h8M9 13v2M15 13v2"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-6"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/></symbol>
+  <symbol id="i-check-c" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+</svg>
+
+<!-- =========================================================================
+     BARRA DE LA MAQUETA: no se implementa. Cambia pantalla, rol y tema.
+     ========================================================================= -->
+<div class="mq" role="region" aria-label="Controles de la maqueta">
+  <div class="mq-row">
+    <div class="mq-name"><svg class="i"><use href="#i-box"/></svg>Maqueta 2.º parcial <small>· referencia para los agentes</small></div>
+    <nav class="mq-tabs" role="tablist" aria-label="Pantallas">
+      <button class="mq-tab" role="tab" data-screen="editor">Editor colaborativo</button>
+      <button class="mq-tab" role="tab" data-screen="asistente">Asistente del equipo</button>
+      <button class="mq-tab" role="tab" data-screen="registro">Registro de cambios</button>
+      <button class="mq-tab" role="tab" data-screen="gestion">Integrantes y permisos</button>
+      <button class="mq-tab" role="tab" data-screen="invitaciones">Mis invitaciones</button>
+      <button class="mq-tab" role="tab" data-screen="componentes">Componentes</button>
+    </nav>
+    <div class="mq-tools">
+      <div class="seg" role="group" aria-label="Rol en el proyecto">
+        <button data-role="ORGANIZADOR" aria-pressed="true">Organizador</button>
+        <button data-role="EDITOR" aria-pressed="false">Editor</button>
+        <button data-role="LECTOR" aria-pressed="false">Lector</button>
+      </div>
+      <label class="switch" for="sw-files"><input type="checkbox" id="sw-files" checked> Archivos</label>
+      <button class="icon-btn" id="theme-btn" aria-label="Cambiar tema" title="Cambiar tema"><svg class="i"><use href="#i-eye"/></svg></button>
+    </div>
+  </div>
+</div>
+
+<div class="app">
+  <!-- Carcasa existente: shared/layouts/AppLayout.tsx (no se rediseña) -->
+  <aside class="side" aria-label="Menú">
+    <div class="brand"><div class="logo"><svg class="i" style="width:20px;height:20px"><use href="#i-box"/></svg></div><div><b>CASE Inteligente</b><small>Frontend modular</small></div></div>
+    <a class="nav-i" href="#invitaciones" data-nav="invitaciones"><svg class="i"><use href="#i-folder"/></svg>Proyectos</a>
+    <a class="nav-i sub" href="#gestion" data-nav="gestion"><svg class="i"><use href="#i-user"/></svg>Gestionar</a>
+    <a class="nav-i sub" href="#registro" data-nav="registro asistente editor"><svg class="i"><use href="#i-users"/></svg>Colaborativo</a>
+    <a class="nav-i sub" href="#componentes" data-nav="componentes"><svg class="i"><use href="#i-code"/></svg>Generación</a>
+    <a class="nav-i" href="#componentes" data-nav="-"><svg class="i"><use href="#i-chart"/></svg>Reportes</a>
+    <a class="nav-i" href="#componentes" data-nav="-"><svg class="i"><use href="#i-user"/></svg>Perfil</a>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="who"><b>Plataforma CASE</b><span>ana@example.com</span></div>
+      <!-- V2.6 · A3: presencia con la IA como integrante (ProjectPresenceIndicator.tsx) -->
+      <div class="presence" title="Integrantes activos">
+        <div class="stack"><span class="av sm ana">A</span><span class="av sm beto">B</span><span class="av sm ia"><svg class="i" style="width:13px;height:13px"><use href="#i-bot"/></svg></span></div>
+        <span class="presence-txt hide-sm">2 personas · <span class="ia-state" id="ia-state"><span class="dot"></span><span id="ia-state-txt">Asistente disponible</span></span></span>
+        <span class="ftag hide-sm">ProjectPresenceIndicator.tsx · V2.6</span>
+      </div>
+      <div class="spacer"></div>
+      <div style="position:relative">
+        <button class="icon-btn" id="bell" aria-label="Notificaciones, 3 sin leer" aria-expanded="false"><svg class="i"><use href="#i-bell"/></svg><span class="badge">3</span></button>
+        <!-- V2.4 · A2: NotificationCenter.tsx con Aceptar/Rechazar -->
+        <div class="notif-pop" id="notif-pop" hidden>
+          <header><b>Notificaciones</b><span class="ftag">NotificationCenter.tsx · V2.4</span></header>
+          <div class="notif unread" id="notif-inv">
+            <span class="av ana">A</span>
+            <div><b>Ana Dev te invitó a «Clínica San Martín»</b><p>Rol Editor · vence el 27 oct</p>
+              <div class="acts"><button class="btn btn-primary btn-sm" data-accept="notif">Aceptar</button><button class="btn btn-secondary btn-sm" data-reject="notif">Rechazar</button></div></div>
+          </div>
+          <div class="notif unread"><span class="av beto">B</span><div><b>Beto Dev guardó la versión 3</b><p>Ventas IA · hace 4 min</p></div></div>
+          <div class="notif"><span class="av ia"><svg class="i" style="width:14px;height:14px"><use href="#i-spark"/></svg></span><div><b>Sugerencia de la IA en Ventas IA</b><p>2 recomendaciones sobre Pedido y Cliente</p></div></div>
+        </div>
+      </div>
+    </header>
+
+    <main class="content" id="content">
+
+<!-- =========================================================================
+     PANTALLA 1 · EDITOR COLABORATIVO  (/proyectos/:projectId/uml/:diagramId)
+     A3: V1.5 tipos/relaciones/visibilidades · V2.6 bloqueos y solo lectura · V2.7 deshacer
+     ========================================================================= -->
+<section data-screen-panel="editor" hidden>
+  <div class="page-h">
+    <div><div class="crumb">Ventas IA <span>›</span> Diagrama principal</div><h1>Editor UML</h1><p>Lienzo colaborativo de clases UML 2.5.</p></div>
+    <div class="tag-row"><span class="chip green"><span class="dot"></span>conectado</span><span class="ftag">UmlEditorPage.tsx</span></div>
+  </div>
+
+  <div class="ed-grid" id="ed-grid">
+    <div class="ed-bar">
+      <button class="btn btn-secondary btn-sm"><svg class="i"><use href="#i-check-c"/></svg>Validar</button>
+      <button class="btn btn-secondary btn-sm"><svg class="i"><use href="#i-upload"/></svg>Importar XMI</button>
+      <button class="btn btn-secondary btn-sm"><svg class="i"><use href="#i-download"/></svg>Exportar XMI</button>
+      <span class="sep" aria-hidden="true"></span>
+      <!-- V2.7 · A3: umlHistory.ts -->
+      <button class="btn btn-ghost btn-sm" id="undo" data-perm="uml.edit" title="Deshacer (Ctrl+Z)"><svg class="i"><use href="#i-undo"/></svg>Deshacer</button>
+      <button class="btn btn-ghost btn-sm" id="redo" data-perm="uml.edit" title="Rehacer (Ctrl+Y)" disabled><svg class="i"><use href="#i-redo"/></svg>Rehacer</button>
+      <span class="ftag">umlHistory.ts · V2.7</span>
+      <div class="ed-tabs" role="tablist">
+        <button class="ed-tab" role="tab" aria-selected="true">Editor</button>
+        <button class="ed-tab" role="tab" aria-selected="false" data-goto="asistente"><svg class="i"><use href="#i-bot"/></svg>Asistente</button>
+        <button class="ed-tab" role="tab" aria-selected="false"><svg class="i"><use href="#i-history"/></svg>Versiones</button>
+      </div>
+    </div>
+
+    <div class="ro-banner" data-ro hidden><svg class="i"><use href="#i-eye"/></svg>Modo solo lectura: tu rol en este proyecto es Lector. Puedes consultar el diagrama y preguntar al asistente.</div>
+
+    <div class="ed-left">
+      <!-- V1.5 · A3: paleta completa. «Nuevo» marca lo que hoy no existe -->
+      <div class="palette" data-perm="uml.edit" aria-label="Herramientas">
+        <h4>Elementos</h4>
+        <button class="tool" aria-pressed="true" data-tool="select"><svg viewBox="0 0 22 14"><path d="M6 1v12l3-3 2 4 2-1-2-4h4z" class="mk-fill"/></svg>Seleccionar</button>
+        <button class="tool" data-tool="class"><svg viewBox="0 0 22 14"><rect x="3" y="1" width="16" height="12" class="mk-hollow"/><path d="M3 5h16" class="mk-line"/></svg>Clase</button>
+        <button class="tool" data-tool="interface"><svg viewBox="0 0 22 14"><circle cx="11" cy="7" r="5" class="mk-hollow"/></svg>Interfaz<span class="new">Nuevo</span></button>
+        <button class="tool" data-tool="enum"><svg viewBox="0 0 22 14"><rect x="3" y="1" width="16" height="12" class="mk-hollow"/><path d="M6 5h10M6 8h10M6 11h6" class="mk-line"/></svg>Enum<span class="new">Nuevo</span></button>
+        <button class="tool" data-tool="abstract"><svg viewBox="0 0 22 14"><rect x="3" y="1" width="16" height="12" class="mk-hollow" stroke-dasharray="3 2"/></svg><i>Abstracta</i><span class="new">Nuevo</span></button>
+        <h4>Relaciones</h4>
+        <button class="tool" data-tool="association"><svg viewBox="0 0 22 14"><path d="M2 7h18" class="mk-line"/></svg>Asociación</button>
+        <button class="tool" data-tool="generalization"><svg viewBox="0 0 22 14"><path d="M2 7h12" class="mk-line"/><path d="M14 2l6 5-6 5z" class="mk-hollow"/></svg>Herencia</button>
+        <button class="tool" data-tool="realization"><svg viewBox="0 0 22 14"><path d="M2 7h12" class="mk-line" stroke-dasharray="3 2"/><path d="M14 2l6 5-6 5z" class="mk-hollow"/></svg>Realización<span class="new">Nuevo</span></button>
+        <button class="tool" data-tool="dependency"><svg viewBox="0 0 22 14"><path d="M2 7h17" class="mk-line" stroke-dasharray="3 2"/><path d="M14 3l5 4-5 4" class="mk-line"/></svg>Dependencia<span class="new">Nuevo</span></button>
+        <button class="tool" data-tool="aggregation"><svg viewBox="0 0 22 14"><path d="M10 7h11" class="mk-line"/><path d="M1 7l4-4 4 4-4 4z" class="mk-hollow"/></svg>Agregación</button>
+        <button class="tool" data-tool="composition"><svg viewBox="0 0 22 14"><path d="M10 7h11" class="mk-line"/><path d="M1 7l4-4 4 4-4 4z" class="mk-fill"/></svg>Composición</button>
+        <button class="tool" data-tool="association_class"><svg viewBox="0 0 22 14"><path d="M2 4h18" class="mk-line"/><path d="M11 4v4" class="mk-line" stroke-dasharray="2 2"/><rect x="7" y="8" width="8" height="5" class="mk-hollow"/></svg>Clase asociación</button>
+      </div>
+
+      <div class="canvas-wrap" id="canvas-wrap">
+        <!-- JointUmlCanvas.tsx: lienzo SVG/HTML existente. Bloqueo = borde punteado ámbar + píldora con el nombre -->
+        <div class="canvas" id="canvas">
+          <svg class="rels" id="rels" aria-hidden="true">
+            <defs>
+              <marker id="m-tri" viewBox="0 0 14 14" refX="13" refY="7" markerWidth="14" markerHeight="14" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M1 1 13 7 1 13z" class="mk-hollow"/></marker>
+              <marker id="m-open" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M1 1 11 6 1 11" class="mk-line"/></marker>
+              <marker id="m-dia-f" viewBox="0 0 18 10" refX="1" refY="5" markerWidth="18" markerHeight="10" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 5 9 1 17 5 9 9z" class="mk-fill"/></marker>
+              <marker id="m-dia-h" viewBox="0 0 18 10" refX="1" refY="5" markerWidth="18" markerHeight="10" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 5 9 1 17 5 9 9z" class="mk-hollow"/></marker>
+            </defs>
+          </svg>
+          <div class="cls" id="c-persona" style="left:20px;top:36px;width:170px" data-name="Persona">
+            <div class="hd abs"><span class="st">{abstract}</span><span class="nm">Persona</span></div>
+            <div class="cp"><span class="vis">#</span> nombre: String<br><span class="vis">#</span> correo: String</div>
+            <div class="cp"><span class="vis">+</span> <i>validar(): Boolean</i></div>
+          </div>
+          <div class="cls" id="c-cliente" style="left:20px;top:300px;width:170px" data-name="Cliente">
+            <div class="hd">Cliente</div>
+            <div class="cp"><span class="vis">-</span> nit: String</div>
+            <div class="cp"><span class="vis">+</span> historial(): List</div>
+          </div>
+          <div class="cls" id="c-facturable" style="left:228px;top:36px;width:184px" data-name="Facturable">
+            <div class="hd"><span class="st">«interface»</span>Facturable</div>
+            <div class="cp"><span class="vis">+</span> emitirFactura(): Factura</div>
+          </div>
+          <div class="cls" id="c-pedido" style="left:228px;top:280px;width:184px" data-name="Pedido">
+            <div class="hd">Pedido</div>
+            <div class="cp"><span class="vis">#</span> fecha: LocalDate<br><span class="vis">-</span> total: Double<br><span class="vis">~</span> estado: EstadoPedido</div>
+            <div class="cp"><span class="vis">+</span> calcularTotal(): Double</div>
+          </div>
+          <div class="cls" id="c-estado" style="left:452px;top:36px;width:170px" data-name="EstadoPedido">
+            <div class="hd"><span class="st">«enumeration»</span>EstadoPedido</div>
+            <div class="cp">PENDIENTE<br>PAGADO<br>ANULADO</div>
+          </div>
+          <div class="cls locked" id="c-producto" style="left:452px;top:280px;width:180px" data-name="Producto" data-locked="Beto Dev">
+            <span class="lockpill"><span class="av beto">B</span>Beto editando</span>
+            <div class="hd">Producto</div>
+            <div class="cp"><span class="vis">-</span> nombre: String<br><span class="vis">-</span> precio: Double</div>
+            <div class="cp"><span class="vis">+</span> aplicarDescuento(p: Double): void</div>
+          </div>
+          <div class="cls" id="c-categoria" style="left:452px;top:470px;width:180px" data-name="Categoria">
+            <div class="hd">Categoria</div>
+            <div class="cp"><span class="vis">-</span> nombre: String</div>
+          </div>
+        </div>
+        <div class="zoom" aria-hidden="true"><button>+</button><button>−</button><span>100%</span></div>
+      </div>
+    </div>
+
+    <!-- Columna derecha: el asistente vive en la pestaña «Asistente» (pantalla 2) -->
+    <aside class="chat" aria-label="Resumen del asistente">
+      <div class="chat-h"><span class="av ia"><svg class="i" style="width:16px;height:16px"><use href="#i-bot"/></svg></span><div class="t"><b>Asistente del proyecto</b><span>Ollama · local</span></div><button class="btn btn-secondary btn-sm" style="margin-left:auto" data-goto="asistente">Abrir</button></div>
+      <div class="msgs" style="max-height:none;min-height:0">
+        <div class="proactive">
+          <div class="proactive-h"><svg class="i" style="color:var(--signal)"><use href="#i-spark"/></svg><b>Sugerencia de la IA</b><span class="chip amber">sin que nadie lo pidiera</span></div>
+          <ul><li><b>Pedido</b> realiza <b>Facturable</b> pero no implementa <code>emitirFactura()</code>.</li><li>La relación Cliente–Pedido no tiene nombre de rol.</li></ul>
+        </div>
+        <div class="lock-note"><svg class="i"><use href="#i-lock"/></svg>Beto Dev está editando Producto. Se libera al deseleccionar o tras 60 s sin actividad.</div>
+      </div>
+    </aside>
+
+    <!-- Panel de propiedades: V1.5 selector Tipo y 4 visibilidades; V2.6 deshabilitado si lo bloquea otro -->
+    <div class="props" id="props">
+      <div class="props-h">
+        <h3>Propiedades de <span id="sel-name">Pedido</span></h3>
+        <div class="tag-row"><span class="chip" id="sel-state">Seleccionado por ti</span><span class="ftag">ElementTypeSelect.tsx · V1.5</span></div>
+      </div>
+      <div class="lock-note" id="props-lock" hidden><svg class="i"><use href="#i-lock"/></svg><span id="props-lock-txt">Beto Dev está editando este elemento. Podrás editarlo cuando lo libere.</span></div>
+      <div class="props-grid editable">
+        <div class="field"><label for="p-name">Nombre</label><input class="input" id="p-name" value="Pedido"></div>
+        <div class="field"><label for="p-type">Tipo de elemento</label>
+          <select class="select" id="p-type"><option>Clase</option><option>Interfaz</option><option>Enum</option><option>Clase abstracta</option></select></div>
+      </div>
+      <div class="tbl-wrap editable">
+        <table>
+          <thead><tr><th>Visibilidad</th><th>Nombre</th><th>Tipo</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><select class="select" id="p-v1" style="width:150px"><option>+ Público</option><option>- Privado</option><option selected># Protegido</option><option>~ Paquete</option></select></td><td><input class="input" id="p-a1" value="fecha"></td><td><input class="input" id="p-t1" value="LocalDate"></td><td><button class="btn btn-ghost btn-sm" aria-label="Quitar atributo"><svg class="i"><use href="#i-trash"/></svg></button></td></tr>
+            <tr><td><select class="select" id="p-v2" style="width:150px"><option>+ Público</option><option selected>- Privado</option><option># Protegido</option><option>~ Paquete</option></select></td><td><input class="input" id="p-a2" value="total"></td><td><input class="input" id="p-t2" value="Double"></td><td><button class="btn btn-ghost btn-sm" aria-label="Quitar atributo"><svg class="i"><use href="#i-trash"/></svg></button></td></tr>
+            <tr><td><select class="select" id="p-v3" style="width:150px"><option>+ Público</option><option>- Privado</option><option># Protegido</option><option selected>~ Paquete</option></select></td><td><input class="input" id="p-a3" value="estado"></td><td><input class="input" id="p-t3" value="EstadoPedido"></td><td><button class="btn btn-ghost btn-sm" aria-label="Quitar atributo"><svg class="i"><use href="#i-trash"/></svg></button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================================
+     PANTALLA 2 · ASISTENTE DEL EQUIPO (pestaña Asistente del editor)
+     A4: V1.8 micrófono + proveedor · A1: V2.1 sugerencia proactiva, V2.2 «qué hizo cada uno» · A2: permisos
+     ========================================================================= -->
+<section data-screen-panel="asistente" hidden>
+  <div class="page-h">
+    <div><div class="crumb">Ventas IA <span>›</span> Editor UML <span>›</span> Asistente</div><h1>Asistente del equipo</h1><p>Una sola IA para todo el proyecto: ve quién escribe, propone cambios y espera confirmación.</p></div>
+    <div class="tag-row"><span class="ftag">ProjectAiAssistant.tsx · V1.8</span><span class="ftag">useSpeechRecognition.ts · V1.8</span></div>
+  </div>
+
+  <div class="card chat" style="max-width:860px;width:100%">
+    <div class="chat-h">
+      <span class="av ia"><svg class="i" style="width:16px;height:16px"><use href="#i-bot"/></svg></span>
+      <div class="t"><b>Asistente del proyecto</b><span>2 personas en línea · chat «Diseño de pedidos»</span></div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="prov" id="prov-btn" aria-expanded="false" title="Proveedor de IA"><span class="dot"></span><span id="prov-name">Ollama · qwen2.5-coder:1.5b</span></button>
+        <button class="icon-btn" id="gear" data-perm="ai.settings" aria-label="Ajustes de la IA" aria-expanded="false"><svg class="i"><use href="#i-gear"/></svg></button>
+      </div>
+      <!-- Ajustes de la IA: solo con ai.settings (Organizador). Llama a updateAiSettings y muestra provider-health -->
+      <div class="pop" id="prov-pop" hidden role="radiogroup" aria-label="Proveedor de IA">
+        <h4>Proveedor de la IA del proyecto</h4>
+        <div class="opt" role="radio" tabindex="0" aria-checked="true" data-prov="Ollama · qwen2.5-coder:1.5b"><span class="radio"></span><div><b>Ollama local</b><small>Sin internet · disponible · 1,1 s</small></div><span class="chip green">Local</span></div>
+        <div class="opt" role="radio" tabindex="0" aria-checked="false" data-prov="Gemini · AI Studio"><span class="radio"></span><div><b>Gemini (AI Studio)</b><small>Requiere GEMINI_API_KEY en el servidor</small></div><span class="chip blue">Nube</span></div>
+        <div class="opt" role="radio" tabindex="0" aria-checked="false" data-prov="Motor de reglas"><span class="radio"></span><div><b>Motor de reglas</b><small>Respaldo sin modelo · siempre disponible</small></div><span class="chip">Respaldo</span></div>
+        <span class="ftag">AiProviderSettings · V1.8</span>
+      </div>
+    </div>
+
+    <div class="msgs" id="msgs">
+      <div class="msg"><span class="who"><span class="av sm beto">B</span>Beto Dev · 10:02</span><div class="bubble">Asistente, ¿qué le falta al modelo para generar el backend?</div></div>
+      <div class="msg"><span class="who"><span class="av sm ia"><svg class="i" style="width:12px;height:12px"><use href="#i-bot"/></svg></span>Asistente CASE · 10:02</span><div class="bubble">Beto, faltan dos cosas: <b>Pedido</b> no implementa <code>emitirFactura()</code> de <b>Facturable</b>, y <b>Producto</b> no tiene identificador visible. ¿Quieres que lo prepare?</div></div>
+      <div class="msg me"><span class="who">Ana Dev (tú) · 10:04</span><div class="bubble">Agrega la clase Factura con total de tipo Double y relaciónala con Pedido uno a uno<span class="voice-tag" style="display:flex"><svg class="i" style="width:12px;height:12px"><use href="#i-mic"/></svg>Dictado por voz</span></div></div>
+      <div class="msg" style="max-width:100%"><span class="who"><span class="av sm ia"><svg class="i" style="width:12px;height:12px"><use href="#i-bot"/></svg></span>Asistente CASE · 10:04</span>
+        <div class="bubble">Preparé 3 cambios. Todavía no se aplicaron.</div>
+        <!-- Acción propuesta: Confirmar/Rechazar solo con ai.confirm_actions -->
+        <div class="action" id="act-1">
+          <div class="row"><span class="chip teal">Crear clase</span><code>Factura</code><span class="chip" id="act-1-st">Propuesta</span></div>
+          <div class="row"><span class="chip teal">Crear atributo</span><code>- total: Double</code></div>
+          <div class="row"><span class="chip teal">Crear relación</span><code>Pedido 1 — 1 Factura</code></div>
+          <div class="row" data-perm="ai.confirm_actions"><button class="btn btn-primary btn-sm" id="act-ok"><svg class="i"><use href="#i-check"/></svg>Confirmar 3 cambios</button><button class="btn btn-secondary btn-sm" id="act-no">Rechazar</button></div>
+          <div class="muted" data-ro hidden style="font-size:12.5px">Solo Organizador y Editor pueden confirmar cambios.</div>
+        </div>
+      </div>
+      <div class="msg"><span class="who"><span class="av sm beto">B</span>Beto Dev · 10:06</span><div class="bubble">¿Qué hizo cada uno hoy?</div></div>
+      <div class="msg" style="max-width:100%"><span class="who"><span class="av sm ia"><svg class="i" style="width:12px;height:12px"><use href="#i-bot"/></svg></span>Asistente CASE · 10:06 · según el registro de cambios</span>
+        <div class="bubble">
+          <b>Ana Dev:</b> creó Persona y Cliente, cambió la visibilidad de Pedido.fecha a protegida y guardó la versión 3.<br>
+          <b>Beto Dev:</b> creó Producto y Categoria y está editando Producto ahora.<br>
+          Los dos tocaron <b>Pedido</b> esta mañana: coordinen quién cierra sus atributos antes de generar.
+        </div>
+      </div>
+      <!-- V2.1 · A1: mensaje con metadata_json.kind = "proactive" -->
+      <div class="proactive" id="proactive" hidden>
+        <div class="proactive-h"><svg class="i" style="color:var(--signal)"><use href="#i-spark"/></svg><b>Sugerencia de la IA</b><span class="chip amber">5 cambios desde la última revisión</span><span class="ftag">ProactiveAdvisorService · V2.1</span></div>
+        <ul><li><b>Factura</b> no tiene identificador ni fecha de emisión.</li><li>La relación Pedido–Factura no tiene multiplicidad en el lado de Factura.</li></ul>
+        <div class="tag-row" data-perm="ai.confirm_actions"><button class="btn btn-primary btn-sm">Preparar corrección</button><button class="btn btn-secondary btn-sm">Descartar</button></div>
+      </div>
+      <div id="typing" hidden><div class="typing" aria-label="El asistente está escribiendo"><i></i><i></i><i></i></div></div>
+    </div>
+
+    <div class="composer" data-perm="ai.chat">
+      <div class="interim" id="interim" aria-live="polite"></div>
+      <div class="comp-row">
+        <label class="sr" for="draft" style="position:absolute;left:-9999px">Mensaje para el asistente</label>
+        <textarea id="draft" placeholder="Pregunta o pide un cambio. También puedes dictarlo."></textarea>
+        <button class="mic" id="mic" aria-pressed="false" aria-label="Dictar por voz"><svg class="i"><use href="#i-mic"/></svg></button>
+        <button class="send" id="send" aria-label="Enviar"><svg class="i"><use href="#i-send"/></svg></button>
+      </div>
+      <div class="comp-opts"><label class="switch" for="auto-send"><input type="checkbox" id="auto-send" checked> Enviar al terminar de dictar</label><span>Chrome y Edge · español</span></div>
+    </div>
+  </div>
+  <div class="tag-row"><button class="btn btn-secondary btn-sm" id="sim-pro"><svg class="i"><use href="#i-spark"/></svg>Simular sugerencia proactiva</button><span class="muted" style="font-size:12.5px">Simulación de la maqueta: en la app llega por WebSocket (AI_MESSAGE_CREATED).</span></div>
+</section>
+
+<!-- =========================================================================
+     PANTALLA 3 · REGISTRO DE CAMBIOS  (/proyectos/:projectId/colaborativo, pestaña nueva)
+     A1: V1.2 ChangeLogPanel.tsx + changeLogService.ts
+     ========================================================================= -->
+<section data-screen-panel="registro" hidden>
+  <div class="page-h">
+    <div><div class="crumb">Ventas IA</div><h1>Espacio colaborativo</h1><p>Chats del proyecto y todo lo que cambió, con su autor.</p></div>
+    <span class="ftag">ProjectWorkspacePage.tsx · V1.2</span>
+  </div>
+  <div class="tabs-line" role="tablist"><button class="tl" role="tab" aria-selected="false" data-goto="asistente">Chats del proyecto</button><button class="tl" role="tab" aria-selected="true"><svg class="i"><use href="#i-history"/></svg>Registro de cambios</button></div>
+
+  <div class="card">
+    <div class="card-h">
+      <div><h2>Registro de cambios</h2><p>Se actualiza en vivo. Filtra por integrante o por tipo de cambio.</p></div>
+      <span class="ftag">ChangeLogPanel.tsx · V1.2</span>
+    </div>
+    <div class="card-b">
+      <div class="filters" id="rg-filters">
+        <select class="select" id="rg-who" style="width:auto;min-width:170px" aria-label="Integrante"><option value="">Todos los integrantes</option><option value="ana">Ana Dev</option><option value="beto">Beto Dev</option><option value="ia">Asistente CASE</option></select>
+        <button class="fchip" aria-pressed="true" data-kind="">Todo</button>
+        <button class="fchip" aria-pressed="false" data-kind="clase">Clases</button>
+        <button class="fchip" aria-pressed="false" data-kind="rel">Relaciones</button>
+        <button class="fchip" aria-pressed="false" data-kind="ia">IA</button>
+        <button class="fchip" aria-pressed="false" data-kind="ver">Versiones</button>
+        <button class="fchip" aria-pressed="false" data-kind="gen">Generación</button>
+      </div>
+      <div class="fallback" id="rg-fallback" hidden><svg class="i"><use href="#i-db"/></svg>Registro en modo respaldo: Redis no responde y se muestra la auditoría de PostgreSQL. Los cambios se siguen guardando.</div>
+
+      <div class="day">Hoy</div>
+      <div class="tline" id="rg-list">
+        <div class="ev" data-who="ia" data-kind="ia clase"><span class="av ia"><svg class="i" style="width:14px;height:14px"><use href="#i-bot"/></svg></span><div class="txt"><b>La IA aplicó:</b> creó la clase Factura<div class="meta"><span class="chip teal">IA</span>confirmado por Ana Dev · Diagrama principal</div></div><time datetime="2026-10-20T10:05">hace 2 min</time></div>
+        <div class="ev" data-who="beto" data-kind="clase"><span class="av beto">B</span><div class="txt"><b>Beto Dev</b> editó la clase Producto<div class="meta"><span class="chip">Clase</span>precio: Double</div></div><time datetime="2026-10-20T10:03">hace 4 min</time></div>
+        <div class="ev" data-who="beto" data-kind="ver"><span class="av beto">B</span><div class="txt"><b>Beto Dev</b> guardó la versión 3<div class="meta"><span class="chip blue">Versión</span>«Antes de generar backend» · notificó a 2 integrantes</div></div><time datetime="2026-10-20T10:01">hace 6 min</time></div>
+        <div class="ev" data-who="ana" data-kind="rel"><span class="av ana">A</span><div class="txt"><b>Ana Dev</b> relacionó Pedido con Facturable<div class="meta"><span class="chip">Realización</span></div></div><time datetime="2026-10-20T09:52">hace 15 min</time></div>
+        <div class="ev" data-who="ana" data-kind="clase"><span class="av ana">A</span><div class="txt"><b>Ana Dev</b> editó la clase Pedido<div class="meta"><span class="chip">Clase</span>fecha: ahora protegido (#)</div></div><time datetime="2026-10-20T09:47">hace 20 min</time></div>
+        <div class="ev" data-who="ana" data-kind="gen"><span class="av ana">A</span><div class="txt"><b>Ana Dev</b> generó Spring Boot y Flutter<div class="meta"><span class="chip green">Generación</span>ventas-ia.zip · 48 archivos</div></div><time datetime="2026-10-20T09:30">hace 37 min</time></div>
+      </div>
+      <div class="day">Ayer</div>
+      <div class="tline">
+        <div class="ev" data-who="beto" data-kind="clase"><span class="av beto">B</span><div class="txt"><b>Beto Dev</b> creó la clase Categoria<div class="meta"><span class="chip">Clase</span></div></div><time datetime="2026-10-19T18:12">ayer 18:12</time></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+        <button class="btn btn-secondary btn-sm">Cargar más</button>
+        <span class="stream-note"><svg class="i"><use href="#i-db"/></svg>Guardado en Redis Streams · <code>case:changelog:project:7a9e…</code></span>
+      </div>
+    </div>
+  </div>
+  <div class="tag-row"><button class="btn btn-secondary btn-sm" id="sim-live">Simular cambio en vivo (CHANGE_LOGGED)</button><label class="switch" for="sw-fallback"><input type="checkbox" id="sw-fallback"> Ver modo respaldo</label></div>
+</section>
+
+<!-- =========================================================================
+     PANTALLA 4 · INTEGRANTES Y PERMISOS  (/proyectos/:projectId)
+     A2: V2.4 ProjectManagementPage.tsx + invitationService.ts · V1.4 PermissionGate
+     ========================================================================= -->
+<section data-screen-panel="gestion" hidden>
+  <div class="page-h">
+    <div><div class="crumb">Proyectos <span>›</span> Gestionar</div><h1>Gestión de proyecto</h1><p>Integrantes, invitaciones y lo que puede hacer cada rol.</p></div>
+    <span class="ftag">ProjectManagementPage.tsx · V2.4</span>
+  </div>
+  <div class="two-col">
+    <div class="stack-col">
+      <div class="card">
+        <div class="card-h"><div><h2>Permisos por rol</h2><p>Organizador gestiona; Editor modela; Lector consulta y pregunta a la IA.</p></div><span class="ftag">permissions.py · V0.3</span></div>
+        <div class="card-b">
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>Permiso</th><th>Org.</th><th>Editor</th><th>Lector</th></tr></thead>
+            <tbody>
+              <tr><td>Ver proyecto, diagramas y registro</td><td class="perm-yes">Sí</td><td class="perm-yes">Sí</td><td class="perm-yes">Sí</td></tr>
+              <tr><td>Escribir al asistente</td><td class="perm-yes">Sí</td><td class="perm-yes">Sí</td><td class="perm-yes">Sí</td></tr>
+              <tr><td>Editar UML e importar XMI</td><td class="perm-yes">Sí</td><td class="perm-yes">Sí</td><td class="perm-no">No</td></tr>
+              <tr><td>Confirmar acciones de la IA</td><td class="perm-yes">Sí</td><td class="perm-yes">Sí</td><td class="perm-no">No</td></tr>
+              <tr><td>Guardar versiones</td><td class="perm-yes">Sí</td><td class="perm-yes">Sí</td><td class="perm-no">No</td></tr>
+              <tr><td>Generar código</td><td class="perm-yes">Sí</td><td class="perm-yes">Sí</td><td class="perm-no">No</td></tr>
+              <tr><td>Restaurar versiones</td><td class="perm-yes">Sí</td><td class="perm-no">No</td><td class="perm-no">No</td></tr>
+              <tr><td>Invitar y gestionar integrantes</td><td class="perm-yes">Sí</td><td class="perm-no">No</td><td class="perm-no">No</td></tr>
+              <tr><td>Ajustes de la IA</td><td class="perm-yes">Sí</td><td class="perm-no">No</td><td class="perm-no">No</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </div>
+    </div>
+    <div class="stack-col">
+      <div class="card" data-perm="members.manage">
+        <div class="card-h"><div><h2>Invitar por correo</h2><p>La persona recibe la invitación en su campana. Vence en 7 días.</p></div></div>
+        <div class="card-b">
+          <form class="invite" id="inv-form" novalidate>
+            <div class="field"><label for="inv-email">Correo</label><input class="input" id="inv-email" type="email" placeholder="persona@correo.com" value="carla@example.com"></div>
+            <div class="field"><label for="inv-role">Rol</label><select class="select" id="inv-role"><option>Editor</option><option>Lector</option></select></div>
+            <button class="btn btn-primary" id="inv-btn" type="submit"><svg class="i"><use href="#i-mail"/></svg><span>Invitar</span></button>
+          </form>
+          <div class="field-err muted" id="inv-err" style="font-size:12.5px" hidden></div>
+          <div>
+            <div class="day">Invitaciones pendientes</div>
+            <div class="tbl-wrap"><table><thead><tr><th>Correo</th><th>Rol</th><th>Vence</th><th></th></tr></thead>
+              <tbody id="inv-rows">
+                <tr data-email="diego@example.com"><td>diego@example.com</td><td><span class="chip">Lector</span></td><td>en 6 días</td><td><button class="btn btn-ghost btn-sm" data-revoke>Revocar</button></td></tr>
+              </tbody></table></div>
+          </div>
+        </div>
+      </div>
+      <div class="note-ro" data-noperm="members.manage" hidden><svg class="i"><use href="#i-shield"/></svg>Solo el Organizador puede invitar y cambiar roles. Puedes ver quién participa.</div>
+      <div class="card">
+        <div class="card-h"><div><h2>Integrantes</h2><p>3 personas con acceso.</p></div><span class="chip teal"><svg class="i" style="width:13px;height:13px"><use href="#i-users"/></svg>3 integrantes</span></div>
+        <div class="card-b"><div class="tbl-wrap"><table>
+          <thead><tr><th>Usuario</th><th>Rol</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><div class="member"><span class="av ana">A</span><div><b>Ana Dev</b><span>ana@example.com</span></div></div></td><td><span class="chip teal">Organizador</span></td><td><span class="muted" style="display:inline-flex;gap:6px;align-items:center"><svg class="i"><use href="#i-lock"/></svg>Propietaria</span></td></tr>
+            <tr><td><div class="member"><span class="av beto">B</span><div><b>Beto Dev</b><span>beto@example.com</span></div></div></td><td><select class="select" id="role-beto" style="width:140px" data-perm-disable="members.manage"><option>Organizador</option><option selected>Editor</option><option>Lector</option></select></td><td><button class="btn btn-ghost btn-sm" data-perm="members.manage" style="color:var(--danger)">Quitar</button></td></tr>
+            <tr><td><div class="member"><span class="av carla">C</span><div><b>Carla Ruiz</b><span>carla.r@example.com</span></div></div></td><td><select class="select" id="role-carla" style="width:140px" data-perm-disable="members.manage"><option>Organizador</option><option>Editor</option><option selected>Lector</option></select></td><td><button class="btn btn-ghost btn-sm" data-perm="members.manage" style="color:var(--danger)">Quitar</button></td></tr>
+          </tbody>
+        </table></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================================
+     PANTALLA 5 · MIS INVITACIONES  (/proyectos) + campana
+     A2: V2.4 ProjectsPage.tsx (bloque superior) y NotificationCenter.tsx
+     ========================================================================= -->
+<section data-screen-panel="invitaciones" hidden>
+  <div class="page-h">
+    <div><h1>Proyectos</h1><p>Tus proyectos y las invitaciones que esperan respuesta.</p></div>
+    <span class="ftag">ProjectsPage.tsx · V2.4</span>
+  </div>
+  <div class="inv-card" id="inv-card">
+    <span class="av ana">A</span>
+    <div style="min-width:0"><b>Ana Dev te invitó a «Clínica San Martín» como Editor</b><div class="muted" style="font-size:13px">Vence el 27 de octubre · podrás editar el diagrama y confirmar acciones de la IA</div></div>
+    <div class="acts"><button class="btn btn-primary" data-accept="card">Aceptar</button><button class="btn btn-secondary" data-reject="card">Rechazar</button></div>
+  </div>
+  <div class="proj-grid" id="proj-grid">
+    <div class="card proj"><span class="chip green" style="width:max-content"><span class="dot"></span>Activo</span><b>Ventas IA</b><span class="muted">Organizador · 3 integrantes · versión 3</span></div>
+    <div class="card proj"><span class="chip green" style="width:max-content"><span class="dot"></span>Activo</span><b>Biblioteca central</b><span class="muted">Editor · 2 integrantes · versión 1</span></div>
+  </div>
+  <p class="muted" style="margin:0;font-size:13px">La campana de la cabecera muestra la misma invitación con Aceptar y Rechazar.</p>
+</section>
+
+<!-- =========================================================================
+     PANTALLA 6 · COMPONENTES COMPARTIDOS (V0.5 · A1)
+     Toaster, ConfirmDialog, Avatar, PresenceStack, StatusBadge, EmptyState, Skeleton
+     ========================================================================= -->
+<section data-screen-panel="componentes" hidden>
+  <div class="page-h">
+    <div><h1>Componentes compartidos</h1><p>Se crean una vez en la ola 0 y los usan todas las pantallas nuevas. Reemplazan a <code>window.confirm</code>.</p></div>
+    <span class="ftag">shared/components/ · V0.5</span>
+  </div>
+  <div class="comp-grid">
+    <div class="card"><div class="card-h"><div><h2>Toaster</h2><p>Éxito, aviso y error. Se cierran solos a los 4 s.</p></div><span class="ftag">Toaster.tsx</span></div>
+      <div class="card-b"><div class="tag-row"><button class="btn btn-secondary btn-sm" data-toast="ok">Éxito</button><button class="btn btn-secondary btn-sm" data-toast="warn">Aviso</button><button class="btn btn-secondary btn-sm" data-toast="err">Error</button></div></div></div>
+    <div class="card"><div class="card-h"><div><h2>ConfirmDialog</h2><p>Para acciones que no se deshacen.</p></div><span class="ftag">ConfirmDialog.tsx</span></div>
+      <div class="card-b"><button class="btn btn-danger btn-sm" style="width:max-content" data-confirm-demo>Eliminar clase Pedido</button></div></div>
+    <div class="card"><div class="card-h"><div><h2>Avatar y presencia</h2><p>Color fijo por persona; la IA usa su propio avatar.</p></div><span class="ftag">Avatar.tsx</span></div>
+      <div class="card-b"><div class="presence"><div class="stack"><span class="av ana">A</span><span class="av beto">B</span><span class="av carla">C</span><span class="av ia"><svg class="i" style="width:15px;height:15px"><use href="#i-bot"/></svg></span></div><span class="ia-state thinking"><span class="dot"></span>Pensando…</span></div></div></div>
+    <div class="card"><div class="card-h"><div><h2>StatusBadge</h2><p>Estados con color semántico.</p></div><span class="ftag">StatusBadge.tsx</span></div>
+      <div class="card-b"><div class="tag-row"><span class="chip">Propuesta</span><span class="chip green">Aplicada</span><span class="chip red">Rechazada</span><span class="chip amber">Bloqueado</span><span class="chip blue">Versión</span><span class="chip teal">IA</span></div></div></div>
+    <div class="card"><div class="card-h"><div><h2>EmptyState</h2><p>Siempre dice qué hacer.</p></div><span class="ftag">EmptyState.tsx</span></div>
+      <div class="card-b"><div class="empty"><span class="ic"><svg class="i"><use href="#i-history"/></svg></span><b style="color:var(--ink)">Todavía no hay cambios</b><span>Cuando alguien edite el diagrama, aparecerá aquí con su nombre.</span></div></div></div>
+    <div class="card"><div class="card-h"><div><h2>Skeleton</h2><p>Mientras carga una lista.</p></div><span class="ftag">Skeleton.tsx</span></div>
+      <div class="card-b"><div style="display:grid;gap:10px"><div class="sk" style="width:70%"></div><div class="sk" style="width:90%"></div><div class="sk" style="width:55%"></div></div></div></div>
+  </div>
+</section>
+
+    </main>
+  </div>
+</div>
+
+<div class="toaster" id="toaster" aria-live="polite"></div>
+<div class="modal-back" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-t">
+    <div class="ic"><svg class="i"><use href="#i-trash"/></svg></div>
+    <h3 id="modal-t">¿Revocar la invitación?</h3>
+    <p id="modal-p">diego@example.com ya no podrá unirse con este enlace. Puedes invitarle de nuevo después.</p>
+    <div class="acts"><button class="btn btn-secondary" id="modal-no">Cancelar</button><button class="btn btn-danger" id="modal-ok">Revocar</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+var $ = function(s, r){ return (r || document).querySelector(s); };
+var $$ = function(s, r){ return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+var store = { get: function(k){ try { return localStorage.getItem('mq2p-' + k); } catch(e){ return null; } },
+              set: function(k, v){ try { localStorage.setItem('mq2p-' + k, v); } catch(e){} } };
+
+/* ---------- permisos (contrato «Permisos por rol») */
+var ROLES = {
+  ORGANIZADOR: ['project.read','project.update','members.manage','uml.edit','versions.create','versions.restore','ai.chat','ai.confirm_actions','ai.settings','generation.run','theme.edit'],
+  EDITOR: ['project.read','uml.edit','versions.create','ai.chat','ai.confirm_actions','generation.run','theme.edit'],
+  LECTOR: ['project.read','ai.chat']
+};
+var role = 'ORGANIZADOR';
+function can(code){ return ROLES[role].indexOf(code) !== -1; }
+function applyRole(){
+  $$('[data-perm]').forEach(function(el){ el.hidden = !can(el.dataset.perm); });
+  $$('[data-noperm]').forEach(function(el){ el.hidden = can(el.dataset.noperm); });
+  $$('[data-perm-disable]').forEach(function(el){ el.disabled = !can(el.dataset.permDisable); });
+  $$('[data-ro]').forEach(function(el){ el.hidden = can('uml.edit'); });
+  $$('.seg [data-role]').forEach(function(b){ b.setAttribute('aria-pressed', b.dataset.role === role); });
+  if (!can('ai.settings')) $('#prov-pop').hidden = true;
+}
+$$('.seg [data-role]').forEach(function(b){ b.addEventListener('click', function(){ role = b.dataset.role; applyRole(); toast('ok', 'Rol: ' + b.textContent, 'La maqueta muestra lo que ve este rol.'); }); });
+
+/* ---------- pantallas */
+var SCREENS = ['editor','asistente','registro','gestion','invitaciones','componentes'];
+function show(id){
+  if (SCREENS.indexOf(id) === -1) id = 'editor';
+  $$('[data-screen-panel]').forEach(function(p){ p.hidden = p.dataset.screenPanel !== id; });
+  $$('.mq-tab').forEach(function(t){ t.setAttribute('aria-selected', t.dataset.screen === id); });
+  $$('.nav-i').forEach(function(a){ var n = (a.dataset.nav || '').split(' '); if (n.indexOf(id) !== -1) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  store.set('screen', id);
+  if (id === 'editor') requestAnimationFrame(drawRels);
+}
+$$('.mq-tab').forEach(function(t){ t.addEventListener('click', function(){ show(t.dataset.screen); history.replaceState(null, '', '#' + t.dataset.screen); }); });
+$$('[data-goto]').forEach(function(b){ b.addEventListener('click', function(){ show(b.dataset.goto); }); });
+window.addEventListener('hashchange', function(){ show(location.hash.slice(1)); });
+
+/* ---------- archivos y tema */
+$('#sw-files').addEventListener('change', function(e){ document.body.classList.toggle('show-files', e.target.checked); store.set('files', e.target.checked ? '1' : '0'); });
+$('#theme-btn').addEventListener('click', function(){
+  var r = document.documentElement, cur = r.getAttribute('data-theme');
+  var dark = cur ? cur === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  r.setAttribute('data-theme', dark ? 'light' : 'dark');
+});
+
+/* ---------- toasts y confirmación */
+function toast(kind, title, text){
+  var t = document.createElement('div'); t.className = 'toast ' + (kind === 'ok' ? '' : kind); t.setAttribute('role', kind === 'err' ? 'alert' : 'status');
+  t.innerHTML = '<div><b></b><span></span></div><button aria-label="Cerrar aviso"><svg class="i"><use href="#i-x"/></svg></button>';
+  t.querySelector('b').textContent = title; t.querySelector('span').textContent = text || '';
+  t.querySelector('button').addEventListener('click', function(){ t.remove(); });
+  $('#toaster').appendChild(t); setTimeout(function(){ t.remove(); }, 4000);
+}
+var pending = null;
+function confirmDialog(title, text, okLabel, onOk){
+  $('#modal-t').textContent = title; $('#modal-p').textContent = text; $('#modal-ok').textContent = okLabel; pending = onOk;
+  $('#modal').hidden = false; $('#modal-no').focus();
+}
+function closeModal(){ $('#modal').hidden = true; pending = null; }
+$('#modal-no').addEventListener('click', closeModal);
+$('#modal-ok').addEventListener('click', function(){ var f = pending; closeModal(); if (f) f(); });
+$('#modal').addEventListener('click', function(e){ if (e.target.id === 'modal') closeModal(); });
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !$('#modal').hidden) closeModal(); });
+
+/* ---------- editor: relaciones dibujadas a partir de las cajas */
+var RELS = [
+  {a:'c-cliente', as:'top', b:'c-persona', bs:'bottom', type:'generalization'},
+  {a:'c-pedido', as:'top', b:'c-facturable', bs:'bottom', type:'realization'},
+  {a:'c-pedido', as:'right', b:'c-estado', bs:'left', type:'dependency', ay:0.25},
+  {a:'c-cliente', as:'right', b:'c-pedido', bs:'left', type:'association', ma:'1', mb:'0..*'},
+  {a:'c-pedido', as:'right', b:'c-producto', bs:'left', type:'aggregation', ay:0.7, by:0.6, ma:'0..*', mb:'1..*'},
+  {a:'c-categoria', as:'top', b:'c-producto', bs:'bottom', type:'composition', ma:'1', mb:'0..*'}
+];
+function anchor(id, side, frac){
+  var el = document.getElementById(id), x = el.offsetLeft, y = el.offsetTop, w = el.offsetWidth, h = el.offsetHeight, f = frac == null ? 0.5 : frac;
+  if (side === 'top') return [x + w * f, y];
+  if (side === 'bottom') return [x + w * f, y + h];
+  if (side === 'left') return [x, y + h * f];
+  return [x + w, y + h * f];
+}
+function drawRels(){
+  var svg = $('#rels'); if (!svg || !$('#c-persona').offsetWidth) return;
+  $$('.rel,.mult', svg).forEach(function(n){ n.remove(); });
+  var NS = 'http://www.w3.org/2000/svg';
+  RELS.forEach(function(r){
+    var p = anchor(r.a, r.as, r.ay), q = anchor(r.b, r.bs, r.by);
+    var path = document.createElementNS(NS, 'path');
+    var mid = (r.as === 'top' || r.as === 'bottom') ? 'M' + p[0] + ' ' + p[1] + ' L' + q[0] + ' ' + q[1]
+      : 'M' + p[0] + ' ' + p[1] + ' L' + ((p[0] + q[0]) / 2) + ' ' + p[1] + ' L' + ((p[0] + q[0]) / 2) + ' ' + q[1] + ' L' + q[0] + ' ' + q[1];
+    if (r.type === 'composition' || r.type === 'aggregation') {
+      mid = (r.as === 'top' || r.as === 'bottom') ? 'M' + p[0] + ' ' + p[1] + ' L' + q[0] + ' ' + q[1]
+        : 'M' + q[0] + ' ' + q[1] + ' L' + ((p[0] + q[0]) / 2) + ' ' + q[1] + ' L' + ((p[0] + q[0]) / 2) + ' ' + p[1] + ' L' + p[0] + ' ' + p[1];
+    }
+    path.setAttribute('d', mid);
+    path.setAttribute('class', 'rel' + (r.type === 'realization' || r.type === 'dependency' ? ' dash' : ''));
+    if (r.type === 'generalization' || r.type === 'realization') path.setAttribute('marker-end', 'url(#m-tri)');
+    if (r.type === 'dependency') path.setAttribute('marker-end', 'url(#m-open)');
+    if (r.type === 'composition') path.setAttribute('marker-start', 'url(#m-dia-f)');
+    if (r.type === 'aggregation') path.setAttribute('marker-end', 'url(#m-dia-h)');
+    svg.appendChild(path);
+    [[r.ma, p], [r.mb, q]].forEach(function(m){
+      if (!m[0]) return; var t = document.createElementNS(NS, 'text'); t.setAttribute('class', 'mult');
+      var vertical = r.as === 'top' || r.as === 'bottom';
+      t.setAttribute('x', m[1][0] + (vertical ? 8 : (m[1] === p ? 4 : -30))); t.setAttribute('y', m[1][1] + (vertical ? (m[1] === p ? -8 : 16) : (m[1] === p ? -6 : 15)));
+      t.textContent = m[0]; svg.appendChild(t);
+    });
+  });
+}
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawRels);
+window.addEventListener('resize', drawRels);
+
+/* ---------- editor: selección y bloqueo */
+var history2 = [{label:'Crear clase Factura'}], future = [];
+function selectClass(el){
+  $$('.cls').forEach(function(c){ c.classList.remove('sel'); });
+  var name = el.dataset.name, lockedBy = el.dataset.locked;
+  $('#sel-name').textContent = name; $('#p-name').value = name;
+  var props = $('#props');
+  if (lockedBy) {
+    props.classList.add('disabled'); $('#props-lock').hidden = false;
+    $('#props-lock-txt').textContent = lockedBy + ' está editando ' + name + '. Podrás editarlo cuando lo libere.';
+    $('#sel-state').className = 'chip amber'; $('#sel-state').textContent = 'Bloqueado por ' + lockedBy;
+    toast('warn', lockedBy + ' está editando ' + name, 'LOCK_REJECTED: el panel queda en solo lectura.');
+  } else {
+    el.classList.add('sel'); props.classList.remove('disabled'); $('#props-lock').hidden = true;
+    $('#sel-state').className = 'chip teal'; $('#sel-state').textContent = can('uml.edit') ? 'Bloqueado por ti mientras editas' : 'Solo lectura';
+    var t = { Persona:'Clase abstracta', Facturable:'Interfaz', EstadoPedido:'Enum' }[name] || 'Clase';
+    $('#p-type').value = t;
+  }
+}
+$$('.cls').forEach(function(c){ c.addEventListener('click', function(){ selectClass(c); }); });
+$('#c-pedido').classList.add('sel');
+$$('.tool').forEach(function(t){ t.addEventListener('click', function(){ $$('.tool').forEach(function(x){ x.setAttribute('aria-pressed', x === t); }); }); });
+$('#undo').addEventListener('click', function(){
+  if (!history2.length) { toast('warn', 'Nada para deshacer', ''); return; }
+  future.push(history2.pop()); $('#redo').disabled = false; $('#undo').disabled = !history2.length;
+  toast('ok', 'Deshecho: ' + future[future.length - 1].label, 'Ctrl+Y para rehacer.');
+});
+$('#redo').addEventListener('click', function(){
+  if (!future.length) return; history2.push(future.pop()); $('#undo').disabled = false; $('#redo').disabled = !future.length;
+  toast('ok', 'Rehecho: ' + history2[history2.length - 1].label, '');
+});
+
+/* ---------- asistente: proveedor */
+function togglePop(){ var p = $('#prov-pop'); if (!can('ai.settings')) { toast('warn', 'Solo el Organizador cambia el proveedor', ''); return; } p.hidden = !p.hidden; $('#gear').setAttribute('aria-expanded', !p.hidden); }
+$('#gear').addEventListener('click', togglePop);
+$('#prov-btn').addEventListener('click', togglePop);
+$$('.opt').forEach(function(o){ var pick = function(){
+  $$('.opt').forEach(function(x){ x.setAttribute('aria-checked', x === o); }); $('#prov-name').textContent = o.dataset.prov;
+  $('#prov-pop').hidden = true; toast('ok', 'Proveedor actualizado', o.dataset.prov + ' responde desde ahora a todo el equipo.'); };
+  o.addEventListener('click', pick); o.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } }); });
+
+/* ---------- asistente: acciones */
+$('#act-ok').addEventListener('click', function(){ $('#act-1-st').className = 'chip green'; $('#act-1-st').textContent = 'Aplicada por Ana Dev'; $('#act-ok').parentNode.hidden = true; toast('ok', '3 cambios aplicados', 'Factura ya está en el diagrama y en el registro de cambios.'); });
+$('#act-no').addEventListener('click', function(){ $('#act-1-st').className = 'chip red'; $('#act-1-st').textContent = 'Rechazada'; $('#act-ok').parentNode.hidden = true; });
+
+/* ---------- asistente: dictado simulado (useSpeechRecognition) */
+var micTimer = null, phrase = 'agrega a Factura el atributo fechaEmision de tipo LocalDate';
+function setIa(thinking){ $('#ia-state').classList.toggle('thinking', thinking); $('#ia-state-txt').textContent = thinking ? 'Asistente pensando…' : 'Asistente disponible'; }
+function addMine(text, voice){
+  var m = document.createElement('div'); m.className = 'msg me';
+  m.innerHTML = '<span class="who">Ana Dev (tú) · ahora</span><div class="bubble"></div>';
+  m.querySelector('.bubble').textContent = text;
+  if (voice) m.querySelector('.bubble').insertAdjacentHTML('beforeend', '<span class="voice-tag" style="display:flex"><svg class="i" style="width:12px;height:12px"><use href="#i-mic"/></svg>Dictado por voz</span>');
+  $('#msgs').insertBefore(m, $('#proactive'));
+  $('#typing').hidden = false; setIa(true); $('#msgs').scrollTop = $('#msgs').scrollHeight;
+  setTimeout(function(){
+    $('#typing').hidden = true; setIa(false);
+    var r = document.createElement('div'); r.className = 'msg'; r.style.maxWidth = '100%';
+    r.innerHTML = '<span class="who"><span class="av sm ia"><svg class="i" style="width:12px;height:12px"><use href="#i-bot"/></svg></span>Asistente CASE · ahora</span><div class="bubble">Preparé 1 cambio para Factura. Confírmalo cuando quieras.</div><div class="action"><div class="row"><span class="chip teal">Crear atributo</span><code>- fechaEmision: LocalDate</code><span class="chip">Propuesta</span></div></div>';
+    $('#msgs').insertBefore(r, $('#proactive')); $('#msgs').scrollTop = $('#msgs').scrollHeight;
+  }, 1400);
+}
+$('#mic').addEventListener('click', function(){
+  var mic = $('#mic'), on = mic.getAttribute('aria-pressed') !== 'true';
+  if (!on) { clearInterval(micTimer); mic.setAttribute('aria-pressed', 'false'); $('#interim').textContent = ''; return; }
+  mic.setAttribute('aria-pressed', 'true'); var i = 0;
+  $('#interim').innerHTML = '<svg class="i" style="width:13px;height:13px;color:var(--danger)"><use href="#i-mic"/></svg><span>Escuchando…</span>';
+  micTimer = setInterval(function(){
+    i += 4; $('#interim').innerHTML = '<svg class="i" style="width:13px;height:13px;color:var(--danger)"><use href="#i-mic"/></svg><em></em>';
+    $('#interim em').textContent = phrase.slice(0, i) + (i < phrase.length ? '…' : '');
+    if (i >= phrase.length) {
+      clearInterval(micTimer); mic.setAttribute('aria-pressed', 'false'); $('#interim').textContent = '';
+      var text = phrase.charAt(0).toUpperCase() + phrase.slice(1);
+      if ($('#auto-send').checked) addMine(text, true); else $('#draft').value = text;
+    }
+  }, 120);
+});
+$('#send').addEventListener('click', function(){ var v = $('#draft').value.trim(); if (!v) { toast('warn', 'Escribe o dicta un mensaje', ''); return; } $('#draft').value = ''; addMine(v, false); });
+$('#sim-pro').addEventListener('click', function(){ var p = $('#proactive'); p.hidden = false; p.style.animation = 'none'; void p.offsetWidth; p.style.animation = 'in .3s ease'; $('#msgs').scrollTop = $('#msgs').scrollHeight; toast('ok', 'Nueva sugerencia de la IA', 'Llegó a todos los integrantes conectados.'); });
+
+/* ---------- registro de cambios */
+var kind = '', who = '';
+function filterLog(){ $$('#rg-list .ev, .tline .ev').forEach(function(ev){ var ok = (!kind || ev.dataset.kind.split(' ').indexOf(kind) !== -1) && (!who || ev.dataset.who === who); ev.hidden = !ok; }); }
+$$('#rg-filters .fchip').forEach(function(c){ c.addEventListener('click', function(){ kind = c.dataset.kind; $$('#rg-filters .fchip').forEach(function(x){ x.setAttribute('aria-pressed', x === c); }); filterLog(); }); });
+$('#rg-who').addEventListener('change', function(e){ who = e.target.value; filterLog(); });
+$('#sw-fallback').addEventListener('change', function(e){ $('#rg-fallback').hidden = !e.target.checked; });
+$('#sim-live').addEventListener('click', function(){
+  var ev = document.createElement('div'); ev.className = 'ev fresh'; ev.dataset.who = 'beto'; ev.dataset.kind = 'rel';
+  ev.innerHTML = '<span class="av beto">B</span><div class="txt"><b>Beto Dev</b> relacionó Producto con Categoria<div class="meta"><span class="chip">Composición</span>1 — 0..*</div></div><time>ahora</time>';
+  $('#rg-list').insertBefore(ev, $('#rg-list').firstChild); filterLog();
+});
+
+/* ---------- gestión: invitar y revocar */
+function bindRevoke(btn){ btn.addEventListener('click', function(){ var tr = btn.closest('tr'), email = tr.dataset.email;
+  confirmDialog('¿Revocar la invitación?', email + ' ya no podrá unirse con esta invitación. Puedes invitarle de nuevo después.', 'Revocar', function(){ tr.remove(); toast('ok', 'Invitación revocada', email); }); }); }
+$$('[data-revoke]').forEach(bindRevoke);
+$('#inv-form').addEventListener('submit', function(e){
+  e.preventDefault(); var email = $('#inv-email').value.trim(), err = $('#inv-err');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { err.hidden = false; err.style.color = 'var(--danger)'; err.textContent = 'Escribe un correo válido, por ejemplo persona@correo.com.'; return; }
+  if ($$('#inv-rows tr').some(function(r){ return r.dataset.email === email.toLowerCase(); })) { err.hidden = false; err.style.color = 'var(--danger)'; err.textContent = 'Ya hay una invitación pendiente para ese correo (409 INVITATION_ALREADY_PENDING).'; return; }
+  err.hidden = true; var b = $('#inv-btn'); b.disabled = true; b.innerHTML = '<span class="spin"></span><span>Invitando…</span>';
+  setTimeout(function(){
+    var tr = document.createElement('tr'); tr.dataset.email = email.toLowerCase();
+    tr.innerHTML = '<td></td><td><span class="chip"></span></td><td>en 7 días</td><td><button class="btn btn-ghost btn-sm" data-revoke>Revocar</button></td>';
+    tr.children[0].textContent = email; tr.querySelector('.chip').textContent = $('#inv-role').value;
+    $('#inv-rows').insertBefore(tr, $('#inv-rows').firstChild); bindRevoke(tr.querySelector('[data-revoke]'));
+    b.disabled = false; b.innerHTML = '<svg class="i"><use href="#i-mail"/></svg><span>Invitar</span>'; $('#inv-email').value = '';
+    toast('ok', 'Invitación enviada', email + ' la verá en su campana.');
+  }, 800);
+});
+$$('[data-perm-disable]').forEach(function(s){ s.addEventListener('change', function(){ toast('ok', 'Rol actualizado', 'Los permisos cambian de inmediato.'); }); });
+
+/* ---------- invitaciones y campana */
+$('#bell').addEventListener('click', function(){ var p = $('#notif-pop'); p.hidden = !p.hidden; $('#bell').setAttribute('aria-expanded', !p.hidden); });
+document.addEventListener('click', function(e){ var p = $('#notif-pop'); if (!p.hidden && !e.target.closest('#notif-pop') && !e.target.closest('#bell')) { p.hidden = true; $('#bell').setAttribute('aria-expanded', 'false'); } });
+function resolveInvite(accepted){
+  var card = $('#inv-card'), n = $('#notif-inv'); if (card) card.remove(); if (n) n.remove();
+  if (accepted) {
+    var c = document.createElement('div'); c.className = 'card proj';
+    c.innerHTML = '<span class="chip green" style="width:max-content"><span class="dot"></span>Activo</span><b>Clínica San Martín</b><span class="muted">Editor · 4 integrantes · versión 2</span>';
+    $('#proj-grid').insertBefore(c, $('#proj-grid').firstChild); toast('ok', 'Te uniste a Clínica San Martín', 'Ya aparece en tus proyectos.');
+  } else toast('ok', 'Invitación rechazada', 'Ana Dev recibirá el aviso.');
+  $('.badge').textContent = '2';
+}
+$$('[data-accept]').forEach(function(b){ b.addEventListener('click', function(){ resolveInvite(true); }); });
+$$('[data-reject]').forEach(function(b){ b.addEventListener('click', function(){ resolveInvite(false); }); });
+
+/* ---------- componentes */
+var TOASTS = { ok:['Versión 4 guardada','Se notificó a 2 integrantes.'], warn:['Beto Dev está editando Producto','Espera a que lo libere.'], err:['No se pudo invitar','Ese correo ya es integrante del proyecto.'] };
+$$('[data-toast]').forEach(function(b){ b.addEventListener('click', function(){ var t = TOASTS[b.dataset.toast]; toast(b.dataset.toast, t[0], t[1]); }); });
+$('[data-confirm-demo]').addEventListener('click', function(){ confirmDialog('¿Eliminar la clase Pedido?', 'Se eliminarán también sus 3 relaciones. Puedes deshacerlo con Ctrl+Z mientras no cambies de diagrama.', 'Eliminar', function(){ toast('ok', 'Clase eliminada', 'Pedido y sus relaciones.'); }); });
+
+/* ---------- arranque */
+document.body.classList.toggle('show-files', store.get('files') !== '0');
+$('#sw-files').checked = store.get('files') !== '0';
+applyRole();
+show(location.hash.slice(1) || store.get('screen') || 'editor');
+})();
+</script>
+</body>
+</html>

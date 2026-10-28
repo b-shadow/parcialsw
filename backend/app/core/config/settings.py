@@ -80,6 +80,23 @@ class Settings(BaseSettings):
     project_snapshot_max_bytes: int = 8 * 1024 * 1024
     notification_outbox_batch_size: int = 50
 
+    # Redis y NoSQL
+    redis_enabled: bool = False
+    redis_url: str = "redis://127.0.0.1:6379/0"
+    redis_key_prefix: str = "case"
+    redis_change_log_maxlen: int = 10000
+
+    # Bloqueos e IA Proactiva
+    element_lock_ttl_seconds: int = 60
+    ai_proactive_enabled: bool = True
+    ai_proactive_min_changes: int = 5
+    ai_proactive_cooldown_seconds: int = 120
+
+    # Gemini opcional
+    gemini_api_key: str | None = None
+    gemini_model: str = ""
+    gemini_base_url: str = "https://generativelanguage.googleapis.com"
+
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins_raw.split(",") if origin.strip()]

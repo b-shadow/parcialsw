@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 
+from app.core.config.settings import settings
 from app.main import app
 
 
@@ -19,16 +20,17 @@ def test_phase9_openapi_operation_ids_are_unique() -> None:
 
 
 def test_phase9_allowed_cors_origin_receives_header() -> None:
+    origin = settings.cors_origins[0]
     response = TestClient(app).options(
         "/api/v1/projects",
         headers={
-            "Origin": "https://case-inteligente.vercel.app",
+            "Origin": origin,
             "Access-Control-Request-Method": "GET",
         },
     )
 
     assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "https://case-inteligente.vercel.app"
+    assert response.headers["access-control-allow-origin"] == origin
 
 
 def test_phase9_unknown_cors_origin_is_not_authorized() -> None:

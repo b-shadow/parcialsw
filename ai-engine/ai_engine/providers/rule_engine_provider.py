@@ -32,9 +32,11 @@ class RuleEngineProvider:
         context: AiProjectContext,
         intents: list[DetectedIntent],
     ) -> bool:
+        intent_names = {item.name for item in intents}
+        if "coordinate_team" in intent_names:
+            return True
         if context.active_diagram is None:
             return False
-        intent_names = {item.name for item in intents}
         normalized_request = _normalized(request_text)
         if "modify_uml" in intent_names and self._requests_recommendation_resolution(
             normalized_request
@@ -177,6 +179,8 @@ class RuleEngineProvider:
                     f"requiere una decision concreta: {unresolved}. Indica el criterio que deseas "
                     "usar y preparare el cambio para confirmarlo."
                 )
+        if "coordinate_team" in intents:
+            return self._coordinate_team_answer(context)
         if {"explain_uml", "answer_question", "recommend", "review_uml", "validate_uml"} & intents:
             return self._contextual_uml_answer(
                 request_text, context, intents, actions, recommendations
@@ -269,6 +273,51 @@ class RuleEngineProvider:
             if title in non_automatic:
                 unresolved.append(non_automatic[title])
         return actions, unresolved
+
+    def _coordinate_team_answer(self, context: AiProjectContext) -> str:
+        if not context.team_activity:
+            return "No hay actividad reciente registrada en el equipo."
+
+        lines: list[str] = []
+        for item in context.team_activity:
+            if item.actions:
+                actions_str = "; ".join(item.actions)
+                lines.append(f"{item.display_name}: {actions_str}")
+            else:
+                lines.append(f"{item.display_name}: sin actividad reciente registrada.")
+
+        known_classes: set[str] = set()
+        if context.active_diagram and context.active_diagram.classes:
+            for cls in context.active_diagram.classes:
+                cname = cls.get("name") if isinstance(cls, dict) else getattr(cls, "name", None)
+                if cname:
+                    known_classes.add(cname)
+
+        class_to_members: dict[str, set[str]] = {}
+        for item in context.team_activity:
+            all_text = " ".join(item.actions)
+            for cname in known_classes:
+                if re.search(rf"\b{re.escape(cname)}\b", all_text, re.IGNORECASE):
+                    class_to_members.setdefault(cname, set()).add(item.display_name)
+            words = set(re.findall(r"\b[A-Z][a-zA-Z0-9_]{2,}\b", all_text))
+            stopwords = {"UML", "JPA", "DTO", "DAO", "REST", "API", "SQL", "CRUD", item.display_name}
+            for word in words:
+                if word not in stopwords:
+                    class_to_members.setdefault(word, set()).add(item.display_name)
+
+        shared_classes = [
+            cname for cname, members in class_to_members.items() if len(members) >= 2
+        ]
+
+        if shared_classes:
+            classes_str = ", ".join(sorted(shared_classes))
+            suggestion = (
+                f"Sugerencia de coordinación: dos o más integrantes tocaron la misma clase ({classes_str}). "
+                "Se sugiere coordinarse y repartir el trabajo para evitar conflictos de edición."
+            )
+            return "\n".join(lines) + f"\n\n{suggestion}"
+
+        return "\n".join(lines)
 
     def _contextual_uml_answer(
         self,

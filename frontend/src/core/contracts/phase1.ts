@@ -4,13 +4,14 @@ export type AiIntent =
   | "specify_method" | "prepare_generation" | "summarize_conversation"
   | "summarize_project" | "coordinate_team" | "unknown";
 
+import type { AiProvider } from "./mejoras2p";
 export type { FlutterThemeConfig, FlutterThemeSettings } from "../../modules/transformacion_generacion_software/types/generation";
 
 export type AiProjectSettings = {
   id: string;
   project_id: string;
   enabled: boolean;
-  preferred_provider: "ollama" | "rule_engine";
+  preferred_provider: AiProvider;
   model_name: string;
   fallback_enabled: boolean;
   require_confirmation: boolean;
@@ -191,7 +192,8 @@ export type ProjectSocketEventV2 = {
     "METHOD_SPECIFICATION_UPDATED" | "METHOD_SPECIFICATION_DELETED" |
     "METHOD_SPECIFICATION_REFINED" |
     "AI_PROCESSING_STARTED" | "AI_PROCESSING_FINISHED" | "AI_PROCESSING_FAILED" |
-    "PRESENCE_JOINED" | "PRESENCE_LEFT" | "PRESENCE_SNAPSHOT" | "SYNC_REQUIRED";
+    "PRESENCE_JOINED" | "PRESENCE_LEFT" | "PRESENCE_SNAPSHOT" | "SYNC_REQUIRED" |
+    "ELEMENT_LOCKED" | "ELEMENT_UNLOCKED" | "LOCK_REJECTED" | "CHANGE_LOGGED";
   event_id: string;
   project_id: string;
   diagram_id?: string | null;

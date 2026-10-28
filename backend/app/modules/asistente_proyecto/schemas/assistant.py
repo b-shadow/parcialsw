@@ -52,7 +52,7 @@ class AiProjectSettingsUpdate(BaseModel):
     model_config = {"extra": "forbid"}
 
     enabled: bool = True
-    preferred_provider: Literal["ollama", "rule_engine"] = "ollama"
+    preferred_provider: Literal["ollama", "gemini", "rule_engine"] = "ollama"
     model_name: str = Field(default="qwen2.5-coder:7b", min_length=1, max_length=120)
     fallback_enabled: bool = True
     require_confirmation: bool = True

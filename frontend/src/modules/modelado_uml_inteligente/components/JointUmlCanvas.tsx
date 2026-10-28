@@ -1,6 +1,7 @@
 import { PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import * as joint from "@joint/core";
 
+import type { ElementLock } from "../../../core/contracts/mejoras2p";
 import type { UmlClassDetail, UmlRelationship } from "../types/uml";
 
 type UmlTool =
@@ -10,7 +11,9 @@ type UmlTool =
   | "inheritance"
   | "aggregation"
   | "composition"
-  | "associationClass";
+  | "associationClass"
+  | "dependency"
+  | "realization";
 
 type JointUmlCanvasProps = {
   classes: UmlClassDetail[];
@@ -19,6 +22,7 @@ type JointUmlCanvasProps = {
   pendingSourceId: string;
   selectedClassId: string | null;
   selectedRelationshipId: string | null;
+  lockedElements?: Record<string, ElementLock>;
   isDark: boolean;
   onClassClick: (classId: string) => void;
   onRelationshipClick: (relationshipId: string) => void;
@@ -42,13 +46,26 @@ type Viewport = {
 };
 
 function visibilitySymbol(visibility: string) {
-  return visibility === "private" ? "-" : "+";
+  switch (visibility) {
+    case "private":
+      return "-";
+    case "protected":
+      return "#";
+    case "package":
+      return "~";
+    case "public":
+    default:
+      return "+";
+  }
 }
 
 function classHeight(umlClass: UmlClassDetail) {
+  const isEnum = umlClass.element_type === "enum";
+  const hasStereotype = umlClass.element_type === "interface" || isEnum || !!umlClass.stereotype;
+  const headerHeight = hasStereotype ? HEADER_HEIGHT + 14 : HEADER_HEIGHT;
   const attributeRows = Math.max(1, umlClass.attributes.length);
-  const methodRows = Math.max(1, umlClass.methods.length);
-  return HEADER_HEIGHT + attributeRows * ROW_HEIGHT + methodRows * ROW_HEIGHT + 26;
+  const methodRows = isEnum ? 0 : Math.max(1, umlClass.methods.length);
+  return headerHeight + attributeRows * ROW_HEIGHT + (isEnum ? 0 : methodRows * ROW_HEIGHT + 12) + 26;
 }
 
 function classAttrs(umlClass: UmlClassDetail, isDark: boolean, selected: boolean) {
@@ -170,15 +187,19 @@ function relationshipLabel(relationship: UmlRelationship) {
 
 function linkAttrs(relationship: UmlRelationship, isDark: boolean, selected: boolean) {
   const stroke = relationship.relationship_type === "inheritance" ? "#1d4ed8" : "#0f766e";
-  const dashed = relationship.relationship_type === "dependency" || relationship.relationship_type === "implementation";
+  const dashed = ["dependency", "realization", "implementation"].includes(relationship.relationship_type);
   const targetMarker = (() => {
     switch (relationship.relationship_type) {
       case "inheritance":
+      case "realization":
+      case "implementation":
         return { type: "path", d: "M 12 -6 0 0 12 6 z", fill: isDark ? "#0f172a" : "#f8fafc", stroke };
       case "aggregation":
         return { type: "path", d: "M 12 0 6 -6 0 0 6 6 z", fill: isDark ? "#0f172a" : "#f8fafc", stroke };
       case "composition":
         return { type: "path", d: "M 12 0 6 -6 0 0 6 6 z", fill: stroke, stroke };
+      case "dependency":
+        return { type: "path", d: "M 10 -5 0 0 10 5", fill: "none", stroke };
       default:
         return { type: "path", d: "M 10 -5 0 0 10 5", fill: "none", stroke };
     }
@@ -249,6 +270,7 @@ export function JointUmlCanvas({
   pendingSourceId,
   selectedClassId,
   selectedRelationshipId,
+  lockedElements,
   isDark,
   onClassClick,
   onRelationshipClick,
@@ -645,6 +667,11 @@ export function JointUmlCanvas({
           return "url(#uml-aggregation)";
         case "composition":
           return "url(#uml-composition)";
+        case "realization":
+        case "implementation":
+          return "url(#uml-realization)";
+        case "dependency":
+          return "url(#uml-dependency)";
         default:
           return "url(#uml-association)";
       }
@@ -665,7 +692,7 @@ export function JointUmlCanvas({
           }}
           pointerEvents="visibleStroke"
           stroke={stroke}
-          strokeDasharray={relationship.relationship_type === "dependency" || relationship.relationship_type === "implementation" ? "8 6" : undefined}
+          strokeDasharray={["dependency", "realization", "implementation"].includes(relationship.relationship_type) ? "8 6" : undefined}
           strokeWidth={selected ? 3 : 2}
           x1={x1}
           x2={x2}
@@ -738,18 +765,31 @@ export function JointUmlCanvas({
             <marker id="uml-composition" markerHeight="12" markerWidth="12" orient="auto" refX="12" refY="6">
               <path d="M 12 6 L 6 0 L 0 6 L 6 12 Z" fill="#0f766e" stroke="#0f766e" strokeWidth="1.8" />
             </marker>
+            <marker id="uml-realization" markerHeight="12" markerWidth="12" orient="auto" refX="12" refY="6">
+              <path d="M 12 6 L 0 0 L 0 12 Z" fill={isDark ? "#111827" : "#f8fafc"} stroke="#0f766e" strokeWidth="1.8" />
+            </marker>
+            <marker id="uml-dependency" markerHeight="8" markerWidth="8" orient="auto" refX="8" refY="4">
+              <path d="M 0 0 L 8 4 L 0 8" fill="none" stroke="#0f766e" strokeWidth="1.8" />
+            </marker>
           </defs>
           {relationships.map(renderRelationship)}
         </svg>
         {classes.map((umlClass, index) => {
           const position = classPosition(umlClass, index, transientPositions);
           const selected = selectedClassId === umlClass.id || pendingSourceId === umlClass.id;
+          const isEnum = umlClass.element_type === "enum";
+          const isInterface = umlClass.element_type === "interface";
+          const isAbstract = umlClass.element_type === "abstract_class";
+          const lock = lockedElements?.[umlClass.id];
+
           return (
             <div
               className={`pointer-events-auto absolute select-none overflow-hidden rounded-sm border font-mono text-sm shadow-sm ${
-                selected
-                  ? "border-slate-950 ring-2 ring-slate-950 dark:border-slate-200 dark:ring-slate-200"
-                  : "border-slate-500 dark:border-slate-500"
+                lock
+                  ? "border-2 border-dashed border-amber-500 ring-2 ring-amber-400/40"
+                  : selected
+                    ? "border-slate-950 ring-2 ring-slate-950 dark:border-slate-200 dark:ring-slate-200"
+                    : "border-slate-500 dark:border-slate-500"
               } ${isDark ? "bg-slate-950 text-slate-100" : "bg-orange-50 text-slate-950"}`}
               key={umlClass.id}
               onPointerDown={(event) => handlePointerDown(event, umlClass, index)}
@@ -762,16 +802,40 @@ export function JointUmlCanvas({
                 minHeight: classHeight(umlClass)
               }}
             >
-              <input
-                className={`h-[34px] w-full border-0 border-b px-3 text-center font-sans text-sm font-bold outline-none ${
+              {lock && (
+                <div
+                  className="absolute -top-3 right-2 z-20 flex items-center gap-1 rounded bg-amber-500 px-1.5 py-0.5 text-xs font-sans font-medium text-slate-950 shadow"
+                  data-testid={`lock-${umlClass.id}`}
+                >
+                  <span aria-hidden="true">🔒</span>
+                  <span>{lock.locked_by.display_name} editando</span>
+                </div>
+              )}
+              <div
+                className={`border-0 border-b px-3 py-1 text-center font-sans ${
                   isDark
                     ? "border-slate-700 bg-slate-900 text-slate-100"
                     : "border-slate-400 bg-orange-100 text-slate-950"
                 }`}
-                onChange={(event) => onClassRename(umlClass.id, event.target.value)}
-                onPointerDown={(event) => event.stopPropagation()}
-                value={umlClass.name}
-              />
+              >
+                {isInterface && (
+                  <div className="text-[11px] font-normal italic text-slate-500 dark:text-slate-400">«interface»</div>
+                )}
+                {isEnum && (
+                  <div className="text-[11px] font-normal italic text-slate-500 dark:text-slate-400">«enumeration»</div>
+                )}
+                {!isInterface && !isEnum && umlClass.stereotype && (
+                  <div className="text-[11px] font-normal italic text-slate-500 dark:text-slate-400">«{umlClass.stereotype}»</div>
+                )}
+                <input
+                  className={`w-full bg-transparent text-center font-sans text-sm font-bold outline-none ${
+                    isAbstract ? "italic font-bold" : ""
+                  }`}
+                  onChange={(event) => onClassRename(umlClass.id, event.target.value)}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  value={umlClass.name}
+                />
+              </div>
               <div className={`min-h-[46px] whitespace-pre-line border-b px-5 py-3 ${isDark ? "border-slate-700" : "border-slate-300"}`}>
                 {umlClass.attributes.map((attribute, itemIndex) => (
                   <div className={isDark ? "text-slate-200" : "text-orange-900"} key={`${attribute.name}-${itemIndex}`}>
@@ -779,13 +843,15 @@ export function JointUmlCanvas({
                   </div>
                 ))}
               </div>
-              <div className="min-h-[46px] whitespace-pre-line px-5 py-3">
-                {umlClass.methods.map((method, itemIndex) => (
-                  <div className={isDark ? "text-slate-200" : "text-green-800"} key={`${method.name}-${itemIndex}`}>
-                    {visibilitySymbol(method.visibility)}&nbsp; {method.name}(): {method.return_type ?? "void"}
-                  </div>
-                ))}
-              </div>
+              {!isEnum && (
+                <div className="min-h-[46px] whitespace-pre-line px-5 py-3">
+                  {umlClass.methods.map((method, itemIndex) => (
+                    <div className={isDark ? "text-slate-200" : "text-green-800"} key={`${method.name}-${itemIndex}`}>
+                      {visibilitySymbol(method.visibility)}&nbsp; {method.name}(): {method.return_type ?? "void"}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}

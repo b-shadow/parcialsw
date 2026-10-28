@@ -19,6 +19,7 @@ __all__ = [
     "AiProvider",
     "AiProviderError",
     "ContextTooLargeError",
+    "GeminiProvider",
     "InvalidStructuredOutputError",
     "ModelNotInstalledError",
     "OllamaProvider",
@@ -37,4 +38,8 @@ def __getattr__(name: str):
         from ai_engine.providers.ollama_provider import OllamaProvider
 
         return OllamaProvider
+    if name == "GeminiProvider":
+        from ai_engine.providers.gemini_provider import GeminiProvider
+
+        return GeminiProvider
     raise AttributeError(name)

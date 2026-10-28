@@ -22,11 +22,13 @@ from app.modules.notificaciones.services.notification_service import (
 from app.modules.proyectos_colaboracion.models import (
     CollaborationEvent,
     Project,
+    ProjectInvitation,
     ProjectMember,
     ProjectPermission,
     ProjectRestoreOperation,
     ProjectVersion,
 )
+from app.modules.proyectos_colaboracion.permissions import PERMISSION_CODES
 from app.modules.proyectos_colaboracion.repositories.member_repository import MemberRepository
 from app.modules.proyectos_colaboracion.repositories.project_repository import ProjectRepository
 from app.modules.proyectos_colaboracion.schemas.project import (
@@ -55,8 +57,9 @@ from app.modules.proyectos_colaboracion.services.version_document_store import (
     persist_version_document,
 )
 from app.modules.proyectos_colaboracion.validators.project_validator import (
-    ensure_organizer,
     ensure_project_exists,
+    ensure_project_permission,
+    member_permissions,
 )
 
 DEFAULT_ORGANIZER_PERMISSIONS = [
@@ -161,11 +164,26 @@ class ProjectService:
         self._require_member(project_id, user_id)
         return project
 
+    def my_membership(self, project_id: UUID, user_id: UUID) -> dict:
+        member = self.members.get_membership(project_id, user_id)
+        if member is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "PERMISSION_DENIED", "message": "Sin acceso al proyecto"},
+            )
+        perms = member_permissions(self.db, member)
+        return {
+            "project_id": project_id,
+            "user_id": user_id,
+            "project_role": member.project_role,
+            "permissions": sorted(perms),
+        }
+
     def update_project(
         self, project_id: UUID, payload: ProjectUpdateRequest, user_id: UUID
     ) -> Project:
         project = self.mutations.acquire(project_id)
-        ensure_organizer(self.members.get_membership(project_id, user_id))
+        ensure_project_permission(self.db, project_id, user_id, "project.update")
         values = payload.model_dump(exclude_unset=True)
         changed = any(
             field in {"name", "description", "settings"} and getattr(project, field) != value
@@ -209,7 +227,7 @@ class ProjectService:
         self, project_id: UUID, payload: AddMemberRequest, user_id: UUID
     ) -> ProjectMember:
         ensure_project_exists(self.projects.get(project_id))
-        ensure_organizer(self.members.get_membership(project_id, user_id))
+        ensure_project_permission(self.db, project_id, user_id, "members.manage")
         existing = self.members.get_membership(project_id, payload.user_id)
         if existing is not None:
             return existing
@@ -258,14 +276,75 @@ class ProjectService:
         self.db.refresh(member)
         return member
 
+    def add_member_from_invitation(self, invitation: ProjectInvitation, user_id: UUID) -> ProjectMember:
+        ensure_project_exists(self.projects.get(invitation.project_id))
+        existing = self.members.get_membership(invitation.project_id, user_id)
+        if existing is not None:
+            return existing
+        member = self.members.add(
+            ProjectMember(
+                project_id=invitation.project_id,
+                user_id=user_id,
+                project_role=invitation.project_role,
+                joined_at=datetime.now(UTC),
+            )
+        )
+        self.audit.record(
+            module="proyectos_colaboracion",
+            action="ADD_PROJECT_MEMBER",
+            user_id=invitation.invited_by_user_id,
+            project_id=invitation.project_id,
+            metadata={
+                "member_user_id": str(user_id),
+                "origin": "invitation",
+                "invitation_id": str(invitation.id),
+            },
+        )
+        self._activity_event(
+            project_id=invitation.project_id,
+            user_id=invitation.invited_by_user_id,
+            event_type="PROJECT_MEMBER_ADDED",
+            resource_type="project_member",
+            resource_id=member.id,
+            summary_key="activity.member_added",
+            payload={
+                "member_id": str(member.id),
+                "project_role": member.project_role,
+                "origin": "invitation",
+            },
+        )
+        NotificationService(self.db).record(
+            DomainNotificationEvent(
+                type="PROJECT_MEMBER_ADDED",
+                category="access",
+                title="Nuevo proyecto compartido",
+                body=f"Te agregaron al proyecto como {member.project_role}.",
+                recipient_user_ids={member.user_id},
+                dedup_entity_id=member.id,
+                project_id=invitation.project_id,
+                actor_user_id=invitation.invited_by_user_id,
+                resource_type="project_member",
+                resource_id=member.id,
+                deep_link=NotificationDeepLink(
+                    route_name="project_management",
+                    params={"project_id": str(invitation.project_id)},
+                ),
+            )
+        )
+        self.db.commit()
+        self.db.refresh(member)
+        return member
+
     def list_members(self, project_id: UUID, user_id: UUID) -> list[ProjectMember]:
         self._require_member(project_id, user_id)
         return self.members.list_by_project(project_id)
 
     def list_member_candidates(self, project_id: UUID, user_id: UUID) -> list[User]:
         ensure_project_exists(self.projects.get(project_id))
-        ensure_organizer(self.members.get_membership(project_id, user_id))
-        member_user_ids = {member.user_id for member in self.members.list_by_project(project_id)}
+        ensure_project_permission(self.db, project_id, user_id, "members.manage")
+        member_user_ids = {
+            member.user_id for member in self.members.list_by_project(project_id)
+        }
         return list(
             self.db.scalars(
                 select(User)
@@ -278,7 +357,7 @@ class ProjectService:
         self, project_id: UUID, member_id: UUID, payload: UpdateMemberRequest, user_id: UUID
     ) -> ProjectMember:
         project = ensure_project_exists(self.projects.get(project_id))
-        ensure_organizer(self.members.get_membership(project_id, user_id))
+        ensure_project_permission(self.db, project_id, user_id, "members.manage")
         member = self.members.get(member_id)
         if member is None or member.project_id != project_id:
             raise HTTPException(
@@ -341,7 +420,7 @@ class ProjectService:
 
     def remove_member(self, project_id: UUID, member_id: UUID, user_id: UUID) -> UUID:
         project = ensure_project_exists(self.projects.get(project_id))
-        ensure_organizer(self.members.get_membership(project_id, user_id))
+        ensure_project_permission(self.db, project_id, user_id, "members.manage")
         member = self.members.get(member_id)
         if member is None or member.project_id != project_id:
             raise HTTPException(
@@ -404,7 +483,15 @@ class ProjectService:
     def set_permission(
         self, project_id: UUID, member_id: UUID, payload: PermissionRequest, user_id: UUID
     ) -> ProjectPermission:
-        ensure_organizer(self.members.get_membership(project_id, user_id))
+        if payload.permission_code not in PERMISSION_CODES:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "INVALID_PERMISSION_CODE",
+                    "message": f"Código de permiso no válido: {payload.permission_code}",
+                },
+            )
+        ensure_project_permission(self.db, project_id, user_id, "members.manage")
         member = self.members.get(member_id)
         if member is None or member.project_id != project_id:
             raise HTTPException(
@@ -445,7 +532,7 @@ class ProjectService:
         idempotency_key: str | None = None,
     ) -> ProjectVersion:
         project = self.mutations.acquire(project_id)
-        self._ensure_version_manager(project, user_id)
+        ensure_project_permission(self.db, project_id, user_id, "versions.create")
         if (
             payload.expected_project_revision is not None
             and payload.expected_project_revision != project.revision
@@ -531,8 +618,8 @@ class ProjectService:
         return version
 
     def list_versions(self, project_id: UUID, user_id: UUID) -> list[dict]:
-        project = ensure_project_exists(self.projects.get(project_id))
-        self._ensure_version_manager(project, user_id)
+        ensure_project_exists(self.projects.get(project_id))
+        ensure_project_permission(self.db, project_id, user_id, "project.read")
         return [
             {
                 **self._version_dict(version),
@@ -543,7 +630,7 @@ class ProjectService:
 
     async def restore_preview(self, project_id: UUID, version_id: UUID, user_id: UUID) -> dict:
         project = ensure_project_exists(self.projects.get(project_id))
-        self._ensure_version_manager(project, user_id)
+        ensure_project_permission(self.db, project_id, user_id, "project.read")
         version = self.projects.get_version(version_id)
         if version is None or version.project_id != project_id:
             self._domain_error(404, "VERSION_NOT_FOUND", "Version del proyecto no encontrada")
@@ -634,7 +721,7 @@ class ProjectService:
         payload: RestoreRequest | None = None,
     ) -> dict:
         project = self.mutations.acquire(project_id)
-        self._ensure_version_manager(project, user_id)
+        ensure_project_permission(self.db, project_id, user_id, "versions.restore")
         version = self.projects.get_version(version_id)
         if version is None or version.project_id != project.id:
             self._domain_error(404, "VERSION_NOT_FOUND", "Version del proyecto no encontrada")

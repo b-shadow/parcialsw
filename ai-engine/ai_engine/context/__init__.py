@@ -6,6 +6,7 @@ from ai_engine.context.contracts import (
     DiagramContext,
     ProjectContext,
     RecentMessageContext,
+    TeamActivityItem,
 )
 from ai_engine.context.sanitizer import sanitize_context_data, sanitize_untrusted_text
 
@@ -18,6 +19,7 @@ __all__ = [
     "DiagramContext",
     "ProjectContext",
     "RecentMessageContext",
+    "TeamActivityItem",
     "sanitize_context_data",
     "sanitize_untrusted_text",
 ]

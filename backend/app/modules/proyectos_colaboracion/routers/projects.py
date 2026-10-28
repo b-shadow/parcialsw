@@ -14,6 +14,7 @@ from app.modules.proyectos_colaboracion.schemas.project import (
     ActivityPageResponse,
     AddMemberRequest,
     CollaborationEventResponse,
+    MyMembershipResponse,
     PermissionRequest,
     ProjectCreateRequest,
     ProjectMemberCandidateResponse,
@@ -123,6 +124,15 @@ def list_members(
         for member in members
         if member.user_id in users
     ]
+
+
+@router.get("/{project_id}/members/me", response_model=MyMembershipResponse)
+def get_my_membership(
+    project_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    return ProjectService(db).my_membership(project_id, current_user.id)
 
 
 @router.patch("/{project_id}/members/{member_id}", response_model=ProjectMemberResponse)

@@ -8,12 +8,15 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app.core.changelog.hooks import install_change_log_hooks
 from app.core.config.settings import settings
 from app.core.database.session import SessionLocal
 from app.core.nosql.client import mongo_manager
 from app.core.nosql.sync_client import sync_mongo_manager
 from app.core.observability import RequestLoggingMiddleware
+from app.core.redis.client import redis_status
 from app.core.security.headers import SecurityHeadersMiddleware
+from app.core.workers import start_background_workers
 from app.modules.acceso_usuarios.routers.auth import router as auth_router
 from app.modules.acceso_usuarios.routers.health import router as acceso_router
 from app.modules.acceso_usuarios.routers.users import router as users_router
@@ -25,7 +28,14 @@ from app.modules.generacion_software.routers.theme import router as theme_router
 from app.modules.modelado_uml.routers.health import router as uml_router
 from app.modules.modelado_uml.routers.uml import router as uml_functional_router
 from app.modules.notificaciones.routers import router as notifications_router
+from app.modules.proyectos_colaboracion.routers.change_log import router as change_log_router
 from app.modules.proyectos_colaboracion.routers.health import router as proyectos_router
+from app.modules.proyectos_colaboracion.routers.invitations import (
+    my_router as my_invitations_router,
+)
+from app.modules.proyectos_colaboracion.routers.invitations import (
+    router as invitations_router,
+)
 from app.modules.proyectos_colaboracion.routers.mobile import router as mobile_router
 from app.modules.proyectos_colaboracion.routers.projects import router as projects_router
 from app.websocket.router import router as websocket_router
@@ -35,12 +45,17 @@ from app.websocket.router import router as websocket_router
 async def lifespan(app: FastAPI):
     app.state.mongo_manager = mongo_manager
     await mongo_manager.connect(bootstrap=True)
-    yield
-    sync_mongo_manager.close()
-    await mongo_manager.close()
+    try:
+        async with start_background_workers(app):
+            yield
+    finally:
+        sync_mongo_manager.close()
+        await mongo_manager.close()
 
 
 def create_app() -> FastAPI:
+    install_change_log_hooks()
+
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",
@@ -68,6 +83,9 @@ def create_app() -> FastAPI:
     app.include_router(users_router, prefix=settings.api_prefix)
     app.include_router(proyectos_router, prefix=settings.api_prefix)
     app.include_router(projects_router, prefix=settings.api_prefix)
+    app.include_router(change_log_router, prefix=settings.api_prefix)
+    app.include_router(invitations_router, prefix=settings.api_prefix)
+    app.include_router(my_invitations_router, prefix=settings.api_prefix)
     app.include_router(mobile_router, prefix=settings.api_prefix)
     app.include_router(uml_router, prefix=settings.api_prefix)
     app.include_router(uml_functional_router, prefix=settings.api_prefix)
@@ -85,6 +103,7 @@ def create_app() -> FastAPI:
     @app.get("/ready", tags=["health"])
     async def ready() -> JSONResponse:
         postgres_status = "available"
+        current_redis_status = redis_status()
         try:
             with SessionLocal() as session:
                 session.execute(text("SELECT 1"))
@@ -171,12 +190,18 @@ def create_app() -> FastAPI:
         )
         content = {
             "status": "ok" if ready_status else "degraded",
+            "database": postgres_status,
+            "redis": current_redis_status,
             "components": {
                 "postgresql": {"status": postgres_status, "required": True},
                 "mongodb": {
                     "status": mongodb_health.status,
                     "required": mongodb_health.required,
                     "database": mongodb_health.database,
+                },
+                "redis": {
+                    "status": current_redis_status,
+                    "required": False,
                 },
             },
         }

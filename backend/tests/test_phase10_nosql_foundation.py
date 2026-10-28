@@ -328,6 +328,8 @@ def test_phase10_readiness_exposes_both_datastores() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "status": "ok",
+        "database": "available",
+        "redis": "disabled",
         "components": {
             "postgresql": {"status": "available", "required": True},
             "mongodb": {
@@ -335,5 +337,6 @@ def test_phase10_readiness_exposes_both_datastores() -> None:
                 "required": True,
                 "database": "case_inteligente_nosql",
             },
+            "redis": {"status": "disabled", "required": False},
         },
     }

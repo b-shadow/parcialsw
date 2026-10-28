@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -29,6 +30,14 @@ class RecentMessageContext(BaseModel):
     sequence_number: int = Field(ge=1)
     role: Literal["user", "assistant", "system", "tool"]
     content: str = Field(max_length=4000)
+    author_display_name: str | None = Field(default=None, max_length=160)
+
+
+class TeamActivityItem(BaseModel):
+    user_id: UUID | None = None
+    display_name: str
+    actions: list[str] = Field(default_factory=list, max_length=10)
+    last_at: datetime
 
 
 class ContextConstraints(BaseModel):
@@ -46,5 +55,6 @@ class AiProjectContext(BaseModel):
     conversation_summary: str | None = Field(default=None, max_length=10000)
     available_versions: list[dict] = Field(default_factory=list, max_length=100)
     generation_state: dict = Field(default_factory=dict)
+    team_activity: list[TeamActivityItem] = Field(default_factory=list, max_length=30)
     constraints: ContextConstraints = Field(default_factory=ContextConstraints)
     context_reduced: bool = False

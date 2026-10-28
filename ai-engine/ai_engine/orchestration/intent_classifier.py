@@ -10,6 +10,7 @@ def _normalize(value: str) -> str:
         for character in unicodedata.normalize("NFKD", value.casefold())
         if not unicodedata.combining(character)
     )
+    value = re.sub(r"^[¿¡\s]+", "", value)
     normalized = re.sub(r"\s+", " ", value).strip()
     typo_aliases = {
         "agrga": "agrega",
@@ -61,7 +62,22 @@ class IntentClassifier:
         ),
         ("summarize_conversation", ("resume la conversacion", "resumen de lo hablado"), 0.95),
         ("summarize_project", ("resume el proyecto", "resumen del proyecto"), 0.95),
-        ("coordinate_team", ("coordina", "compara opiniones", "acuerdos del equipo"), 0.9),
+        (
+            "coordinate_team",
+            (
+                "que hizo cada",
+                "quien cambio",
+                "quien modifico",
+                "resumen del equipo",
+                "que esta haciendo",
+                "reparte",
+                "organiza el trabajo",
+                "coordina",
+                "compara opiniones",
+                "acuerdos del equipo",
+            ),
+            0.9,
+        ),
         ("explain_system", ("como uso", "donde genero", "como funciona el sistema", "manual"), 0.9),
         (
             "explain_uml",
@@ -90,7 +106,8 @@ class IntentClassifier:
                 break
 
         if "?" in text or normalized.startswith(("que ", "como ", "cual ", "por que ")):
-            candidates.append((0, "answer_question", "pregunta explicita", 0.86))
+            pos = 0 if not candidates else len(normalized)
+            candidates.append((pos, "answer_question", "pregunta explicita", 0.86))
         unique: dict[str, tuple[int, str, float]] = {}
         for position, name, evidence, confidence in candidates:
             current = unique.get(name)

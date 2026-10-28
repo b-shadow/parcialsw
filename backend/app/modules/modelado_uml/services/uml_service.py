@@ -58,7 +58,10 @@ from app.modules.modelado_uml.validators.uml_validator import (
 from app.modules.proyectos_colaboracion.models import CollaborationEvent
 from app.modules.proyectos_colaboracion.repositories.member_repository import MemberRepository
 from app.modules.proyectos_colaboracion.services.project_mutation_guard import ProjectMutationGuard
-from app.modules.proyectos_colaboracion.validators.project_validator import ensure_membership
+from app.modules.proyectos_colaboracion.validators.project_validator import (
+    ensure_membership,
+    ensure_project_permission,
+)
 
 
 class UmlService:
@@ -79,7 +82,7 @@ class UmlService:
         self.documents = ActiveUmlDocumentStore()
 
     def create_diagram(self, payload: DiagramCreateRequest, user_id: UUID) -> UmlDiagram:
-        ensure_membership(self.members.get_membership(payload.project_id, user_id))
+        ensure_project_permission(self.db, payload.project_id, user_id, "uml.edit")
         existing = self.uml.list_diagrams_by_project(payload.project_id)
         if existing:
             raise HTTPException(
@@ -137,11 +140,29 @@ class UmlService:
         )
         self.db.commit()
 
+    def _ensure_unique_class_name(
+        self, diagram_id: UUID, name: str, exclude_id: UUID | None = None
+    ) -> None:
+        normalized_target = name.strip().casefold()
+        existing_classes = self.uml.list_classes(diagram_id)
+        for cls in existing_classes:
+            if exclude_id and cls.id == exclude_id:
+                continue
+            if cls.name.strip().casefold() == normalized_target:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "CLASS_NAME_DUPLICATED",
+                        "message": "Ya existe una clase con ese nombre en el diagrama",
+                    },
+                )
+
     def create_class(
         self, diagram_id: UUID, payload: UmlClassCreateRequest, user_id: UUID
     ) -> UmlClass:
         diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
+        self._ensure_unique_class_name(diagram_id, payload.name)
         self._begin_mutation(diagram.project_id)
         uml_class = self.uml.add_class(
             UmlClass(
@@ -268,7 +289,9 @@ class UmlService:
     ) -> UmlClass:
         uml_class = ensure_class_exists(self.uml.get_class(class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
+        if payload.name is not None:
+            self._ensure_unique_class_name(diagram.id, payload.name, exclude_id=class_id)
         self._begin_mutation(diagram.project_id)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(uml_class, field, value)
@@ -286,7 +309,7 @@ class UmlService:
     def delete_class(self, class_id: UUID, user_id: UUID) -> None:
         uml_class = ensure_class_exists(self.uml.get_class(class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
         self._begin_mutation(diagram.project_id)
         for relationship in self.uml.list_relationships_for_class(class_id):
             self.uml.delete_visual_element(diagram.id, "relationship", relationship.id)
@@ -308,7 +331,7 @@ class UmlService:
     ) -> UmlAttribute:
         uml_class = ensure_class_exists(self.uml.get_class(class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
         self._begin_mutation(diagram.project_id)
         attribute = self.uml.add_attribute(UmlAttribute(class_id=class_id, **payload.model_dump()))
         self.audit.record(
@@ -334,7 +357,7 @@ class UmlService:
             )
         uml_class = ensure_class_exists(self.uml.get_class(attribute.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
         self._begin_mutation(diagram.project_id)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(attribute, field, value)
@@ -359,7 +382,7 @@ class UmlService:
             )
         uml_class = ensure_class_exists(self.uml.get_class(attribute.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
         self._begin_mutation(diagram.project_id)
         self.uml.delete_attribute(attribute)
         self.audit.record(
@@ -376,7 +399,7 @@ class UmlService:
     ) -> UmlMethod:
         uml_class = ensure_class_exists(self.uml.get_class(class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
         self._begin_mutation(diagram.project_id)
         method = self.uml.add_method(UmlMethod(class_id=class_id, **payload.model_dump()))
         self.audit.record(
@@ -402,7 +425,7 @@ class UmlService:
             )
         uml_class = ensure_class_exists(self.uml.get_class(method.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
         self._begin_mutation(diagram.project_id)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(method, field, value)
@@ -427,7 +450,7 @@ class UmlService:
             )
         uml_class = ensure_class_exists(self.uml.get_class(method.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
         self._begin_mutation(diagram.project_id)
         self.uml.delete_method(method)
         self.audit.record(
@@ -451,7 +474,7 @@ class UmlService:
             )
         uml_class = ensure_class_exists(self.uml.get_class(method.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
         self._begin_mutation(diagram.project_id)
         self._validate_parameter(method, payload.name, payload.data_type, payload.default_value)
         parameter = self.uml.add_parameter(
@@ -477,7 +500,7 @@ class UmlService:
         method = self.uml.get_method(parameter.method_id)
         uml_class = ensure_class_exists(self.uml.get_class(method.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
         self._begin_mutation(diagram.project_id)
         values = payload.model_dump(exclude_unset=True)
         self._validate_parameter(
@@ -507,7 +530,7 @@ class UmlService:
         method = self.uml.get_method(parameter.method_id)
         uml_class = ensure_class_exists(self.uml.get_class(method.class_id))
         diagram = ensure_diagram_exists(self.uml.get_diagram(uml_class.diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
         self._begin_mutation(diagram.project_id)
         specification = self.uml.get_method_specification(method.id)
         if specification and self._parameter_is_referenced(
@@ -582,7 +605,7 @@ class UmlService:
         self, diagram_id: UUID, payload: UmlRelationshipCreateRequest, user_id: UUID
     ) -> UmlRelationship:
         diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
         self._begin_mutation(diagram.project_id)
         source = ensure_class_exists(self.uml.get_class(payload.source_class_id))
         target = ensure_class_exists(self.uml.get_class(payload.target_class_id))
@@ -613,7 +636,7 @@ class UmlService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Relacion UML no encontrada"
             )
         diagram = ensure_diagram_exists(self.uml.get_diagram(relationship.diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
         self._begin_mutation(diagram.project_id)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(relationship, field, value)
@@ -637,7 +660,7 @@ class UmlService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Relacion UML no encontrada"
             )
         diagram = ensure_diagram_exists(self.uml.get_diagram(relationship.diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
         self._begin_mutation(diagram.project_id)
         self.uml.delete_visual_element(diagram.id, "relationship", relationship_id)
         self.uml.delete_relationship(relationship)
@@ -654,7 +677,7 @@ class UmlService:
         self, diagram_id: UUID, payload: MoveElementRequest, user_id: UUID
     ) -> UmlVisualElement:
         diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
         self._begin_mutation(diagram.project_id)
         visual = self.uml.get_visual_element(diagram_id, payload.element_type, payload.element_id)
         if visual is None:
@@ -726,7 +749,7 @@ class UmlService:
         return XmiExportResponse(diagram_id=diagram_id, file_name=file_name, content=content)
 
     def import_diagram_xmi(self, payload: XmiImportRequest, user_id: UUID) -> UmlDiagram:
-        ensure_membership(self.members.get_membership(payload.project_id, user_id))
+        ensure_project_permission(self.db, payload.project_id, user_id, "uml.edit")
         existing = self.uml.list_diagrams_by_project(payload.project_id)
         if existing:
             return self.import_diagram_xmi_into_existing(existing[0].id, payload, user_id)
@@ -759,7 +782,7 @@ class UmlService:
         self, diagram_id: UUID, payload: XmiImportRequest, user_id: UUID
     ) -> UmlDiagram:
         diagram = ensure_diagram_exists(self.uml.get_diagram(diagram_id))
-        ensure_membership(self.members.get_membership(diagram.project_id, user_id))
+        ensure_project_permission(self.db, diagram.project_id, user_id, "uml.edit")
         if diagram.project_id != payload.project_id:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -808,7 +831,7 @@ class UmlService:
         return diagram
 
     def generate_from_prompt(self, payload: TextToUmlRequest, user_id: UUID) -> UmlDiagram:
-        ensure_membership(self.members.get_membership(payload.project_id, user_id))
+        ensure_project_permission(self.db, payload.project_id, user_id, "uml.edit")
         self._begin_mutation(payload.project_id)
         model = build_uml_from_text(payload.prompt, payload.name)
         existing = self.uml.list_diagrams_by_project(payload.project_id)

@@ -7,6 +7,7 @@ from ai_engine.context import (
     DiagramContext,
     ProjectContext,
     RecentMessageContext,
+    TeamActivityItem,
 )
 from ai_engine.context.sanitizer import sanitize_untrusted_text
 from fastapi import HTTPException, status
@@ -81,11 +82,14 @@ class ProjectContextBuilder:
         recent_messages: list[RecentMessageContext] = []
         if requested.include_recent_messages:
             messages = await self._messages(conversation.id, settings.max_context_messages)
+            author_ids = {item.author_user_id for item in messages if item.author_user_id}
+            names_by_user = self.assistant.user_display_names(author_ids) if author_ids else {}
             recent_messages = [
                 RecentMessageContext(
                     sequence_number=item.sequence_number,
                     role=item.role,
                     content=item.content,
+                    author_display_name=names_by_user.get(item.author_user_id) if item.author_user_id else None,
                 )
                 for item in messages
             ]
@@ -131,7 +135,45 @@ class ProjectContextBuilder:
                 for item in pending_recommendations
             ],
         }
-        return AiProjectContext(
+        team_activity: list[TeamActivityItem] = []
+        try:
+            from app.core.changelog.service import ChangeLogService
+            cl_service = ChangeLogService()
+            cl_page = cl_service.list_project(project.id, db=self.db, limit=50)
+            cl_page = cl_service.resolve_names(self.db, cl_page)
+
+            grouped: dict[str, dict] = {}
+            for entry in cl_page.items:
+                key = str(entry.actor_user_id) if entry.actor_user_id else (entry.actor_display_name or "sistema")
+                name = entry.actor_display_name or ("Sistema" if not entry.actor_user_id else str(entry.actor_user_id))
+                action_text = entry.summary or f"{entry.action} {entry.entity_type or ''}".strip()
+                if not action_text:
+                    continue
+                if key not in grouped:
+                    grouped[key] = {
+                        "user_id": entry.actor_user_id,
+                        "display_name": name,
+                        "actions": [],
+                        "last_at": entry.occurred_at,
+                    }
+                actor_data = grouped[key]
+                if len(actor_data["actions"]) < 10 and action_text not in actor_data["actions"]:
+                    actor_data["actions"].append(action_text)
+                actor_data["last_at"] = max(actor_data["last_at"], entry.occurred_at)
+
+            for data in grouped.values():
+                team_activity.append(
+                    TeamActivityItem(
+                        user_id=data["user_id"],
+                        display_name=data["display_name"],
+                        actions=data["actions"],
+                        last_at=data["last_at"],
+                    )
+                )
+        except Exception:
+            team_activity = []
+
+        context = AiProjectContext(
             project=ProjectContext(
                 id=project.id,
                 name=project.name,
@@ -148,6 +190,7 @@ class ProjectContextBuilder:
             conversation_summary=await self._project_conversation_memory(project.id, conversation),
             available_versions=versions,
             generation_state=generation_state,
+            team_activity=team_activity,
             constraints=ContextConstraints(
                 language="es",
                 offline=True,
@@ -155,6 +198,11 @@ class ProjectContextBuilder:
                 surface=requested.surface,
             ),
         )
+        try:
+            from ai_engine.context.budget import ContextBudget
+            return ContextBudget(max_chars=50000).apply(context).context
+        except Exception:
+            return context
 
     async def _project_conversation_memory(
         self, project_id: UUID, current: AiConversation
