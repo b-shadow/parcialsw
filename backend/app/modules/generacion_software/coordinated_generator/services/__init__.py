@@ -1,6 +1,6 @@
-from .coordinated_generation_service import (
-    CoordinatedGenerationResult,
-    CoordinatedGeneratorService,
+from .servicio_generacion_coordinada import (
+    ResultadoGeneracionCoordinada,
+    ServicioGeneradorCoordinado,
 )
 
-__all__ = ["CoordinatedGenerationResult", "CoordinatedGeneratorService"]
+__all__ = ["ResultadoGeneracionCoordinada", "ServicioGeneradorCoordinado"]

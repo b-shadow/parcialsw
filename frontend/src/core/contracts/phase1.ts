@@ -1,17 +1,17 @@
-export type AiIntent =
+export type IntencionIA =
   | "answer_question" | "explain_system" | "explain_uml" | "recommend"
   | "review_uml" | "validate_uml" | "modify_uml" | "generate_uml"
   | "specify_method" | "prepare_generation" | "summarize_conversation"
   | "summarize_project" | "coordinate_team" | "unknown";
 
-import type { AiProvider } from "./mejoras2p";
-export type { FlutterThemeConfig, FlutterThemeSettings } from "../../modules/transformacion_generacion_software/types/generation";
+import type { ProveedorIA } from "./mejoras2p";
+export type { ConfiguracionTemaFlutter, AjustesTemaFlutter } from "../../modules/transformacion_generacion_software/types/generacion";
 
-export type AiProjectSettings = {
+export type ConfiguracionIAProyecto = {
   id: string;
   project_id: string;
   enabled: boolean;
-  preferred_provider: AiProvider;
+  preferred_provider: ProveedorIA;
   model_name: string;
   fallback_enabled: boolean;
   require_confirmation: boolean;
@@ -24,7 +24,7 @@ export type AiProjectSettings = {
   updated_at: string;
 };
 
-export type AiConversation = {
+export type ConversacionIA = {
   id: string;
   project_id: string;
   title: string;
@@ -38,7 +38,7 @@ export type AiConversation = {
   updated_at: string;
 };
 
-export type AiMessage = {
+export type MensajeIA = {
   id: string;
   conversation_id: string;
   project_id: string;
@@ -50,15 +50,15 @@ export type AiMessage = {
   client_message_id: string | null;
   correlation_id: string;
   status: "pending" | "streaming" | "completed" | "failed" | "cancelled";
-  detected_intents: AiIntent[];
+  detected_intents: IntencionIA[];
   references_json: Array<{ type: string; id: string; label: string }>;
   metadata_json: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 };
 
-export type AiMessagePage = {
-  items: AiMessage[];
+export type PaginaMensajesIA = {
+  items: MensajeIA[];
   previous_cursor: number | null;
   next_cursor: number | null;
   has_more_before: boolean;
@@ -67,7 +67,7 @@ export type AiMessagePage = {
   max_sequence: number | null;
 };
 
-export type AiAction = {
+export type AccionIA = {
   id: string; project_id: string; conversation_id: string; source_message_id: string;
   requested_by_user_id: string; action_type: string; target_type: string | null;
   target_id: string | null; payload: Record<string, unknown>; risk_level: "low" | "medium" | "high";
@@ -78,7 +78,7 @@ export type AiAction = {
   created_at: string; updated_at: string;
 };
 
-export type AiRecommendation = {
+export type RecomendacionIA = {
   id: string; project_id: string; conversation_id: string; source_message_id: string;
   category: string; severity: "info" | "warning" | "critical"; title: string; description: string;
   references_json: Array<{ type: string; id: string; label: string }>;
@@ -87,7 +87,7 @@ export type AiRecommendation = {
   created_at: string; updated_at: string;
 };
 
-export type AiInteractionRequest = {
+export type SolicitudInteraccionIA = {
   client_message_id: string;
   content: string;
   conversation_id?: string | null;
@@ -100,14 +100,14 @@ export type AiInteractionRequest = {
   };
 };
 
-export type AiInteractionResponse = {
+export type RespuestaInteraccionIA = {
   message_id: string;
   correlation_id: string;
   status: "pending" | "streaming" | "completed" | "failed" | "cancelled";
-  detected_intents: AiIntent[];
+  detected_intents: IntencionIA[];
   answer: string;
-  actions: AiAction[];
-  recommendations: AiRecommendation[];
+  actions: AccionIA[];
+  recommendations: RecomendacionIA[];
   conversation_sequence: number;
   provider: string;
   model: string;
@@ -119,7 +119,7 @@ export type AiInteractionResponse = {
   context_reduced: boolean;
 };
 
-export type AiProviderHealth = {
+export type EstadoProveedorIA = {
   provider: string;
   available: boolean;
   models: string[];
@@ -130,20 +130,20 @@ export type AiProviderHealth = {
   error_message: string | null;
 };
 
-export type AiActionDecision = { action: AiAction; idempotent: boolean };
+export type DecisionAccionIA = { action: AccionIA; idempotent: boolean };
 
-export type SpecificationRule = { code: string; description: string; severity: "info" | "warning" | "error" };
-export type MethodSpecification = {
+export type ReglaEspecificacion = { code: string; description: string; severity: "info" | "warning" | "error" };
+export type EspecificacionMetodo = {
   id: string;
   method_id: string;
   description: string | null;
   operation_kind: "create" | "read" | "update" | "delete" | "search" | "calculate" | "business_action" | "custom";
   exposure: "internal" | "api" | "user_action";
-  preconditions: SpecificationRule[];
-  postconditions: SpecificationRule[];
-  business_rules: SpecificationRule[];
-  validations: SpecificationRule[];
-  side_effects: SpecificationRule[];
+  preconditions: ReglaEspecificacion[];
+  postconditions: ReglaEspecificacion[];
+  business_rules: ReglaEspecificacion[];
+  validations: ReglaEspecificacion[];
+  side_effects: ReglaEspecificacion[];
   required_permissions: string[];
   related_entities: Array<{ class_id?: string; class_name: string; relation: string; required: boolean }>;
   backend_contract: Record<string, unknown> | null;
@@ -153,17 +153,17 @@ export type MethodSpecification = {
   updated_at: string;
 };
 
-export type MobileProjectSummary = {
+export type ResumenProyectoMovil = {
   id: string; name: string; description: string | null; project_role: string; status: string;
   diagram_count: number; member_count: number; unread_notification_count: number; updated_at: string;
 };
 
-export type MobileDiagramSummary = {
+export type ResumenDiagramaMovil = {
   id: string; project_id: string; name: string; diagram_type: string; class_count: number;
   relationship_count: number; updated_at: string; updated_by_display_name: string | null;
 };
 
-export type MobileDiagramDetail = {
+export type DetalleDiagramaMovil = {
   diagram: Record<string, unknown>;
   classes: Array<Record<string, unknown>>;
   relationships: Array<Record<string, unknown>>;
@@ -172,19 +172,19 @@ export type MobileDiagramDetail = {
   can_edit: boolean;
 };
 
-export type ProjectSnapshotV2 = {
+export type InstantaneaProyectoV2 = {
   schema_version: 2;
   captured_at: string;
   project: { id: string; name: string; description: string | null };
   diagrams: Array<Record<string, unknown>>;
-  flutter_theme: { config: FlutterThemeConfig; preset_name: string | null; schema_version: number; revision: number } | null;
+  flutter_theme: { config: ConfiguracionTemaFlutter; preset_name: string | null; schema_version: number; revision: number } | null;
   generation_settings: Record<string, unknown>;
-  ai_settings: Pick<AiProjectSettings, "enabled" | "preferred_provider" | "model_name" | "fallback_enabled" | "require_confirmation"> | null;
+  ai_settings: Pick<ConfiguracionIAProyecto, "enabled" | "preferred_provider" | "model_name" | "fallback_enabled" | "require_confirmation"> | null;
 };
 
-export type ProjectSocketEventV2 = {
+export type EventoSocketProyectoV2 = {
   protocol_version: 2;
-  type: "AI_MESSAGE_CREATED" | "AI_MESSAGE_STATUS_CHANGED" | "AI_ACTION_PROPOSED" |
+  type: "UML_EVENT" | "AI_MESSAGE_CREATED" | "AI_MESSAGE_STATUS_CHANGED" | "AI_ACTION_PROPOSED" |
     "AI_ACTION_STATUS_CHANGED" | "AI_RECOMMENDATION_CREATED" | "AI_RECOMMENDATION_STATUS_CHANGED" |
     "AI_CONVERSATION_SUMMARY_UPDATED" | "FLUTTER_THEME_UPDATED" |
     "PROJECT_VERSION_CREATED" | "PROJECT_VERSION_RESTORED" |
@@ -206,12 +206,12 @@ export type ProjectSocketEventV2 = {
   payload: Record<string, unknown>;
 };
 
-export type ProjectPresence = {
+export type PresenciaProyecto = {
   user_id: string;
   display_name: string;
   project_role: string;
   connection_count: number;
   active_diagram_id?: string | null;
 };
-import type { FlutterThemeConfig } from "../../modules/transformacion_generacion_software/types/generation";
+import type { ConfiguracionTemaFlutter } from "../../modules/transformacion_generacion_software/types/generacion";
 

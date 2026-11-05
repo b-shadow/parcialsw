@@ -1,2 +1,2 @@
-from app.modules.asistente_proyecto.schemas.assistant import *
-from app.modules.asistente_proyecto.schemas.websocket import *
+from app.modules.asistente_proyecto.schemas.esquemas_asistente import *
+from app.modules.asistente_proyecto.schemas.eventos_websocket import *

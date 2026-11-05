@@ -3,7 +3,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.main import app
-from app.modules.generacion_software.flutter_generator import FlutterGeneratorService
+from app.modules.generacion_software.flutter_generator import ServicioGeneradorFlutter
 
 
 def _intermediate_model() -> dict:
@@ -80,11 +80,11 @@ def _association_class_model() -> dict:
 
 def test_flutter_generator_writes_complete_project(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.modules.generacion_software.flutter_generator.generator.project_writer.which",
+        "app.modules.generacion_software.flutter_generator.generator.escritor_proyecto.which",
         lambda _: None,
     )
 
-    result = FlutterGeneratorService(storage_root=tmp_path).generate(
+    result = ServicioGeneradorFlutter(storage_root=tmp_path).generate(
         _intermediate_model(),
         "Sistema Ventas Mobile",
         str(uuid4()),
@@ -129,11 +129,11 @@ def test_flutter_generator_writes_complete_project(tmp_path: Path, monkeypatch) 
 
 def test_flutter_generator_applies_theme_config(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.modules.generacion_software.flutter_generator.generator.project_writer.which",
+        "app.modules.generacion_software.flutter_generator.generator.escritor_proyecto.which",
         lambda _: None,
     )
 
-    result = FlutterGeneratorService(storage_root=tmp_path).generate(
+    result = ServicioGeneradorFlutter(storage_root=tmp_path).generate(
         _intermediate_model(),
         "Sistema Ventas Mobile",
         str(uuid4()),
@@ -180,15 +180,15 @@ def test_flutter_generator_scaffolds_android_when_flutter_cli_exists(tmp_path: P
         (Path(cwd) / "web").mkdir(exist_ok=True)
 
     monkeypatch.setattr(
-        "app.modules.generacion_software.flutter_generator.generator.project_writer.which",
+        "app.modules.generacion_software.flutter_generator.generator.escritor_proyecto.which",
         lambda _: "flutter",
     )
     monkeypatch.setattr(
-        "app.modules.generacion_software.flutter_generator.generator.project_writer.subprocess.run",
+        "app.modules.generacion_software.flutter_generator.generator.escritor_proyecto.subprocess.run",
         fake_run,
     )
 
-    result = FlutterGeneratorService(storage_root=tmp_path).generate(
+    result = ServicioGeneradorFlutter(storage_root=tmp_path).generate(
         _intermediate_model(),
         "Sistema Ventas Mobile",
         str(uuid4()),
@@ -210,16 +210,16 @@ def test_flutter_generator_reports_flutter_cli_failures(tmp_path: Path, monkeypa
         )
 
     monkeypatch.setattr(
-        "app.modules.generacion_software.flutter_generator.generator.project_writer.which",
+        "app.modules.generacion_software.flutter_generator.generator.escritor_proyecto.which",
         lambda _: "flutter",
     )
     monkeypatch.setattr(
-        "app.modules.generacion_software.flutter_generator.generator.project_writer.subprocess.run",
+        "app.modules.generacion_software.flutter_generator.generator.escritor_proyecto.subprocess.run",
         fake_run,
     )
 
     try:
-        FlutterGeneratorService(storage_root=tmp_path).generate(
+        ServicioGeneradorFlutter(storage_root=tmp_path).generate(
             _intermediate_model(),
             "Sistema Ventas Mobile",
             str(uuid4()),
@@ -234,11 +234,11 @@ def test_flutter_generator_reports_flutter_cli_failures(tmp_path: Path, monkeypa
 
 def test_flutter_generator_renders_dropdowns_for_association_class_foreign_keys(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.modules.generacion_software.flutter_generator.generator.project_writer.which",
+        "app.modules.generacion_software.flutter_generator.generator.escritor_proyecto.which",
         lambda _: None,
     )
 
-    result = FlutterGeneratorService(storage_root=tmp_path).generate(
+    result = ServicioGeneradorFlutter(storage_root=tmp_path).generate(
         _association_class_model(),
         "Academico Mobile",
         str(uuid4()),
@@ -262,7 +262,7 @@ def test_flutter_generator_renders_dropdowns_for_association_class_foreign_keys(
 
 def test_flutter_generator_creates_join_screen_for_many_to_many_without_association_class(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.modules.generacion_software.flutter_generator.generator.project_writer.which",
+        "app.modules.generacion_software.flutter_generator.generator.escritor_proyecto.which",
         lambda _: None,
     )
     model = {
@@ -281,7 +281,7 @@ def test_flutter_generator_creates_join_screen_for_many_to_many_without_associat
         ],
     }
 
-    result = FlutterGeneratorService(storage_root=tmp_path).generate(
+    result = ServicioGeneradorFlutter(storage_root=tmp_path).generate(
         model,
         "Biblioteca Mobile",
         str(uuid4()),

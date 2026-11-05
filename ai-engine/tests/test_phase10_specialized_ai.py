@@ -1,17 +1,17 @@
-from ai_engine.services import LocalAIService
-from ai_engine.services.contracts import (
-    CodeGenerationRequest,
-    KnowledgeSearchRequest,
-    UmlGenerationRequest,
-    UmlModificationRequest,
+from ai_engine.services import ServicioIALocal
+from ai_engine.services.contratos import (
+    SolicitudBusquedaConocimiento,
+    SolicitudGeneracionCodigo,
+    SolicitudGeneracionUML,
+    SolicitudModificacionUML,
 )
 
 
 def test_specialized_text_generation_uses_dataset_and_rag() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.text_to_uml(
-        UmlGenerationRequest(prompt="Sistema de ventas con clientes, pedidos, productos y facturas")
+    response = service.texto_a_uml(
+        SolicitudGeneracionUML(prompt="Sistema de ventas con clientes, pedidos, productos y facturas")
     )
 
     class_names = {uml_class.name for uml_class in response.classes}
@@ -21,12 +21,12 @@ def test_specialized_text_generation_uses_dataset_and_rag() -> None:
 
 
 def test_local_knowledge_dataset_training_and_evaluation_are_available() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    knowledge = service.search_knowledge(KnowledgeSearchRequest(query="validacion UML relaciones"))
-    dataset = service.dataset_summary()
-    training = service.training_plan()
-    evaluation = service.evaluate_offline()
+    knowledge = service.buscar_conocimiento(SolicitudBusquedaConocimiento(query="validacion UML relaciones"))
+    dataset = service.resumen_datos()
+    training = service.plan_entrenamiento()
+    evaluation = service.evaluar_sin_conexion()
 
     assert knowledge
     assert dataset.records >= 4
@@ -36,18 +36,18 @@ def test_local_knowledge_dataset_training_and_evaluation_are_available() -> None
 
 
 def test_uml_modification_and_code_guidance_are_offline() -> None:
-    service = LocalAIService()
-    base = service.text_to_uml(UmlGenerationRequest(prompt="Sistema con cliente y pedido"))
+    service = ServicioIALocal()
+    base = service.texto_a_uml(SolicitudGeneracionUML(prompt="Sistema con cliente y pedido"))
 
-    modified = service.modify_uml(
-        UmlModificationRequest(
+    modified = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction="Agregar autenticacion al sistema",
             classes=base.classes,
             relationships=base.relationships,
         )
     )
-    code = service.generate_code_guidance(
-        CodeGenerationRequest(
+    code = service.generar_orientacion_codigo(
+        SolicitudGeneracionCodigo(
             classes=modified.classes,
             relationships=modified.relationships,
             target="spring_boot",

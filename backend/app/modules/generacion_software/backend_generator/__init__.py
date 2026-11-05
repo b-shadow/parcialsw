@@ -1,5 +1,5 @@
-from app.modules.generacion_software.backend_generator.services.spring_boot_generator_service import (
-    SpringBootGeneratorService,
+from app.modules.generacion_software.backend_generator.services.servicio_generador_spring_boot import (
+    ServicioGeneradorSpringBoot,
 )
 
-__all__ = ["SpringBootGeneratorService"]
+__all__ = ["ServicioGeneradorSpringBoot"]

@@ -1,5 +1,7 @@
-from app.modules.generacion_software.backend_generator.validators.project_validator import (
-    validate_project,
+from app.modules.generacion_software.backend_generator.validators.validador_proyecto import (
+    validar_proyecto,
 )
 
-__all__ = ["validate_project"]
+__all__ = [
+    "validar_proyecto",
+]

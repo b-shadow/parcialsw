@@ -1,3 +1,6 @@
-from ai_engine.datasets.software_cases import DatasetExample, get_seed_dataset
+from ai_engine.datasets.casos_software import EjemploDatos, obtener_datos_iniciales
 
-__all__ = ["DatasetExample", "get_seed_dataset"]
+__all__ = [
+    "EjemploDatos",
+    "obtener_datos_iniciales",
+]

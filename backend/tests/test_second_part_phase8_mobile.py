@@ -1,13 +1,13 @@
-from ai_engine.context import ContextConstraints
+from ai_engine.context import RestriccionesContexto
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.asistente_proyecto.schemas.assistant import RequestedContext
-from app.modules.proyectos_colaboracion.schemas.mobile import MobileDiagramDetail
+from app.modules.asistente_proyecto.schemas.esquemas_asistente import ContextoSolicitado
+from app.modules.proyectos_colaboracion.schemas.movil import DetalleDiagramaMovil
 
 
 def test_mobile_diagram_contract_is_always_read_only() -> None:
-    schema = MobileDiagramDetail.model_json_schema()
+    schema = DetalleDiagramaMovil.model_json_schema()
     assert schema["properties"]["can_edit"]["default"] is False
 
 
@@ -35,6 +35,6 @@ def test_mobile_surface_exposes_no_mutating_method() -> None:
 
 
 def test_mobile_ai_surface_reaches_shared_context_contract() -> None:
-    request = RequestedContext(surface="mobile_readonly")
-    constraints = ContextConstraints(surface=request.surface)
+    request = ContextoSolicitado(surface="mobile_readonly")
+    constraints = RestriccionesContexto(surface=request.surface)
     assert constraints.surface == "mobile_readonly"

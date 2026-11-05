@@ -6,25 +6,25 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app.main import app
-from app.modules.generacion_software.services.intermediate_model import (
-    require_supported_intermediate_model,
+from app.modules.generacion_software.services.modelo_intermedio import (
+    requerir_modelo_intermedio_admitido,
 )
-from app.modules.modelado_uml.engine.internal_model import (
-    UmlClassModel,
-    UmlDiagramModel,
-    UmlMethodModel,
-    UmlParameterModel,
+from app.modules.modelado_uml.engine.modelo_interno import (
+    ModeloClaseUML,
+    ModeloDiagramaUML,
+    ModeloMetodoUML,
+    ModeloParametroUML,
 )
-from app.modules.modelado_uml.engine.xmi import export_xmi, import_xmi
-from app.modules.modelado_uml.schemas.method_specification import (
-    BackendMethodContract,
-    MethodGenerationRule,
-    RequiredPermission,
-    UmlMethodSpecificationCreate,
+from app.modules.modelado_uml.engine.xmi import exportar_xmi, importar_xmi
+from app.modules.modelado_uml.schemas.especificacion_metodo import (
+    ContratoMetodoBackend,
+    CreacionEspecificacionMetodoUML,
+    PermisoRequerido,
+    ReglaGeneracionMetodo,
 )
-from app.modules.modelado_uml.services.method_specification_service import (
-    MethodContext,
-    MethodSpecificationService,
+from app.modules.modelado_uml.services.servicio_especificacion_metodo import (
+    ContextoMetodo,
+    ServicioEspecificacionMetodo,
 )
 
 
@@ -32,7 +32,7 @@ class _UmlCatalog:
     def __init__(self, classes: list[object]) -> None:
         self.classes = classes
 
-    def list_classes(self, _diagram_id):
+    def listar_clases(self, _diagram_id):
         return self.classes
 
 
@@ -55,18 +55,18 @@ def _context(*, private: bool = False):
         parameters=[parameter],
     )
     diagram = SimpleNamespace(id=diagram_id, project_id=uuid4())
-    return MethodContext(method, uml_class, diagram, SimpleNamespace(project_role="EDITOR"))
+    return ContextoMetodo(method, uml_class, diagram, SimpleNamespace(project_role="EDITOR"))
 
 
-def _service(context: MethodContext) -> MethodSpecificationService:
-    service = object.__new__(MethodSpecificationService)
+def _service(context: ContextoMetodo) -> ServicioEspecificacionMetodo:
+    service = object.__new__(ServicioEspecificacionMetodo)
     service.uml = _UmlCatalog([context.uml_class])
     return service
 
 
-def _ready_specification(context: MethodContext) -> UmlMethodSpecificationCreate:
+def _ready_specification(context: ContextoMetodo) -> CreacionEspecificacionMetodoUML:
     parameter = context.method.parameters[0]
-    return UmlMethodSpecificationCreate(
+    return CreacionEspecificacionMetodoUML(
         description="Registra una inscripcion con su fecha.",
         operation_kind="create",
         exposure="user_action",
@@ -105,9 +105,9 @@ def _ready_specification(context: MethodContext) -> UmlMethodSpecificationCreate
 
 
 def test_phase4_closed_contracts_normalize_domain_codes() -> None:
-    permission = RequiredPermission(code=" Inscripcion.Crear ")
-    rule = MethodGenerationRule(kind="range", minimum=0, maximum=100)
-    backend = BackendMethodContract(
+    permission = PermisoRequerido(code=" Inscripcion.Crear ")
+    rule = ReglaGeneracionMetodo(kind="range", minimum=0, maximum=100)
+    backend = ContratoMetodoBackend(
         http_method="POST",
         path="/inscripciones",
         authorization=["EDITOR", "editor"],
@@ -119,20 +119,20 @@ def test_phase4_closed_contracts_normalize_domain_codes() -> None:
     assert backend.authorization == ["editor"]
     assert backend.error_codes == ["REGISTRO_DUPLICADO"]
     with pytest.raises(ValidationError):
-        BackendMethodContract(http_method="GET", path="https://host/recurso")
+        ContratoMetodoBackend(http_method="GET", path="https://host/recurso")
     with pytest.raises(ValidationError):
-        UmlMethodSpecificationCreate(unknown_contract=True)
+        CreacionEspecificacionMetodoUML(unknown_contract=True)
 
 
 def test_phase4_draft_is_permitted_but_strict_validation_blocks_generation() -> None:
     context = _context()
     service = _service(context)
-    draft = UmlMethodSpecificationCreate(
+    draft = CreacionEspecificacionMetodoUML(
         description="Registra la operacion", exposure="user_action"
     )
 
-    relaxed = service.validate_model(context, draft, strict=False)
-    strict = service.validate_model(context, draft, strict=True)
+    relaxed = service.validar_modelo(context, draft, strict=False)
+    strict = service.validar_modelo(context, draft, strict=True)
 
     assert relaxed.status == "draft"
     assert not relaxed.errors
@@ -145,7 +145,7 @@ def test_phase4_draft_is_permitted_but_strict_validation_blocks_generation() -> 
 
 def test_phase4_valid_specification_is_ready_and_localdate_uses_picker() -> None:
     context = _context()
-    result = _service(context).validate_model(
+    result = _service(context).validar_modelo(
         context, _ready_specification(context), strict=True
     )
 
@@ -159,13 +159,13 @@ def test_phase4_detects_private_exposure_unsafe_get_and_unknown_references() -> 
     payload = _ready_specification(context).model_copy(
         update={
             "operation_kind": "delete",
-            "backend_contract": BackendMethodContract(
+            "backend_contract": ContratoMetodoBackend(
                 http_method="GET", path="/inscripciones/{desconocido}"
             ),
         }
     )
 
-    result = _service(context).validate_model(context, payload, strict=True)
+    result = _service(context).validar_modelo(context, payload, strict=True)
     codes = {item.code for item in result.errors}
 
     assert "private_method_exposed" in codes
@@ -176,7 +176,7 @@ def test_phase4_detects_private_exposure_unsafe_get_and_unknown_references() -> 
 
 def test_phase4_stale_revision_returns_machine_readable_conflict() -> None:
     with pytest.raises(HTTPException) as captured:
-        MethodSpecificationService._conflict(7)
+        ServicioEspecificacionMetodo._conflicto(7)
 
     assert captured.value.status_code == 409
     assert captured.value.detail == {"code": "stale_revision", "current_revision": 7}
@@ -185,19 +185,19 @@ def test_phase4_stale_revision_returns_machine_readable_conflict() -> None:
 def test_phase4_xmi_roundtrip_preserves_parameters_and_specification() -> None:
     parameter_id = str(uuid4())
     method_id = str(uuid4())
-    source = UmlDiagramModel(
+    source = ModeloDiagramaUML(
         name="Academico",
         classes=[
-            UmlClassModel(
+            ModeloClaseUML(
                 id=str(uuid4()),
                 name="Inscripcion",
                 methods=[
-                    UmlMethodModel(
+                    ModeloMetodoUML(
                         id=method_id,
                         name="registrar",
                         return_type="void",
                         parameters=[
-                            UmlParameterModel(
+                            ModeloParametroUML(
                                 id=parameter_id,
                                 name="fecha",
                                 data_type="LocalDate",
@@ -213,8 +213,8 @@ def test_phase4_xmi_roundtrip_preserves_parameters_and_specification() -> None:
         ],
     )
 
-    xml = export_xmi(source)
-    imported = import_xmi(xml)
+    xml = exportar_xmi(source)
+    imported = importar_xmi(xml)
     method = imported.classes[0].methods[0]
 
     assert "case_method_specification_v1" in xml
@@ -227,14 +227,14 @@ def test_phase4_xmi_roundtrip_preserves_parameters_and_specification() -> None:
 
 def test_phase4_intermediate_model_v1_adapter_is_immutable_and_rejects_future() -> None:
     legacy = {"classes": [{"name": "Curso", "methods": [{"name": "crear"}]}]}
-    adapted = require_supported_intermediate_model(legacy)
+    adapted = requerir_modelo_intermedio_admitido(legacy)
 
     assert "schema_version" not in legacy
     assert adapted["schema_version"] == 2
     assert adapted["classes"][0]["methods"][0]["parameters"] == []
     assert adapted["classes"][0]["methods"][0]["readiness"]["status"] == "legacy"
     with pytest.raises(ValueError, match="no soportada"):
-        require_supported_intermediate_model({"schema_version": 3})
+        requerir_modelo_intermedio_admitido({"schema_version": 3})
 
 
 def test_phase4_openapi_exposes_signature_specification_and_refinement_contracts() -> None:

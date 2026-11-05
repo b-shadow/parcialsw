@@ -1,3 +1,3 @@
-from app.modules.asistente_proyecto.repositories.assistant_repository import AssistantRepository
+from app.modules.asistente_proyecto.repositories.repositorio_asistente import RepositorioAsistente
 
-__all__ = ["AssistantRepository"]
+__all__ = ["RepositorioAsistente"]

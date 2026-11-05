@@ -1,8 +1,13 @@
-from app.modules.generacion_software.flutter_generator.generator.project_writer import (
-    FlutterWriteResult,
-    GeneratedFlutterFile,
-    build_file_set,
-    write_flutter_project,
+from app.modules.generacion_software.flutter_generator.generator.escritor_proyecto import (
+    ArchivoFlutterGenerado,
+    ResultadoEscrituraFlutter,
+    construir_conjunto_archivos,
+    escribir_proyecto_flutter,
 )
 
-__all__ = ["FlutterWriteResult", "GeneratedFlutterFile", "build_file_set", "write_flutter_project"]
+__all__ = [
+    "ArchivoFlutterGenerado",
+    "ResultadoEscrituraFlutter",
+    "construir_conjunto_archivos",
+    "escribir_proyecto_flutter",
+]

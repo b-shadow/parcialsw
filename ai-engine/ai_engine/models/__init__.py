@@ -1,3 +1,5 @@
-from ai_engine.models.local_profile import get_model_profile
+from ai_engine.models.perfil_local import obtener_perfil_modelo
 
-__all__ = ["get_model_profile"]
+__all__ = [
+    "obtener_perfil_modelo",
+]

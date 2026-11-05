@@ -3,24 +3,29 @@ from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
-from ai_engine.providers.base import ProviderHealth
-from ai_engine.providers.ollama_provider import validate_ollama_base_url
+from ai_engine.orchestration.contratos import (
+    IntencionDetectada,
+    ResultadoIAUnificado,
+    ResultadoOrquestacion,
+)
+from ai_engine.providers.base import EstadoProveedor
+from ai_engine.providers.proveedor_ollama import validar_url_base_ollama
 from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy import UniqueConstraint
 
 from app.main import app
-from app.modules.asistente_proyecto.models import AiConversation
-from app.modules.asistente_proyecto.schemas.assistant import (
-    AiConversationCreate,
-    AiInteractionRequest,
-    AiProviderHealthResponse,
+from app.modules.asistente_proyecto.models import ConversacionIA
+from app.modules.asistente_proyecto.schemas.esquemas_asistente import (
+    CreacionConversacionIA,
+    EstadoProveedorIA,
+    SolicitudInteraccionIA,
 )
-from app.modules.asistente_proyecto.services.assistant_service import AssistantContractService
-from app.modules.asistente_proyecto.services.project_ai_application_service import (
-    ProjectAiApplicationService,
+from app.modules.asistente_proyecto.services.fabrica_proveedores import resolver_modelo_ollama
+from app.modules.asistente_proyecto.services.servicio_aplicacion_ia_proyecto import (
+    ServicioAplicacionIAProyecto,
 )
-from app.modules.asistente_proyecto.services.provider_factory import resolve_ollama_model
+from app.modules.asistente_proyecto.services.servicio_asistente import ServicioContratoAsistente
 
 
 def test_phase2_openapi_contracts_are_registered() -> None:
@@ -35,22 +40,22 @@ def test_phase2_openapi_contracts_are_registered() -> None:
 
 
 def test_interaction_contract_normalizes_content_and_bounds_version() -> None:
-    request = AiInteractionRequest(client_message_id=uuid4(), content="  revisa el modelo  ")
+    request = SolicitudInteraccionIA(client_message_id=uuid4(), content="  revisa el modelo  ")
     assert request.content == "revisa el modelo"
     with pytest.raises(ValidationError):
-        AiInteractionRequest(client_message_id=uuid4(), content="revisa", base_diagram_version=-1)
+        SolicitudInteraccionIA(client_message_id=uuid4(), content="revisa", base_diagram_version=-1)
 
 
 def test_project_can_store_multiple_named_conversations() -> None:
     unique_columns = {
         tuple(column.name for column in constraint.columns)
-        for constraint in AiConversation.__table__.constraints
+        for constraint in ConversacionIA.__table__.constraints
         if isinstance(constraint, UniqueConstraint)
     }
     assert ("project_id",) not in unique_columns
-    assert AiConversationCreate(title="  Revision de dominio  ").title == "Revision de dominio"
+    assert CreacionConversacionIA(title="  Revision de dominio  ").title == "Revision de dominio"
     assert (
-        AssistantContractService._title_from_first_message(
+        ServicioContratoAsistente._titulo_desde_primer_mensaje(
             "Analiza el diagrama de ventas y recomienda mejoras importantes"
         )
         == "Analiza el diagrama de ventas y recomienda mejoras"
@@ -58,7 +63,7 @@ def test_project_can_store_multiple_named_conversations() -> None:
 
 
 def test_provider_health_contract_does_not_expose_internal_data() -> None:
-    response = AiProviderHealthResponse(
+    response = EstadoProveedorIA(
         provider="ollama",
         available=False,
         selected_model="qwen2.5-coder:7b",
@@ -78,15 +83,15 @@ def test_provider_health_contract_does_not_expose_internal_data() -> None:
 
 
 def test_ollama_configuration_rejects_ssrf_destinations() -> None:
-    assert validate_ollama_base_url("http://localhost:11434")
+    assert validar_url_base_ollama("http://localhost:11434")
     with pytest.raises(ValueError):
-        validate_ollama_base_url("http://169.254.169.254/latest/meta-data")
+        validar_url_base_ollama("http://169.254.169.254/latest/meta-data")
 
 
 def test_missing_configured_model_uses_an_installed_local_qwen_model() -> None:
     class FakeProvider:
-        async def health(self, requested_model: str) -> ProviderHealth:
-            return ProviderHealth(
+        async def health(self, requested_model: str) -> EstadoProveedor:
+            return EstadoProveedor(
                 provider="ollama",
                 available=True,
                 installed_models=["qwen3-vl:2b-instruct"],
@@ -96,31 +101,78 @@ def test_missing_configured_model_uses_an_installed_local_qwen_model() -> None:
 
     import asyncio
 
-    selected = asyncio.run(resolve_ollama_model(FakeProvider(), "qwen2.5-coder:7b"))
+    selected = asyncio.run(resolver_modelo_ollama(FakeProvider(), "qwen2.5-coder:7b"))
     assert selected == "qwen3-vl:2b-instruct"
 
 
 def test_assistant_resolves_the_only_diagram_from_the_project() -> None:
     project_id = uuid4()
     diagram_id = uuid4()
-    service = ProjectAiApplicationService(Mock())
+    service = ServicioAplicacionIAProyecto(Mock())
     service.uml = SimpleNamespace(
-        list_diagrams_by_project=lambda _: [SimpleNamespace(id=diagram_id)]
+        listar_diagramas_por_proyecto=lambda _: [SimpleNamespace(id=diagram_id)]
     )
 
-    assert service._resolve_project_diagram_id(project_id, None) == diagram_id
+    assert service._resolver_id_diagrama_proyecto(project_id, None) == diagram_id
 
 
 def test_assistant_rejects_a_diagram_from_another_project() -> None:
     project_id = uuid4()
     own_diagram_id = uuid4()
-    service = ProjectAiApplicationService(Mock())
+    service = ServicioAplicacionIAProyecto(Mock())
     service.uml = SimpleNamespace(
-        list_diagrams_by_project=lambda _: [SimpleNamespace(id=own_diagram_id)]
+        listar_diagramas_por_proyecto=lambda _: [SimpleNamespace(id=own_diagram_id)]
     )
 
     with pytest.raises(HTTPException) as error:
-        service._resolve_project_diagram_id(project_id, uuid4())
+        service._resolver_id_diagrama_proyecto(project_id, uuid4())
 
     assert error.value.status_code == 404
     assert error.value.detail["code"] == "PROJECT_DIAGRAM_NOT_FOUND"
+
+
+def test_assistant_persists_detected_intent_names_from_orchestrator() -> None:
+    project_id, conversation_id, user_id, user_message_id, correlation_id = (
+        uuid4() for _ in range(5)
+    )
+    service = ServicioAplicacionIAProyecto(Mock())
+    service.repository = Mock()
+    service.contracts = Mock()
+    service.repository.obtener_conversacion.return_value = SimpleNamespace(id=conversation_id)
+    service.repository.obtener_mensaje_asistente_por_correlacion.return_value = None
+    user_message = SimpleNamespace(status="pending", detected_intents=[])
+    service.repository.obtener_mensaje.return_value = user_message
+    assistant_message = SimpleNamespace(id=uuid4())
+    service.contracts.crear_mensaje = Mock(return_value=(assistant_message, True))
+    outcome = ResultadoOrquestacion(
+        result=ResultadoIAUnificado(
+            answer="El diagrama representa inscripciones de estudiantes en cursos.",
+            detected_intents=[
+                IntencionDetectada(name="review_uml", confidence=0.9, evidence="opinas", order=1),
+                IntencionDetectada(name="answer_question", confidence=0.8, evidence="pregunta", order=2),
+            ],
+            references=[
+                {"type": "diagram", "id": str(uuid4()), "label": "Diagrama actual"},
+                {"type": "diagram", "id": "no-es-uuid", "label": "Referencia invalida"},
+            ],
+        ),
+        duration_ms=10,
+    )
+
+    result = service._persistir_resultado(
+        project_id=project_id,
+        conversation_id=conversation_id,
+        user_id=user_id,
+        user_message_id=user_message_id,
+        correlation_id=correlation_id,
+        diagram_id=None,
+        base_diagram_version=None,
+        outcome=outcome,
+    )
+
+    assert result is assistant_message
+    payload = service.contracts.crear_mensaje.call_args.args[2]
+    assert payload.detected_intents == ["review_uml", "answer_question"]
+    assert len(payload.references) == 1
+    assert payload.references[0].label == "Diagrama actual"
+    assert user_message.status == "completed"

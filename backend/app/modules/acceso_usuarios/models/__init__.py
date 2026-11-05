@@ -1,8 +1,8 @@
-from app.modules.acceso_usuarios.models.audit_log import AuditLog
-from app.modules.acceso_usuarios.models.role import Role
-from app.modules.acceso_usuarios.models.session import UserSession
-from app.modules.acceso_usuarios.models.user import User
-from app.modules.acceso_usuarios.models.user_role import UserRole
+from app.modules.acceso_usuarios.models.registro_auditoria import RegistroAuditoria
+from app.modules.acceso_usuarios.models.rol import Rol
+from app.modules.acceso_usuarios.models.rol_usuario import RolUsuario
+from app.modules.acceso_usuarios.models.sesion import SesionUsuario
+from app.modules.acceso_usuarios.models.usuario import Usuario
 
-__all__ = ["AuditLog", "Role", "User", "UserRole", "UserSession"]
+__all__ = ['RegistroAuditoria', 'Rol', 'RolUsuario', 'SesionUsuario', 'Usuario']
 

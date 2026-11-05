@@ -6,49 +6,49 @@ import fakeredis
 import redis.exceptions
 from fastapi.testclient import TestClient
 
-from app.core.config.settings import settings
-from app.core.nosql.client import MongoHealth
-from app.core.redis.client import (
-    get_redis,
-    redis_key,
+from app.core.config.configuracion import settings
+from app.core.nosql.cliente import EstadoMongo
+from app.core.redis.cliente import (
+    clave_redis,
+    establecer_cliente_prueba,
+    obtener_redis,
     redis_status,
-    set_test_client,
 )
 from app.main import app
 
 
 def test_redis_disabled_by_default():
-    set_test_client(None, None)
+    establecer_cliente_prueba(None, None)
     assert not settings.redis_enabled
-    assert get_redis() is None
+    assert obtener_redis() is None
     assert redis_status() == "disabled"
 
 
 def test_redis_with_fakeredis():
     fake_sync = fakeredis.FakeRedis(decode_responses=True)
-    set_test_client(fake_sync, None)
+    establecer_cliente_prueba(fake_sync, None)
     try:
         assert redis_status() == "available"
-        assert redis_key("lock", "x") == "case:lock:x"
-        assert redis_key("changelog", "project", "123") == "case:changelog:project:123"
+        assert clave_redis("lock", "x") == "case:lock:x"
+        assert clave_redis("changelog", "project", "123") == "case:changelog:project:123"
     finally:
-        set_test_client(None, None)
+        establecer_cliente_prueba(None, None)
 
 
 def test_redis_connection_error_returns_unavailable():
     mock_client = MagicMock()
     mock_client.ping.side_effect = redis.exceptions.ConnectionError("Connection refused")
-    set_test_client(mock_client, None)
+    establecer_cliente_prueba(mock_client, None)
     try:
         status = redis_status()
         assert status == "unavailable"
     finally:
-        set_test_client(None, None)
+        establecer_cliente_prueba(None, None)
 
 
 def test_ready_endpoint_with_redis_disabled():
-    set_test_client(None, None)
-    mongo_health = MongoHealth(
+    establecer_cliente_prueba(None, None)
+    mongo_health = EstadoMongo(
         status="available",
         required=True,
         database="case_inteligente_nosql",

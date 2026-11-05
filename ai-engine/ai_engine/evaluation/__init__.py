@@ -1,3 +1,6 @@
-from ai_engine.evaluation.offline_metrics import EvaluationReport, evaluate_generation
+from ai_engine.evaluation.metricas_sin_conexion import InformeEvaluacion, evaluar_generacion
 
-__all__ = ["EvaluationReport", "evaluate_generation"]
+__all__ = [
+    "InformeEvaluacion",
+    "evaluar_generacion",
+]

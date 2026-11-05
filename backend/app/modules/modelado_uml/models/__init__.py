@@ -1,22 +1,22 @@
-from app.modules.modelado_uml.models.uml_attribute import UmlAttribute
-from app.modules.modelado_uml.models.uml_class import UmlClass
-from app.modules.modelado_uml.models.uml_diagram import UmlDiagram
-from app.modules.modelado_uml.models.uml_method import UmlMethod
-from app.modules.modelado_uml.models.uml_method_specification import UmlMethodSpecification
-from app.modules.modelado_uml.models.uml_parameter import UmlParameter
-from app.modules.modelado_uml.models.uml_relationship import UmlRelationship
-from app.modules.modelado_uml.models.uml_visual_element import UmlVisualElement
-from app.modules.modelado_uml.models.xmi_exchange import XmiExchange
+from app.modules.modelado_uml.models.atributo_uml import AtributoUML
+from app.modules.modelado_uml.models.clase_uml import ClaseUML
+from app.modules.modelado_uml.models.diagrama_uml import DiagramaUML
+from app.modules.modelado_uml.models.elemento_visual_uml import ElementoVisualUML
+from app.modules.modelado_uml.models.especificacion_metodo_uml import EspecificacionMetodoUML
+from app.modules.modelado_uml.models.intercambio_xmi import IntercambioXMI
+from app.modules.modelado_uml.models.metodo_uml import MetodoUML
+from app.modules.modelado_uml.models.parametro_uml import ParametroUML
+from app.modules.modelado_uml.models.relacion_uml import RelacionUML
 
 __all__ = [
-    "UmlAttribute",
-    "UmlClass",
-    "UmlDiagram",
-    "UmlMethod",
-    "UmlMethodSpecification",
-    "UmlParameter",
-    "UmlRelationship",
-    "UmlVisualElement",
-    "XmiExchange",
+    'AtributoUML',
+    'ClaseUML',
+    'DiagramaUML',
+    'ElementoVisualUML',
+    'EspecificacionMetodoUML',
+    'IntercambioXMI',
+    'MetodoUML',
+    'ParametroUML',
+    'RelacionUML',
 ]
 

@@ -3,27 +3,27 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-class AiUmlAttribute(BaseModel):
+class AtributoUMLIA(BaseModel):
     name: str
     data_type: str = "String"
     visibility: str = "private"
     is_required: bool = False
 
 
-class AiUmlMethod(BaseModel):
+class MetodoUMLIA(BaseModel):
     name: str
     return_type: str = "void"
     visibility: str = "public"
 
 
-class AiUmlClass(BaseModel):
+class ClaseUMLIA(BaseModel):
     name: str
     stereotype: str | None = None
-    attributes: list[AiUmlAttribute] = Field(default_factory=list)
-    methods: list[AiUmlMethod] = Field(default_factory=list)
+    attributes: list[AtributoUMLIA] = Field(default_factory=list)
+    methods: list[MetodoUMLIA] = Field(default_factory=list)
 
 
-class AiUmlRelationship(BaseModel):
+class RelacionUMLIA(BaseModel):
     source: str
     target: str
     relationship_type: str = "association"
@@ -33,41 +33,41 @@ class AiUmlRelationship(BaseModel):
     metadata_json: dict = Field(default_factory=dict)
 
 
-class AiTextRequest(BaseModel):
+class SolicitudTextoIA(BaseModel):
     prompt: str = Field(min_length=1)
     language: str = "es"
     source_type: Literal["text", "voice", "image"] = "text"
     use_rag: bool = True
 
 
-class AiVoiceRequest(BaseModel):
+class SolicitudVozIA(BaseModel):
     transcript: str | None = None
     audio_base64: str | None = None
     language: str = "es"
 
 
-class AiImageRequest(BaseModel):
+class SolicitudImagenIA(BaseModel):
     description: str | None = None
     image_base64: str | None = None
     file_name: str | None = None
     language: str = "es"
 
 
-class AiUmlResponse(BaseModel):
-    classes: list[AiUmlClass]
-    relationships: list[AiUmlRelationship]
+class RespuestaUMLIA(BaseModel):
+    classes: list[ClaseUMLIA]
+    relationships: list[RelacionUMLIA]
     confidence: float
     observations: list[str]
     knowledge_context: list[str] = Field(default_factory=list)
     engine: str
 
 
-class AiValidationRequest(BaseModel):
-    classes: list[AiUmlClass]
-    relationships: list[AiUmlRelationship] = Field(default_factory=list)
+class SolicitudValidacionIA(BaseModel):
+    classes: list[ClaseUMLIA]
+    relationships: list[RelacionUMLIA] = Field(default_factory=list)
 
 
-class AiValidationResponse(BaseModel):
+class RespuestaValidacionIA(BaseModel):
     errors: list[str]
     warnings: list[str]
     recommendations: list[str]
@@ -75,13 +75,13 @@ class AiValidationResponse(BaseModel):
     engine: str
 
 
-class AiSoftwarePlanRequest(BaseModel):
-    classes: list[AiUmlClass]
-    relationships: list[AiUmlRelationship] = Field(default_factory=list)
+class SolicitudPlanSoftwareIA(BaseModel):
+    classes: list[ClaseUMLIA]
+    relationships: list[RelacionUMLIA] = Field(default_factory=list)
     target: Literal["spring_boot", "flutter"]
 
 
-class AiSoftwarePlanResponse(BaseModel):
+class RespuestaPlanSoftwareIA(BaseModel):
     target: Literal["spring_boot", "flutter"]
     files: list[str]
     components: list[str]
@@ -89,27 +89,27 @@ class AiSoftwarePlanResponse(BaseModel):
     engine: str
 
 
-class AiModificationRequest(BaseModel):
+class SolicitudModificacionIA(BaseModel):
     instruction: str = Field(min_length=1)
-    classes: list[AiUmlClass]
-    relationships: list[AiUmlRelationship] = Field(default_factory=list)
+    classes: list[ClaseUMLIA]
+    relationships: list[RelacionUMLIA] = Field(default_factory=list)
 
 
-class AiModificationResponse(BaseModel):
-    classes: list[AiUmlClass]
-    relationships: list[AiUmlRelationship]
+class RespuestaModificacionIA(BaseModel):
+    classes: list[ClaseUMLIA]
+    relationships: list[RelacionUMLIA]
     changes: list[str]
     confidence: float
     engine: str
 
 
-class AiCodeGenerationRequest(BaseModel):
-    classes: list[AiUmlClass]
-    relationships: list[AiUmlRelationship] = Field(default_factory=list)
+class SolicitudGeneracionCodigoIA(BaseModel):
+    classes: list[ClaseUMLIA]
+    relationships: list[RelacionUMLIA] = Field(default_factory=list)
     target: Literal["spring_boot", "flutter"]
 
 
-class AiCodeGenerationResponse(BaseModel):
+class RespuestaGeneracionCodigoIA(BaseModel):
     target: Literal["spring_boot", "flutter"]
     architecture: list[str]
     files: list[str]
@@ -118,25 +118,25 @@ class AiCodeGenerationResponse(BaseModel):
     engine: str
 
 
-class AiKnowledgeSearchRequest(BaseModel):
+class SolicitudBusquedaConocimientoIA(BaseModel):
     query: str = Field(min_length=1)
     limit: int = Field(default=3, ge=1, le=10)
 
 
-class AiKnowledgeItemResponse(BaseModel):
+class RespuestaElementoConocimientoIA(BaseModel):
     topic: str
     content: str
     tags: list[str]
 
 
-class AiDatasetSummaryResponse(BaseModel):
+class RespuestaResumenDatosIA(BaseModel):
     records: int
     intents: list[str]
     targets: list[str]
     offline: bool = True
 
 
-class AiTrainingPlanResponse(BaseModel):
+class RespuestaPlanEntrenamientoIA(BaseModel):
     base_models: list[str]
     selected_primary_model: str
     selected_small_model: str
@@ -148,7 +148,7 @@ class AiTrainingPlanResponse(BaseModel):
     offline_policy: str
 
 
-class AiEvaluationResponse(BaseModel):
+class RespuestaEvaluacionIA(BaseModel):
     dataset_size: int
     class_precision: float
     relationship_precision: float
@@ -156,7 +156,7 @@ class AiEvaluationResponse(BaseModel):
     offline: bool = True
 
 
-class AiModelProfileResponse(BaseModel):
+class RespuestaPerfilModeloIA(BaseModel):
     selected_model: str
     runtime: str
     offline: bool

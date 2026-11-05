@@ -8,28 +8,28 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app.core.config.settings import settings
-from app.core.nosql.client import MongoHealth
-from app.core.nosql.contracts import MongoCollection, UmlDiagramVersionDocument
-from app.core.nosql.outbox import NoSqlOutboxDispatcher
+from app.core.config.configuracion import settings
+from app.core.nosql.bandeja_salida import DistribuidorBandejaSalidaNoSQL
+from app.core.nosql.cliente import EstadoMongo
+from app.core.nosql.contratos import ColeccionMongo, DocumentoVersionDiagramaUML
 from app.main import app
-from app.modules.proyectos_colaboracion.models import ProjectVersion
-from app.modules.proyectos_colaboracion.schemas.snapshot import (
-    ProjectSnapshotV2,
-    SnapshotProject,
-    snapshot_sha256,
+from app.modules.proyectos_colaboracion.models import VersionProyecto
+from app.modules.proyectos_colaboracion.schemas.instantanea import (
+    InstantaneaProyecto,
+    InstantaneaProyectoV2,
+    hash_instantanea_sha256,
 )
-from app.modules.proyectos_colaboracion.services.project_service import ProjectService
-from app.modules.proyectos_colaboracion.services.version_document_store import (
-    enqueue_version_document,
-    version_document_from_sql,
+from app.modules.proyectos_colaboracion.services.almacen_documentos_versiones import (
+    documento_version_desde_sql,
+    encolar_documento_version,
 )
+from app.modules.proyectos_colaboracion.services.servicio_proyectos import ServicioProyectos
 
 
 def _snapshot(project_id, diagram_id):
-    return ProjectSnapshotV2(
+    return InstantaneaProyectoV2(
         captured_at=datetime.now(UTC),
-        project=SnapshotProject(id=project_id, name="Academico"),
+        project=InstantaneaProyecto(id=project_id, name="Academico"),
         diagrams=[
             {
                 "id": str(diagram_id),
@@ -64,9 +64,9 @@ def _snapshot(project_id, diagram_id):
     )
 
 
-def _version(snapshot, project_id) -> ProjectVersion:
+def _version(snapshot, project_id) -> VersionProyecto:
     now = datetime.now(UTC)
-    return ProjectVersion(
+    return VersionProyecto(
         id=uuid4(),
         project_id=project_id,
         created_by_user_id=uuid4(),
@@ -77,7 +77,7 @@ def _version(snapshot, project_id) -> ProjectVersion:
         status="available",
         kind="manual",
         snapshot_schema_version=2,
-        snapshot_hash=snapshot_sha256(snapshot),
+        snapshot_hash=hash_instantanea_sha256(snapshot),
         snapshot_size_bytes=1200,
         project_revision=7,
         created_at=now,
@@ -90,13 +90,13 @@ def test_phase12_document_preserves_complete_snapshot_and_registry_metadata() ->
     snapshot = _snapshot(project_id, diagram_id)
     version = _version(snapshot, project_id)
 
-    document = version_document_from_sql(version, diagram_id=diagram_id)
-    restored = UmlDiagramVersionDocument.model_validate(document.to_mongo())
+    document = documento_version_desde_sql(version, diagram_id=diagram_id)
+    restored = DocumentoVersionDiagramaUML.model_validate(document.to_mongo())
 
     assert restored.content == version.snapshot
     assert restored.project_revision == 7
     assert restored.snapshot_schema_version == 2
-    assert restored.content_hash == snapshot_sha256(snapshot)
+    assert restored.content_hash == hash_instantanea_sha256(snapshot)
     method = restored.content["diagrams"][0]["classes"][0]["methods"][0]
     assert method["specification"]["preconditions"] == ["Existe"]
     assert restored.content["diagrams"][0]["relationships"][0]["target_multiplicity"] == "*"
@@ -107,12 +107,12 @@ def test_phase12_version_write_uses_transactional_outbox_without_commit() -> Non
     version = _version(_snapshot(project_id, diagram_id), project_id)
     session = MagicMock()
 
-    enqueue_version_document(session, version, diagram_id=diagram_id)
+    encolar_documento_version(session, version, diagram_id=diagram_id)
 
     session.flush.assert_called_once()
     session.commit.assert_not_called()
     event = session.add.call_args.args[0]
-    assert event.payload["collection"] == MongoCollection.UML_DIAGRAM_VERSIONS.value
+    assert event.payload["collection"] == ColeccionMongo.UML_DIAGRAM_VERSIONS.value
     assert event.payload["document"]["content"] == version.snapshot
     assert event.idempotency_key.endswith(version.snapshot_hash)
 
@@ -122,14 +122,14 @@ def test_phase12_preview_source_prefers_valid_mongodb_snapshot(monkeypatch) -> N
     snapshot = _snapshot(project_id, diagram_id)
     version = _version(snapshot, project_id)
     project = SimpleNamespace(id=project_id, name="Academico", description=None, owner_id=uuid4())
-    service = object.__new__(ProjectService)
+    service = object.__new__(ServicioProyectos)
     service.db = MagicMock()
     service.version_documents = SimpleNamespace(
-        safe_get=AsyncMock(return_value=version_document_from_sql(version, diagram_id=diagram_id))
+        obtener_seguro=AsyncMock(return_value=documento_version_desde_sql(version, diagram_id=diagram_id))
     )
     monkeypatch.setattr(settings, "uml_versions_compare_reads", True)
 
-    loaded, warnings = asyncio.run(service._load_version_snapshot(version, project))
+    loaded, warnings = asyncio.run(service._cargar_instantanea_version(version, project))
 
     assert loaded == version.snapshot
     assert warnings == []
@@ -139,44 +139,44 @@ def test_phase12_hash_drift_falls_back_or_fails_by_flag(monkeypatch) -> None:
     project_id, diagram_id = uuid4(), uuid4()
     snapshot = _snapshot(project_id, diagram_id)
     version = _version(snapshot, project_id)
-    document = version_document_from_sql(version, diagram_id=diagram_id).model_copy(
+    document = documento_version_desde_sql(version, diagram_id=diagram_id).model_copy(
         update={"content_hash": "f" * 64}
     )
     project = SimpleNamespace(id=project_id, name="Academico", description=None, owner_id=uuid4())
-    service = object.__new__(ProjectService)
+    service = object.__new__(ServicioProyectos)
     service.db = MagicMock()
-    service.version_documents = SimpleNamespace(safe_get=AsyncMock(return_value=document))
+    service.version_documents = SimpleNamespace(obtener_seguro=AsyncMock(return_value=document))
     monkeypatch.setattr(settings, "uml_versions_compare_reads", True)
     monkeypatch.setattr(settings, "uml_versions_sql_fallback_enabled", True)
 
-    loaded, warnings = asyncio.run(service._load_version_snapshot(version, project))
+    loaded, warnings = asyncio.run(service._cargar_instantanea_version(version, project))
     assert loaded == version.snapshot
     assert warnings == ["mongodb_snapshot_hash_mismatch_fallback_sql"]
 
     monkeypatch.setattr(settings, "uml_versions_sql_fallback_enabled", False)
     with pytest.raises(HTTPException) as rejected:
-        asyncio.run(service._load_version_snapshot(version, project))
+        asyncio.run(service._cargar_instantanea_version(version, project))
     assert rejected.value.detail["code"] == "VERSION_DOCUMENT_DIVERGED"
 
 
 def test_phase12_outbox_rejects_mutation_of_immutable_version() -> None:
     project_id, diagram_id = uuid4(), uuid4()
     version = _version(_snapshot(project_id, diagram_id), project_id)
-    document = version_document_from_sql(version, diagram_id=diagram_id)
+    document = documento_version_desde_sql(version, diagram_id=diagram_id)
     target = SimpleNamespace(
         find_one=AsyncMock(return_value={"_id": str(version.id), "content_hash": "f" * 64}),
         insert_one=AsyncMock(),
     )
     receipts = SimpleNamespace(find_one=AsyncMock(return_value=None), insert_one=AsyncMock())
     database = {
-        MongoCollection.UML_DIAGRAM_VERSIONS.value: target,
-        MongoCollection.PROCESSED_EVENTS.value: receipts,
+        ColeccionMongo.UML_DIAGRAM_VERSIONS.value: target,
+        ColeccionMongo.PROCESSED_EVENTS.value: receipts,
     }
     event = SimpleNamespace(
         id=uuid4(),
         idempotency_key="immutable-conflict",
         payload={
-            "collection": MongoCollection.UML_DIAGRAM_VERSIONS.value,
+            "collection": ColeccionMongo.UML_DIAGRAM_VERSIONS.value,
             "operation": "upsert",
             "document_id": str(version.id),
             "document": document.to_mongo(),
@@ -184,15 +184,15 @@ def test_phase12_outbox_rejects_mutation_of_immutable_version() -> None:
     )
 
     with pytest.raises(ValueError, match="immutable UML version"):
-        asyncio.run(NoSqlOutboxDispatcher(MagicMock(), database)._apply(event))
+        asyncio.run(DistribuidorBandejaSalidaNoSQL(MagicMock(), database)._apply(event))
     target.insert_one.assert_not_awaited()
     receipts.insert_one.assert_not_awaited()
 
 
 def test_phase12_readiness_requires_completed_uml_version_migration(monkeypatch) -> None:
     collection = SimpleNamespace(find_one=AsyncMock(return_value={"status": "completed"}))
-    database = {MongoCollection.MIGRATION_CHECKPOINTS.value: collection}
-    health = MongoHealth(status="available", required=True, database="case_test")
+    database = {ColeccionMongo.MIGRATION_CHECKPOINTS.value: collection}
+    health = EstadoMongo(status="available", required=True, database="case_test")
     monkeypatch.setattr(settings, "uml_versions_migration_required", True)
 
     with (
@@ -254,18 +254,22 @@ def test_phase12_restore_replay_is_idempotent_and_does_not_read_snapshot() -> No
         project_revision_after=9,
         project_revision_before=8,
     )
-    service = object.__new__(ProjectService)
+    service = object.__new__(ServicioProyectos)
     service.db = SimpleNamespace(scalar=lambda _statement: operation)
     service.mutations = SimpleNamespace(acquire=lambda _project_id: project)
     service.projects = SimpleNamespace(
-        get_version=lambda version_id: source if version_id == source_id else backup
+        obtener_version=lambda version_id: source if version_id == source_id else backup
     )
-    service.version_documents = SimpleNamespace(safe_get=AsyncMock())
+    service.version_documents = SimpleNamespace(obtener_seguro=AsyncMock())
 
-    result = asyncio.run(
-        service.restore_version(project_id, source_id, user_id, idempotency_key="same-request")
-    )
+    with patch(
+        "app.modules.proyectos_colaboracion.services.servicio_proyectos.asegurar_permiso_proyecto",
+        return_value=SimpleNamespace(project_role="ORGANIZADOR"),
+    ):
+        result = asyncio.run(
+            service.restaurar_version(project_id, source_id, user_id, idempotency_key="same-request")
+        )
 
     assert result["idempotent_replay"] is True
     assert result["backup_version"]["id"] == backup_id
-    service.version_documents.safe_get.assert_not_awaited()
+    service.version_documents.obtener_seguro.assert_not_awaited()

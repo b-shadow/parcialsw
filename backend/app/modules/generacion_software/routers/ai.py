@@ -2,136 +2,136 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from app.core.security.dependencies import get_current_user
-from app.modules.acceso_usuarios.models import User
+from app.core.security.dependencias import obtener_usuario_actual
+from app.modules.acceso_usuarios.models import Usuario
 from app.modules.generacion_software.schemas.ai import (
-    AiCodeGenerationRequest,
-    AiCodeGenerationResponse,
-    AiDatasetSummaryResponse,
-    AiEvaluationResponse,
-    AiImageRequest,
-    AiKnowledgeItemResponse,
-    AiKnowledgeSearchRequest,
-    AiModelProfileResponse,
-    AiModificationRequest,
-    AiModificationResponse,
-    AiSoftwarePlanRequest,
-    AiSoftwarePlanResponse,
-    AiTextRequest,
-    AiTrainingPlanResponse,
-    AiUmlResponse,
-    AiValidationRequest,
-    AiValidationResponse,
-    AiVoiceRequest,
+    RespuestaElementoConocimientoIA,
+    RespuestaEvaluacionIA,
+    RespuestaGeneracionCodigoIA,
+    RespuestaModificacionIA,
+    RespuestaPerfilModeloIA,
+    RespuestaPlanEntrenamientoIA,
+    RespuestaPlanSoftwareIA,
+    RespuestaResumenDatosIA,
+    RespuestaUMLIA,
+    RespuestaValidacionIA,
+    SolicitudBusquedaConocimientoIA,
+    SolicitudGeneracionCodigoIA,
+    SolicitudImagenIA,
+    SolicitudModificacionIA,
+    SolicitudPlanSoftwareIA,
+    SolicitudTextoIA,
+    SolicitudValidacionIA,
+    SolicitudVozIA,
 )
-from app.modules.generacion_software.services.ai_service import AiService
+from app.modules.generacion_software.services.servicio_ia import ServicioIA
 
 router = APIRouter(prefix="/ai", tags=["ia-local-offline"])
 
 
-@router.get("/profile", response_model=AiModelProfileResponse)
-def profile(_: Annotated[User, Depends(get_current_user)]) -> AiModelProfileResponse:
-    return AiService().profile()
+@router.get("/profile", response_model=RespuestaPerfilModeloIA)
+def profile(_: Annotated[Usuario, Depends(obtener_usuario_actual)]) -> RespuestaPerfilModeloIA:
+    return ServicioIA().profile()
 
 
-@router.post("/uml/text", response_model=AiUmlResponse)
-def text_to_uml(
-    payload: AiTextRequest,
-    _: Annotated[User, Depends(get_current_user)],
-) -> AiUmlResponse:
-    return AiService().text_to_uml(payload)
+@router.post("/uml/text", response_model=RespuestaUMLIA)
+def texto_a_uml(
+    payload: SolicitudTextoIA,
+    _: Annotated[Usuario, Depends(obtener_usuario_actual)],
+) -> RespuestaUMLIA:
+    return ServicioIA().texto_a_uml(payload)
 
 
-@router.post("/generate-uml", response_model=AiUmlResponse)
-def generate_uml_alias(
-    payload: AiTextRequest,
-    _: Annotated[User, Depends(get_current_user)],
-) -> AiUmlResponse:
-    return AiService().text_to_uml(payload)
+@router.post("/generate-uml", response_model=RespuestaUMLIA)
+def alias_generar_uml(
+    payload: SolicitudTextoIA,
+    _: Annotated[Usuario, Depends(obtener_usuario_actual)],
+) -> RespuestaUMLIA:
+    return ServicioIA().texto_a_uml(payload)
 
 
-@router.post("/uml/voice", response_model=AiUmlResponse)
-def voice_to_uml(
-    payload: AiVoiceRequest,
-    _: Annotated[User, Depends(get_current_user)],
-) -> AiUmlResponse:
-    return AiService().voice_to_uml(payload)
+@router.post("/uml/voice", response_model=RespuestaUMLIA)
+def voz_a_uml(
+    payload: SolicitudVozIA,
+    _: Annotated[Usuario, Depends(obtener_usuario_actual)],
+) -> RespuestaUMLIA:
+    return ServicioIA().voz_a_uml(payload)
 
 
-@router.post("/uml/image", response_model=AiUmlResponse)
-def image_to_uml(
-    payload: AiImageRequest,
-    _: Annotated[User, Depends(get_current_user)],
-) -> AiUmlResponse:
-    return AiService().image_to_uml(payload)
+@router.post("/uml/image", response_model=RespuestaUMLIA)
+def imagen_a_uml(
+    payload: SolicitudImagenIA,
+    _: Annotated[Usuario, Depends(obtener_usuario_actual)],
+) -> RespuestaUMLIA:
+    return ServicioIA().imagen_a_uml(payload)
 
 
-@router.post("/analyze-image", response_model=AiUmlResponse)
-def analyze_image_alias(
-    payload: AiImageRequest,
-    _: Annotated[User, Depends(get_current_user)],
-) -> AiUmlResponse:
-    return AiService().image_to_uml(payload)
+@router.post("/analyze-image", response_model=RespuestaUMLIA)
+def alias_analizar_imagen(
+    payload: SolicitudImagenIA,
+    _: Annotated[Usuario, Depends(obtener_usuario_actual)],
+) -> RespuestaUMLIA:
+    return ServicioIA().imagen_a_uml(payload)
 
 
-@router.post("/uml/validate", response_model=AiValidationResponse)
-def validate_uml(
-    payload: AiValidationRequest,
-    _: Annotated[User, Depends(get_current_user)],
-) -> AiValidationResponse:
-    return AiService().validate_uml(payload)
+@router.post("/uml/validate", response_model=RespuestaValidacionIA)
+def validar_uml(
+    payload: SolicitudValidacionIA,
+    _: Annotated[Usuario, Depends(obtener_usuario_actual)],
+) -> RespuestaValidacionIA:
+    return ServicioIA().validar_uml(payload)
 
 
-@router.post("/validate-model", response_model=AiValidationResponse)
-def validate_model_alias(
-    payload: AiValidationRequest,
-    _: Annotated[User, Depends(get_current_user)],
-) -> AiValidationResponse:
-    return AiService().validate_uml(payload)
+@router.post("/validate-model", response_model=RespuestaValidacionIA)
+def alias_validar_modelo(
+    payload: SolicitudValidacionIA,
+    _: Annotated[Usuario, Depends(obtener_usuario_actual)],
+) -> RespuestaValidacionIA:
+    return ServicioIA().validar_uml(payload)
 
 
-@router.post("/software/plan", response_model=AiSoftwarePlanResponse)
-def software_plan(
-    payload: AiSoftwarePlanRequest,
-    _: Annotated[User, Depends(get_current_user)],
-) -> AiSoftwarePlanResponse:
-    return AiService().software_plan(payload)
+@router.post("/software/plan", response_model=RespuestaPlanSoftwareIA)
+def plan_software(
+    payload: SolicitudPlanSoftwareIA,
+    _: Annotated[Usuario, Depends(obtener_usuario_actual)],
+) -> RespuestaPlanSoftwareIA:
+    return ServicioIA().plan_software(payload)
 
 
-@router.post("/uml/modify", response_model=AiModificationResponse)
-def modify_uml(
-    payload: AiModificationRequest,
-    _: Annotated[User, Depends(get_current_user)],
-) -> AiModificationResponse:
-    return AiService().modify_uml(payload)
+@router.post("/uml/modify", response_model=RespuestaModificacionIA)
+def modificar_uml(
+    payload: SolicitudModificacionIA,
+    _: Annotated[Usuario, Depends(obtener_usuario_actual)],
+) -> RespuestaModificacionIA:
+    return ServicioIA().modificar_uml(payload)
 
 
-@router.post("/generate-code", response_model=AiCodeGenerationResponse)
-def generate_code(
-    payload: AiCodeGenerationRequest,
-    _: Annotated[User, Depends(get_current_user)],
-) -> AiCodeGenerationResponse:
-    return AiService().generate_code_guidance(payload)
+@router.post("/generate-code", response_model=RespuestaGeneracionCodigoIA)
+def generar_codigo(
+    payload: SolicitudGeneracionCodigoIA,
+    _: Annotated[Usuario, Depends(obtener_usuario_actual)],
+) -> RespuestaGeneracionCodigoIA:
+    return ServicioIA().generar_orientacion_codigo(payload)
 
 
-@router.post("/knowledge/search", response_model=list[AiKnowledgeItemResponse])
-def search_knowledge(
-    payload: AiKnowledgeSearchRequest,
-    _: Annotated[User, Depends(get_current_user)],
-) -> list[AiKnowledgeItemResponse]:
-    return AiService().search_knowledge(payload)
+@router.post("/knowledge/search", response_model=list[RespuestaElementoConocimientoIA])
+def buscar_conocimiento(
+    payload: SolicitudBusquedaConocimientoIA,
+    _: Annotated[Usuario, Depends(obtener_usuario_actual)],
+) -> list[RespuestaElementoConocimientoIA]:
+    return ServicioIA().buscar_conocimiento(payload)
 
 
-@router.get("/dataset/summary", response_model=AiDatasetSummaryResponse)
-def dataset_summary(_: Annotated[User, Depends(get_current_user)]) -> AiDatasetSummaryResponse:
-    return AiService().dataset_summary()
+@router.get("/dataset/summary", response_model=RespuestaResumenDatosIA)
+def resumen_datos(_: Annotated[Usuario, Depends(obtener_usuario_actual)]) -> RespuestaResumenDatosIA:
+    return ServicioIA().resumen_datos()
 
 
-@router.get("/training/plan", response_model=AiTrainingPlanResponse)
-def training_plan(_: Annotated[User, Depends(get_current_user)]) -> AiTrainingPlanResponse:
-    return AiService().training_plan()
+@router.get("/training/plan", response_model=RespuestaPlanEntrenamientoIA)
+def plan_entrenamiento(_: Annotated[Usuario, Depends(obtener_usuario_actual)]) -> RespuestaPlanEntrenamientoIA:
+    return ServicioIA().plan_entrenamiento()
 
 
-@router.get("/evaluation/offline", response_model=AiEvaluationResponse)
-def evaluate_offline(_: Annotated[User, Depends(get_current_user)]) -> AiEvaluationResponse:
-    return AiService().evaluate_offline()
+@router.get("/evaluation/offline", response_model=RespuestaEvaluacionIA)
+def evaluar_sin_conexion(_: Annotated[Usuario, Depends(obtener_usuario_actual)]) -> RespuestaEvaluacionIA:
+    return ServicioIA().evaluar_sin_conexion()

@@ -1,6 +1,6 @@
-export type UmlElementType = "class" | "interface" | "enum" | "abstract_class";
-export type UmlVisibility = "public" | "private" | "protected" | "package";
-export type UmlRelationshipType =
+export type TipoElementoUML = "class" | "interface" | "enum" | "abstract_class";
+export type VisibilidadUML = "public" | "private" | "protected" | "package";
+export type TipoRelacionUML =
   | "association"
   | "inheritance"
   | "aggregation"
@@ -8,7 +8,7 @@ export type UmlRelationshipType =
   | "dependency"
   | "realization";
 
-export type UmlDiagram = {
+export type DiagramaUML = {
   id: string;
   project_id: string;
   created_by_user_id: string;
@@ -21,18 +21,18 @@ export type UmlDiagram = {
   created_at: string;
 };
 
-export type UmlClass = {
+export type ClaseUML = {
   id: string;
   diagram_id: string;
   name: string;
-  visibility: UmlVisibility | string;
-  element_type: UmlElementType | string;
+  visibility: VisibilidadUML | string;
+  element_type: TipoElementoUML | string;
   stereotype: string | null;
   description: string | null;
   metadata_json: Record<string, unknown>;
 };
 
-export type UmlVisualElement = {
+export type ElementoVisualUML = {
   id: string;
   diagram_id: string;
   element_type: string;
@@ -44,13 +44,13 @@ export type UmlVisualElement = {
   style: Record<string, unknown>;
 };
 
-export type UmlClassDetail = UmlClass & {
-  attributes: UmlAttribute[];
-  methods: UmlMethod[];
-  visual: UmlVisualElement | null;
+export type DetalleClaseUML = ClaseUML & {
+  attributes: AtributoUML[];
+  methods: MetodoUML[];
+  visual: ElementoVisualUML | null;
 };
 
-export type UmlAttribute = {
+export type AtributoUML = {
   id: string;
   class_id: string;
   name: string;
@@ -63,7 +63,7 @@ export type UmlAttribute = {
   constraints: Record<string, unknown>;
 };
 
-export type UmlMethod = {
+export type MetodoUML = {
   id: string;
   class_id: string;
   name: string;
@@ -74,7 +74,7 @@ export type UmlMethod = {
   parameters: Array<{ id: string; name: string; data_type: string; default_value: string | null; order_index: number }>;
 };
 
-export type MethodRule = {
+export type ReglaMetodo = {
   code: string;
   description: string;
   severity: "info" | "warning" | "error";
@@ -83,7 +83,7 @@ export type MethodRule = {
   generation?: Record<string, unknown> | null;
 };
 
-export type MethodSideEffect = {
+export type EfectoSecundarioMetodo = {
   code: string;
   kind: "data_change" | "status_change" | "notification" | "audit_event" | "refresh_required";
   description: string;
@@ -91,7 +91,7 @@ export type MethodSideEffect = {
   target_entity_name: string | null;
 };
 
-export type MethodRelatedEntity = {
+export type EntidadRelacionadaMetodo = {
   class_id: string | null;
   class_name: string;
   relation: "owner" | "input_reference" | "output" | "reads" | "creates" | "updates" | "deletes" | "refresh_target";
@@ -99,19 +99,19 @@ export type MethodRelatedEntity = {
   source_parameter_id: string | null;
 };
 
-export type MethodSpecification = {
+export type EspecificacionMetodo = {
   id: string;
   method_id: string;
   description: string | null;
   operation_kind: "create" | "read" | "search" | "update" | "delete" | "calculate" | "business_action" | "custom";
   exposure: "internal" | "api" | "user_action";
-  preconditions: MethodRule[];
-  postconditions: MethodRule[];
-  business_rules: MethodRule[];
-  validations: MethodRule[];
-  side_effects: MethodSideEffect[];
+  preconditions: ReglaMetodo[];
+  postconditions: ReglaMetodo[];
+  business_rules: ReglaMetodo[];
+  validations: ReglaMetodo[];
+  side_effects: EfectoSecundarioMetodo[];
   required_permissions: Array<{ code: string; description?: string | null }>;
-  related_entities: MethodRelatedEntity[];
+  related_entities: EntidadRelacionadaMetodo[];
   backend_contract: {
     http_method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
     path: string;
@@ -145,7 +145,7 @@ export type MethodSpecification = {
   updated_at: string;
 };
 
-export type MethodDiagnostic = {
+export type DiagnosticoMetodo = {
   code: string;
   severity: "info" | "warning" | "error";
   path: string;
@@ -154,35 +154,35 @@ export type MethodDiagnostic = {
   related_element_id: string | null;
 };
 
-export type MethodReadiness = {
+export type PreparacionMetodo = {
   status: "empty" | "draft" | "needs_review" | "invalid" | "ready" | "legacy";
   ready_for_generation: boolean;
-  errors: MethodDiagnostic[];
-  warnings: MethodDiagnostic[];
+  errors: DiagnosticoMetodo[];
+  warnings: DiagnosticoMetodo[];
   inferred_fields: string[];
 };
 
-export type MethodSpecificationEnvelope = {
-  specification: MethodSpecification | null;
-  readiness: MethodReadiness;
+export type EnvolturaEspecificacionMetodo = {
+  specification: EspecificacionMetodo | null;
+  readiness: PreparacionMetodo;
 };
 
-export type MethodSpecificationProposal = {
+export type PropuestaEspecificacionMetodo = {
   action_id: string;
   method_id: string;
   base_revision: number;
   summary: string;
-  patch: Partial<MethodSpecification>;
+  patch: Partial<EspecificacionMetodo>;
   changed_fields: string[];
   unresolved_references: string[];
   assumptions: string[];
   warnings: string[];
-  validation: MethodReadiness;
+  validation: PreparacionMetodo;
   provider: string;
   fallback_used: boolean;
 };
 
-export type UmlRelationship = {
+export type RelacionUML = {
   id: string;
   diagram_id: string;
   source_class_id: string;
@@ -195,15 +195,15 @@ export type UmlRelationship = {
   metadata_json: Record<string, unknown>;
 };
 
-export type UmlValidation = {
+export type ValidacionUML = {
   diagram_id: string;
   errors: string[];
   warnings: string[];
   recommendations: string[];
 };
 
-export type DiagramModel = {
-  diagram: UmlDiagram;
-  classes: UmlClassDetail[];
-  relationships: UmlRelationship[];
+export type ModeloDiagrama = {
+  diagram: DiagramaUML;
+  classes: DetalleClaseUML[];
+  relationships: RelacionUML[];
 };

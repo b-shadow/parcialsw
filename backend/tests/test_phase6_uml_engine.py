@@ -5,17 +5,17 @@ from uuid import uuid4
 from xml.etree import ElementTree
 
 from app.main import app
-from app.modules.modelado_uml.engine.internal_model import (
-    UmlAttributeModel,
-    UmlClassModel,
-    UmlDiagramModel,
-    UmlMethodModel,
-    UmlRelationshipModel,
+from app.modules.modelado_uml.engine.analizador_texto import construir_uml_desde_texto
+from app.modules.modelado_uml.engine.modelo_interno import (
+    ModeloAtributoUML,
+    ModeloClaseUML,
+    ModeloDiagramaUML,
+    ModeloMetodoUML,
+    ModeloRelacionUML,
 )
-from app.modules.modelado_uml.engine.text_parser import build_uml_from_text
-from app.modules.modelado_uml.engine.validator import validate_internal_model
-from app.modules.modelado_uml.engine.xmi import export_xmi, import_xmi
-from app.modules.modelado_uml.services.uml_service import UmlService
+from app.modules.modelado_uml.engine.validador import validar_modelo_interno
+from app.modules.modelado_uml.engine.xmi import exportar_xmi, importar_xmi
+from app.modules.modelado_uml.services.servicio_uml import ServicioUML
 
 EA_GUID_PATTERN = re.compile(r'tag="ea_guid" value="([^"]+)"')
 
@@ -57,34 +57,34 @@ class _DrawingImportRepository:
         self.visuals = []
         self.relationships = []
 
-    def add_diagram(self, diagram):
+    def agregar_diagrama(self, diagram):
         diagram.id = uuid4()
         self.diagrams.append(diagram)
         return diagram
 
-    def add_class(self, uml_class):
+    def agregar_clase(self, uml_class):
         uml_class.id = uuid4()
         self.classes.append(uml_class)
         return uml_class
 
-    def add_visual_element(self, visual):
+    def agregar_elemento_visual(self, visual):
         visual.id = uuid4()
         self.visuals.append(visual)
         return visual
 
-    def add_attribute(self, attribute):
+    def agregar_atributo(self, attribute):
         attribute.id = uuid4()
         return attribute
 
-    def add_method(self, method):
+    def agregar_metodo(self, method):
         method.id = uuid4()
         return method
 
-    def add_parameter(self, parameter):
+    def agregar_parametro(self, parameter):
         parameter.id = uuid4()
         return parameter
 
-    def add_relationship(self, relationship):
+    def agregar_relacion(self, relationship):
         relationship.id = uuid4()
         self.relationships.append(relationship)
         return relationship
@@ -114,7 +114,7 @@ def _assert_joint_canvas_drawable_repository(repository: _DrawingImportRepositor
 
 
 def test_text_prompt_generates_internal_uml_model() -> None:
-    model = build_uml_from_text("Crear sistema de biblioteca con libros, usuarios y prestamos")
+    model = construir_uml_desde_texto("Crear sistema de biblioteca con libros, usuarios y prestamos")
 
     class_names = {uml_class.name for uml_class in model.classes}
     assert {"Biblioteca", "Libros", "Usuarios", "Prestamos"}.issubset(class_names)
@@ -123,7 +123,7 @@ def test_text_prompt_generates_internal_uml_model() -> None:
 
 
 def test_text_prompt_generates_single_class_with_explicit_attributes() -> None:
-    model = build_uml_from_text(
+    model = construir_uml_desde_texto(
         "generar una clase con atributos id que es UUID y nombre que es string"
     )
 
@@ -136,11 +136,11 @@ def test_text_prompt_generates_single_class_with_explicit_attributes() -> None:
 
 
 def test_internal_uml_validator_detects_design_findings() -> None:
-    model = UmlDiagramModel(
+    model = ModeloDiagramaUML(
         name="Duplicados",
-        classes=[UmlClassModel(name="Cliente"), UmlClassModel(name="Cliente")],
+        classes=[ModeloClaseUML(name="Cliente"), ModeloClaseUML(name="Cliente")],
         relationships=[
-            UmlRelationshipModel(
+            ModeloRelacionUML(
                 source_class_id="Cliente",
                 target_class_id="Cliente",
                 relationship_type="association",
@@ -148,7 +148,7 @@ def test_internal_uml_validator_detects_design_findings() -> None:
         ],
     )
 
-    errors, warnings, recommendations = validate_internal_model(model)
+    errors, warnings, recommendations = validar_modelo_interno(model)
 
     assert errors == []
     assert any("duplicados" in warning for warning in warnings)
@@ -157,18 +157,18 @@ def test_internal_uml_validator_detects_design_findings() -> None:
 
 
 def test_internal_uml_validator_allows_classes_without_methods() -> None:
-    model = UmlDiagramModel(
+    model = ModeloDiagramaUML(
         name="Modelo de datos",
         classes=[
-            UmlClassModel(
+            ModeloClaseUML(
                 name="Cliente",
-                attributes=[UmlAttributeModel(name="id", data_type="UUID")],
+                attributes=[ModeloAtributoUML(name="id", data_type="UUID")],
                 methods=[],
             )
         ],
     )
 
-    errors, warnings, recommendations = validate_internal_model(model)
+    errors, warnings, recommendations = validar_modelo_interno(model)
 
     assert errors == []
     assert warnings == []
@@ -176,30 +176,30 @@ def test_internal_uml_validator_allows_classes_without_methods() -> None:
 
 
 def test_internal_uml_validator_detects_invalid_members_multiplicity_and_inheritance_cycle() -> None:
-    model = UmlDiagramModel(
+    model = ModeloDiagramaUML(
         name="Invalido",
         classes=[
-            UmlClassModel(
+            ModeloClaseUML(
                 name="Cliente",
                 attributes=[
-                    UmlAttributeModel(name="correo", data_type="String"),
-                    UmlAttributeModel(name="CORREO", data_type="String"),
+                    ModeloAtributoUML(name="correo", data_type="String"),
+                    ModeloAtributoUML(name="CORREO", data_type="String"),
                 ],
                 methods=[
-                    UmlMethodModel(name="guardar", return_type="void"),
-                    UmlMethodModel(name="GUARDAR", return_type="void"),
+                    ModeloMetodoUML(name="guardar", return_type="void"),
+                    ModeloMetodoUML(name="GUARDAR", return_type="void"),
                 ],
             ),
-            UmlClassModel(name="Pedido"),
+            ModeloClaseUML(name="Pedido"),
         ],
         relationships=[
-            UmlRelationshipModel(
+            ModeloRelacionUML(
                 source_class_id="Cliente",
                 target_class_id="Pedido",
                 relationship_type="inheritance",
                 source_cardinality="muchos",
             ),
-            UmlRelationshipModel(
+            ModeloRelacionUML(
                 source_class_id="Pedido",
                 target_class_id="Cliente",
                 relationship_type="inheritance",
@@ -207,7 +207,7 @@ def test_internal_uml_validator_detects_invalid_members_multiplicity_and_inherit
         ],
     )
 
-    errors, warnings, _ = validate_internal_model(model)
+    errors, warnings, _ = validar_modelo_interno(model)
 
     assert any("Multiplicidad invalida" in error for error in errors)
     assert any("herencia contiene un ciclo" in error for error in errors)
@@ -216,10 +216,10 @@ def test_internal_uml_validator_detects_invalid_members_multiplicity_and_inherit
 
 
 def test_xmi_export_import_roundtrip_keeps_classes() -> None:
-    source = build_uml_from_text("Crear sistema academico con estudiantes, cursos y matriculas")
+    source = construir_uml_desde_texto("Crear sistema academico con estudiantes, cursos y matriculas")
 
-    xmi = export_xmi(source)
-    imported = import_xmi(xmi, name="Importado")
+    xmi = exportar_xmi(source)
+    imported = importar_xmi(xmi, name="Importado")
 
     assert 'xmi.version="1.1"' in xmi
     assert 'xmlns:UML="omg.org/UML1.3"' in xmi
@@ -243,15 +243,15 @@ def test_xmi_export_import_roundtrip_keeps_classes() -> None:
 
 
 def test_xmi_roundtrip_preserves_generalization_aggregation_and_composition() -> None:
-    source = UmlDiagramModel(
+    source = ModeloDiagramaUML(
         name="Relaciones UML",
         classes=[
-            UmlClassModel(id="class-child", name="Detalle"),
-            UmlClassModel(id="class-parent", name="Entidad"),
-            UmlClassModel(id="class-whole", name="Pedido"),
+            ModeloClaseUML(id="class-child", name="Detalle"),
+            ModeloClaseUML(id="class-parent", name="Entidad"),
+            ModeloClaseUML(id="class-whole", name="Pedido"),
         ],
         relationships=[
-            UmlRelationshipModel(
+            ModeloRelacionUML(
                 id="rel-generalization",
                 source_class_id="class-child",
                 target_class_id="class-parent",
@@ -259,7 +259,7 @@ def test_xmi_roundtrip_preserves_generalization_aggregation_and_composition() ->
                 source_cardinality="1",
                 target_cardinality="1",
             ),
-            UmlRelationshipModel(
+            ModeloRelacionUML(
                 id="rel-aggregation",
                 source_class_id="class-child",
                 target_class_id="class-whole",
@@ -267,7 +267,7 @@ def test_xmi_roundtrip_preserves_generalization_aggregation_and_composition() ->
                 source_cardinality="0..*",
                 target_cardinality="1",
             ),
-            UmlRelationshipModel(
+            ModeloRelacionUML(
                 id="rel-composition",
                 source_class_id="class-parent",
                 target_class_id="class-whole",
@@ -278,8 +278,8 @@ def test_xmi_roundtrip_preserves_generalization_aggregation_and_composition() ->
         ],
     )
 
-    xmi = export_xmi(source)
-    imported = import_xmi(xmi, name="Importado")
+    xmi = exportar_xmi(source)
+    imported = importar_xmi(xmi, name="Importado")
     relationships = {relationship.relationship_type: relationship for relationship in imported.relationships}
 
     assert "<UML:Generalization" in xmi
@@ -311,7 +311,7 @@ def test_xmi_import_normalizes_legacy_aggregation_end_to_target() -> None:
   </UML:Namespace.ownedElement></UML:Model></XMI.content>
 </XMI>"""
 
-    imported = import_xmi(legacy_xmi, name="legacy")
+    imported = importar_xmi(legacy_xmi, name="legacy")
     relationship = imported.relationships[0]
 
     assert relationship.relationship_type == "aggregation"
@@ -367,7 +367,7 @@ def test_enterprise_architect_xml_import_reads_class_diagram() -> None:
   </XMI.content>
 </XMI>"""
 
-    imported = import_xmi(ea_xml, name="archivo")
+    imported = importar_xmi(ea_xml, name="archivo")
 
     assert imported.name == "clases"
     assert [uml_class.name for uml_class in imported.classes] == ["Estudiante", "Curso"]
@@ -384,7 +384,7 @@ def test_enterprise_architect_xml_import_reads_class_diagram() -> None:
 
 def test_enterprise_architect_exportar_xml_fixture_imports_real_class_diagram() -> None:
     fixture_path = Path(__file__).resolve().parents[2] / "exportar.xml"
-    imported = import_xmi(fixture_path.read_text(encoding="utf-8", errors="replace"), name="exportar")
+    imported = importar_xmi(fixture_path.read_text(encoding="utf-8", errors="replace"), name="exportar")
 
     assert imported.name == "clases"
     assert [uml_class.name for uml_class in imported.classes] == [
@@ -407,24 +407,24 @@ def test_enterprise_architect_exportar_xml_fixture_imports_real_class_diagram() 
 
 def test_editor_import_replace_flow_becomes_joint_canvas_drawable_model() -> None:
     fixture_path = Path(__file__).resolve().parents[2] / "exportar.xml"
-    imported = import_xmi(fixture_path.read_text(encoding="utf-8", errors="replace"), name="exportar")
+    imported = importar_xmi(fixture_path.read_text(encoding="utf-8", errors="replace"), name="exportar")
     repository = _DrawingImportRepository()
-    service = UmlService.__new__(UmlService)
+    service = ServicioUML.__new__(ServicioUML)
     service.uml = repository
 
-    service._populate_existing_diagram_from_model(SimpleNamespace(id=uuid4()), imported)
+    service._poblar_diagrama_existente_desde_modelo(SimpleNamespace(id=uuid4()), imported)
 
     _assert_joint_canvas_drawable_repository(repository)
 
 
 def test_collaborative_import_new_diagram_flow_becomes_joint_canvas_drawable_model() -> None:
     fixture_path = Path(__file__).resolve().parents[2] / "exportar.xml"
-    imported = import_xmi(fixture_path.read_text(encoding="utf-8", errors="replace"), name="exportar")
+    imported = importar_xmi(fixture_path.read_text(encoding="utf-8", errors="replace"), name="exportar")
     repository = _DrawingImportRepository()
-    service = UmlService.__new__(UmlService)
+    service = ServicioUML.__new__(ServicioUML)
     service.uml = repository
 
-    diagram = service._persist_internal_model(imported, uuid4(), uuid4())
+    diagram = service._persistir_modelo_interno(imported, uuid4(), uuid4())
 
     assert diagram.id == repository.diagrams[0].id
     assert diagram.name == "clases"
@@ -433,10 +433,10 @@ def test_collaborative_import_new_diagram_flow_becomes_joint_canvas_drawable_mod
 
 def test_enterprise_architect_xml_import_export_roundtrip_keeps_drawable_relationships() -> None:
     fixture_path = Path(__file__).resolve().parents[2] / "exportar.xml"
-    imported = import_xmi(fixture_path.read_text(encoding="utf-8", errors="replace"), name="exportar")
+    imported = importar_xmi(fixture_path.read_text(encoding="utf-8", errors="replace"), name="exportar")
 
-    exported = export_xmi(imported)
-    reimported = import_xmi(exported, name="reimportado")
+    exported = exportar_xmi(imported)
+    reimported = importar_xmi(exported, name="reimportado")
 
     assert exported.startswith('<?xml version="1.0" encoding="windows-1252"?>')
     assert "<XMI.exporter>Enterprise Architect</XMI.exporter>" in exported
@@ -465,11 +465,11 @@ def test_enterprise_architect_xml_import_export_roundtrip_keeps_drawable_relatio
 
 def test_enterprise_architect_export_uses_fresh_ids_and_keeps_association_class_attributes() -> None:
     fixture_path = Path(__file__).resolve().parents[2] / "exportar.xml"
-    imported = import_xmi(fixture_path.read_text(encoding="utf-8", errors="replace"), name="exportar")
+    imported = importar_xmi(fixture_path.read_text(encoding="utf-8", errors="replace"), name="exportar")
 
-    first_export = export_xmi(imported)
-    second_export = export_xmi(imported)
-    first_reimport = import_xmi(first_export, name="first")
+    first_export = exportar_xmi(imported)
+    second_export = exportar_xmi(imported)
+    first_reimport = importar_xmi(first_export, name="first")
 
     assert _xmi_ids(first_export).isdisjoint(_xmi_ids(second_export))
     inscripcion = next(uml_class for uml_class in first_reimport.classes if uml_class.name == "Inscripcion")

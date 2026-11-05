@@ -3,38 +3,38 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.config.settings import settings
-from app.core.database.session import get_db
-from app.core.security.dependencies import get_current_user
-from app.modules.acceso_usuarios.models import User
+from app.core.config.configuracion import settings
+from app.core.database.sesion import obtener_sesion_bd
+from app.core.security.dependencias import obtener_usuario_actual
+from app.modules.acceso_usuarios.models import Usuario
 from app.modules.notificaciones.schemas import (
-    PushConfigResponse,
-    PushSubscriptionCreate,
-    PushSubscriptionDelete,
-    PushSubscriptionResponse,
+    CreacionSuscripcionPush,
+    EliminacionSuscripcionPush,
+    RespuestaConfiguracionPush,
+    RespuestaSuscripcionPush,
 )
-from app.modules.notificaciones.services import PushNotificationService, send_user_push
+from app.modules.notificaciones.services import ServicioNotificacionesPush, enviar_push_usuario
 
 router = APIRouter(prefix="/notifications/push", tags=["notificaciones-push"])
 
 
-@router.get("/config", response_model=PushConfigResponse)
-def push_config(_: Annotated[User, Depends(get_current_user)]) -> PushConfigResponse:
+@router.get("/config", response_model=RespuestaConfiguracionPush)
+def configuracion_push(_: Annotated[Usuario, Depends(obtener_usuario_actual)]) -> RespuestaConfiguracionPush:
     enabled = bool(settings.vapid_public_key and settings.vapid_private_key)
-    return PushConfigResponse(
+    return RespuestaConfiguracionPush(
         enabled=enabled,
         public_key=settings.vapid_public_key if enabled else None,
     )
 
 
-@router.post("/subscriptions", response_model=PushSubscriptionResponse, status_code=201)
-def subscribe(
-    payload: PushSubscriptionCreate,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+@router.post("/subscriptions", response_model=RespuestaSuscripcionPush, status_code=201)
+def suscribir(
+    payload: CreacionSuscripcionPush,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
     user_agent: Annotated[str | None, Header()] = None,
-) -> PushSubscriptionResponse:
-    return PushNotificationService(db).subscribe(
+) -> RespuestaSuscripcionPush:
+    return ServicioNotificacionesPush(db).suscribir(
         current_user.id,
         payload,
         user_agent,
@@ -42,22 +42,22 @@ def subscribe(
 
 
 @router.delete("/subscriptions", status_code=status.HTTP_204_NO_CONTENT)
-def unsubscribe(
-    payload: PushSubscriptionDelete,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+def cancelar_suscripcion(
+    payload: EliminacionSuscripcionPush,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
 ) -> Response:
-    PushNotificationService(db).unsubscribe(current_user.id, str(payload.endpoint))
+    ServicioNotificacionesPush(db).cancelar_suscripcion(current_user.id, str(payload.endpoint))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/test", status_code=status.HTTP_202_ACCEPTED)
-def test_notification(
+def probar_notificacion(
     background_tasks: BackgroundTasks,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
 ) -> dict[str, str]:
     background_tasks.add_task(
-        send_user_push,
+        enviar_push_usuario,
         current_user.id,
         {
             "title": "Notificaciones activadas",

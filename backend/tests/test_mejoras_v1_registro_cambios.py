@@ -5,25 +5,29 @@ from uuid import uuid4
 import fakeredis
 import pytest
 
-from app.core.changelog.contracts import PendingChange
-from app.core.changelog.hooks import clear_pending_changes, flush_pending_changes, queue_change
-from app.core.changelog.service import ChangeLogService
-from app.core.redis.client import redis_key, set_test_client
+from app.core.changelog.contratos import CambioPendiente
+from app.core.changelog.ganchos import (
+    encolar_cambio,
+    limpiar_cambios_pendientes,
+    vaciar_cambios_pendientes,
+)
+from app.core.changelog.servicio import ServicioRegistroCambios
+from app.core.redis.cliente import clave_redis, establecer_cliente_prueba
 
 
 @pytest.fixture
 def fake_redis_client():
     client = fakeredis.FakeRedis(decode_responses=True)
-    set_test_client(client, None)
+    establecer_cliente_prueba(client, None)
     yield client
-    set_test_client(None, None)
+    establecer_cliente_prueba(None, None)
 
 
 def test_queue_and_flush_writes_to_streams(fake_redis_client):
     proj_id = uuid4()
     actor_id = uuid4()
 
-    change = PendingChange(
+    change = CambioPendiente(
         project_id=proj_id,
         actor_user_id=actor_id,
         source="ui",
@@ -39,14 +43,14 @@ def test_queue_and_flush_writes_to_streams(fake_redis_client):
             self.info = {}
 
     db = DummySession()
-    queue_change(db, change)
+    encolar_cambio(db, change)
     assert len(db.info["change_log_pending"]) == 1
 
-    flush_pending_changes(db)
+    vaciar_cambios_pendientes(db)
     assert "change_log_pending" not in db.info
 
-    p_key = redis_key("changelog", "project", str(proj_id))
-    g_key = redis_key("changelog", "all")
+    p_key = clave_redis("changelog", "project", str(proj_id))
+    g_key = clave_redis("changelog", "all")
 
     p_entries = fake_redis_client.xrevrange(p_key)
     g_entries = fake_redis_client.xrevrange(g_key)
@@ -68,9 +72,9 @@ def test_rollback_discards_pending_changes(fake_redis_client):
 
     db = DummySession()
     proj_id = uuid4()
-    queue_change(
+    encolar_cambio(
         db,
-        PendingChange(
+        CambioPendiente(
             project_id=proj_id,
             source="ui",
             module="modelado_uml",
@@ -78,11 +82,11 @@ def test_rollback_discards_pending_changes(fake_redis_client):
         ),
     )
 
-    clear_pending_changes(db)
+    limpiar_cambios_pendientes(db)
     assert "change_log_pending" not in db.info
 
-    flush_pending_changes(db)
-    p_key = redis_key("changelog", "project", str(proj_id))
+    vaciar_cambios_pendientes(db)
+    p_key = clave_redis("changelog", "project", str(proj_id))
     assert len(fake_redis_client.xrevrange(p_key)) == 0
 
 
@@ -91,9 +95,9 @@ def test_pagination_and_filtering(fake_redis_client):
     user_a = uuid4()
     user_b = uuid4()
 
-    service = ChangeLogService()
+    service = ServicioRegistroCambios()
     changes = [
-        PendingChange(
+        CambioPendiente(
             project_id=proj_id,
             actor_user_id=user_a,
             source="ui",
@@ -107,23 +111,23 @@ def test_pagination_and_filtering(fake_redis_client):
     service.append_many(changes)
 
     # 1. Paginar limit=2
-    page1 = service.list_project(proj_id, limit=2)
+    page1 = service.listar_proyecto(proj_id, limit=2)
     assert len(page1.items) == 2
     assert page1.next_cursor is not None
 
-    page2 = service.list_project(proj_id, before_id=page1.next_cursor, limit=2)
+    page2 = service.listar_proyecto(proj_id, before_id=page1.next_cursor, limit=2)
     assert len(page2.items) == 1
 
     # 2. Filtro por actor_id
-    page_user_b = service.list_project(proj_id, actor_id=user_b)
+    page_user_b = service.listar_proyecto(proj_id, actor_id=user_b)
     assert len(page_user_b.items) == 0
 
 
 def test_fallback_when_redis_unavailable():
-    set_test_client(None, None)
-    service = ChangeLogService()
+    establecer_cliente_prueba(None, None)
+    service = ServicioRegistroCambios()
     proj_id = uuid4()
 
-    page = service.list_project(proj_id, db=None)
+    page = service.listar_proyecto(proj_id, db=None)
     assert page.source == "postgres_fallback"
     assert len(page.items) == 0

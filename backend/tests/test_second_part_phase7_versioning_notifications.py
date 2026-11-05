@@ -6,63 +6,63 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.main import app
-from app.modules.acceso_usuarios.services.audit_service import sanitize_audit_metadata
+from app.modules.acceso_usuarios.services.servicio_auditoria import sanear_metadatos_auditoria
 from app.modules.notificaciones.models import (
-    Notification,
-    NotificationOutbox,
-    NotificationPreference,
+    BandejaSalidaNotificacion,
+    Notificacion,
+    PreferenciaNotificacion,
 )
-from app.modules.notificaciones.schemas.notification import NotificationDeepLink
-from app.modules.notificaciones.services.notification_service import (
-    DomainNotificationEvent,
-    NotificationService,
+from app.modules.notificaciones.schemas.notificacion import EnlaceProfundoNotificacion
+from app.modules.notificaciones.services.servicio_notificaciones import (
+    EventoNotificacionDominio,
+    ServicioNotificaciones,
 )
-from app.modules.proyectos_colaboracion.schemas.snapshot import (
-    ProjectSnapshotV2,
-    SnapshotProject,
-    canonicalize_project_snapshot,
-    snapshot_sha256,
+from app.modules.proyectos_colaboracion.schemas.instantanea import (
+    InstantaneaProyecto,
+    InstantaneaProyectoV2,
+    hash_instantanea_sha256,
+    normalizar_instantanea_proyecto,
 )
-from app.modules.proyectos_colaboracion.services.project_service import (
+from app.modules.proyectos_colaboracion.services.servicio_proyectos import (
     EVENT_ALIASES,
-    ProjectService,
+    ServicioProyectos,
 )
 
 
-def snapshot(*, captured_at: datetime, diagrams: list[dict] | None = None) -> ProjectSnapshotV2:
-    return ProjectSnapshotV2(
+def snapshot(*, captured_at: datetime, diagrams: list[dict] | None = None) -> InstantaneaProyectoV2:
+    return InstantaneaProyectoV2(
         captured_at=captured_at,
-        project=SnapshotProject(id=uuid4(), name="Ventas"),
+        project=InstantaneaProyecto(id=uuid4(), name="Ventas"),
         diagrams=diagrams or [],
     )
 
 
 def test_snapshot_hash_is_deterministic_and_excludes_capture_time() -> None:
     project_id = uuid4()
-    first = ProjectSnapshotV2(
+    first = InstantaneaProyectoV2(
         captured_at=datetime(2026, 1, 1, tzinfo=UTC),
-        project=SnapshotProject(id=project_id, name="Ventas"),
+        project=InstantaneaProyecto(id=project_id, name="Ventas"),
         diagrams=[{"id": "b"}, {"id": "a"}],
     )
-    second = ProjectSnapshotV2(
+    second = InstantaneaProyectoV2(
         captured_at=datetime(2026, 10, 1, tzinfo=UTC),
-        project=SnapshotProject(id=project_id, name="Ventas"),
+        project=InstantaneaProyecto(id=project_id, name="Ventas"),
         diagrams=[{"id": "a"}, {"id": "b"}],
     )
-    assert canonicalize_project_snapshot(first) == canonicalize_project_snapshot(second)
-    assert snapshot_sha256(first) == snapshot_sha256(second)
-    assert len(snapshot_sha256(first)) == 64
+    assert normalizar_instantanea_proyecto(first) == normalizar_instantanea_proyecto(second)
+    assert hash_instantanea_sha256(first) == hash_instantanea_sha256(second)
+    assert len(hash_instantanea_sha256(first)) == 64
 
 
 def test_snapshot_contract_rejects_unknown_restore_fields() -> None:
     value = snapshot(captured_at=datetime.now(UTC)).model_dump(mode="json")
     value["access_token"] = "must-not-enter"
     with pytest.raises(ValidationError):
-        ProjectSnapshotV2.model_validate(value)
+        InstantaneaProyectoV2.model_validate(value)
 
 
 def test_audit_metadata_is_recursive_bounded_and_secret_free() -> None:
-    cleaned = sanitize_audit_metadata({
+    cleaned = sanear_metadatos_auditoria({
         "operation": "restore",
         "nested": {"authorization": "Bearer secret", "safe": "x" * 900},
         "private_key": "hidden",
@@ -71,12 +71,12 @@ def test_audit_metadata_is_recursive_bounded_and_secret_free() -> None:
 
 
 def test_deep_links_only_accept_closed_internal_routes() -> None:
-    valid = NotificationDeepLink(
+    valid = EnlaceProfundoNotificacion(
         route_name="project_collaborative", params={"project_id": str(uuid4())}
     )
     assert valid.route_name == "project_collaborative"
     with pytest.raises(ValidationError):
-        NotificationDeepLink(route_name="https://attacker.example")
+        EnlaceProfundoNotificacion(route_name="https://attacker.example")
 
 
 class FakeSession:
@@ -102,8 +102,8 @@ def test_notification_policy_creates_inbox_and_outbox_but_excludes_actor() -> No
     actor = uuid4()
     recipient = uuid4()
     session = FakeSession()
-    created = NotificationService(session).record(  # type: ignore[arg-type]
-        DomainNotificationEvent(
+    created = ServicioNotificaciones(session).record(  # type: ignore[arg-type]
+        EventoNotificacionDominio(
             type="PROJECT_VERSION_RESTORED",
             category="versions",
             title="Proyecto restaurado",
@@ -111,22 +111,22 @@ def test_notification_policy_creates_inbox_and_outbox_but_excludes_actor() -> No
             recipient_user_ids={actor, recipient},
             dedup_entity_id=uuid4(),
             actor_user_id=actor,
-            deep_link=NotificationDeepLink(route_name="projects"),
+            deep_link=EnlaceProfundoNotificacion(route_name="projects"),
         )
     )
     assert len(created) == 1
     assert created[0].recipient_user_id == recipient
-    assert sum(isinstance(item, Notification) for item in session.added) == 1
-    assert sum(isinstance(item, NotificationOutbox) for item in session.added) == 1
+    assert sum(isinstance(item, Notificacion) for item in session.added) == 1
+    assert sum(isinstance(item, BandejaSalidaNotificacion) for item in session.added) == 1
 
 
 def test_global_notification_preferences_have_database_uniqueness() -> None:
     index = next(
-        item for item in NotificationPreference.__table__.indexes
-        if item.name == "uq_notification_preferences_global"
+        item for item in PreferenciaNotificacion.__table__.indexes
+        if item.name == "ix_preferencias_notificaciones_usuario_id_categoria"
     )
     assert index.unique is True
-    assert str(index.dialect_options["postgresql"]["where"]) == "project_id IS NULL"
+    assert str(index.dialect_options["postgresql"]["where"]) == "proyecto_id IS NULL"
 
 
 def test_snapshot_statistics_cover_uml_content() -> None:
@@ -141,7 +141,7 @@ def test_snapshot_statistics_cover_uml_content() -> None:
             "relationships": [{}, {}],
         }],
     )
-    assert ProjectService._snapshot_stats(value) == {
+    assert ServicioProyectos._estadisticas_instantanea(value) == {
         "diagrams": 1, "classes": 2, "attributes": 2, "methods": 3, "relationships": 2,
     }
 
@@ -164,4 +164,4 @@ def test_phase7_routes_are_exposed_in_openapi() -> None:
         "/api/v1/notifications/preferences",
     }
     assert expected <= set(paths)
-    assert "snapshot" not in document["components"]["schemas"]["VersionResponse"]["properties"]
+    assert "snapshot" not in document["components"]["schemas"]["RespuestaVersion"]["properties"]

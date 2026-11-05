@@ -18,7 +18,7 @@ def test_db_url():
 
 def test_v0_migration_upgrade_and_downgrade(test_db_url):
     alembic_cfg = Config("alembic.ini")
-    alembic_cfg.set_main_option("sqlalchemy.url", test_db_url)
+    alembic_cfg.attributes["database_url_override"] = test_db_url
 
     engine = create_engine(test_db_url)
 
@@ -38,15 +38,14 @@ def test_v0_migration_upgrade_and_downgrade(test_db_url):
         rows = conn.execute(query).fetchall()
         assert len(rows) == 0, f"Hay columnas NOT NULL sin default: {rows}"
 
-        # 2. Verificar que ai_project_settings acepta gemini
-        # Insertar proyecto y verificar que preferred_provider='gemini' no viole el check
+        # 2. La configuración de IA ahora es un valor de projects.settings.ai.
         res = conn.execute(text("""
-            SELECT conname, pg_get_constraintdef(oid)
-            FROM pg_constraint
-            WHERE conname = 'ck_ai_project_settings_provider';
+            SELECT table_name FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name IN ('ai_project_settings', 'project_permissions');
         """)).fetchall()
-        assert len(res) == 1
-        assert "gemini" in res[0][1]
+        assert res == []
+        assert conn.execute(text("SELECT count(*) FROM proyectos WHERE configuracion IS NULL")).scalar() == 0
 
     # Downgrade -1 y volver a subir a head
     command.downgrade(alembic_cfg, "-1")

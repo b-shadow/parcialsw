@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 
-from app.core.config.settings import settings
+from app.core.config.configuracion import settings
 from app.main import app
 
 

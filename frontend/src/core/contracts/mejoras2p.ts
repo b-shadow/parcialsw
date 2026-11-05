@@ -1,4 +1,4 @@
-export type PermissionCode =
+export type CodigoPermiso =
   | "project.read"
   | "project.update"
   | "members.manage"
@@ -11,7 +11,7 @@ export type PermissionCode =
   | "generation.run"
   | "theme.edit";
 
-export const PERMISSION_CODES: readonly PermissionCode[] = [
+export const CODIGOS_PERMISO: readonly CodigoPermiso[] = [
   "project.read",
   "project.update",
   "members.manage",
@@ -25,16 +25,16 @@ export const PERMISSION_CODES: readonly PermissionCode[] = [
   "theme.edit",
 ] as const;
 
-export type ProjectRole = "ORGANIZADOR" | "EDITOR" | "LECTOR";
+export type RolProyecto = "ORGANIZADOR" | "EDITOR" | "LECTOR";
 
-export type MyMembership = {
+export type MiParticipacion = {
   project_id: string;
   user_id: string;
-  project_role: ProjectRole;
-  permissions: PermissionCode[];
+  project_role: RolProyecto;
+  permissions: CodigoPermiso[];
 };
 
-export type ChangeLogEntry = {
+export type EntradaRegistroCambios = {
   id: string;
   project_id: string;
   occurred_at: string;
@@ -50,27 +50,27 @@ export type ChangeLogEntry = {
   metadata: Record<string, unknown>;
 };
 
-export type ChangeLogPage = {
-  items: ChangeLogEntry[];
+export type PaginaRegistroCambios = {
+  items: EntradaRegistroCambios[];
   next_cursor: string | null;
   source: "redis" | "postgres_fallback";
 };
 
-export type InvitationStatus = "pending" | "accepted" | "rejected" | "revoked" | "expired";
+export type EstadoInvitacion = "pending" | "accepted" | "rejected" | "revoked" | "expired";
 
-export type ProjectInvitation = {
+export type InvitacionProyecto = {
   id: string;
   project_id: string;
   project_name: string;
   invited_email: string;
-  project_role: Exclude<ProjectRole, "ORGANIZADOR">;
-  status: InvitationStatus;
+  project_role: Exclude<RolProyecto, "ORGANIZADOR">;
+  status: EstadoInvitacion;
   invited_by_name: string;
   expires_at: string;
   created_at: string;
 };
 
-export type ElementLock = {
+export type BloqueoElemento = {
   diagram_id: string;
   element_type: "class" | "relationship";
   element_id: string;
@@ -78,4 +78,4 @@ export type ElementLock = {
   expires_at: string;
 };
 
-export type AiProvider = "ollama" | "gemini" | "rule_engine";
+export type ProveedorIA = "ollama" | "gemini" | "rule_engine";

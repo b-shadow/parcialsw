@@ -5,10 +5,10 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-from app.modules.modelado_uml.services.uml_service import UmlService
-from app.modules.proyectos_colaboracion.services.project_service import ProjectService
-from app.modules.proyectos_colaboracion.validators.project_validator import ensure_organizer
-from app.websocket.connection_manager import ConnectionManager
+from app.modules.modelado_uml.services.servicio_uml import ServicioUML
+from app.modules.proyectos_colaboracion.services.servicio_proyectos import ServicioProyectos
+from app.modules.proyectos_colaboracion.validators.validador_proyecto import asegurar_organizador
+from app.websocket.gestor_conexiones import GestorConexiones
 
 
 class FakeWebSocket:
@@ -29,7 +29,7 @@ class FakeWebSocket:
 
 def test_collaboration_broadcast_is_project_scoped_and_excludes_sender() -> None:
     async def scenario() -> None:
-        manager = ConnectionManager()
+        manager = GestorConexiones()
         sender = FakeWebSocket()
         collaborator = FakeWebSocket()
         other_project = FakeWebSocket()
@@ -56,15 +56,15 @@ def test_only_organizer_can_manage_saved_versions() -> None:
     organizer = SimpleNamespace(project_role="ORGANIZADOR")
     editor = SimpleNamespace(project_role="EDITOR")
 
-    assert ensure_organizer(organizer) is organizer
+    assert asegurar_organizador(organizer) is organizer
     with pytest.raises(HTTPException) as rejected:
-        ensure_organizer(editor)
+        asegurar_organizador(editor)
     assert rejected.value.status_code == 403
 
 
 def test_connection_manager_limits_connections_per_project() -> None:
     async def scenario() -> None:
-        manager = ConnectionManager()
+        manager = GestorConexiones()
         manager.MAX_CONNECTIONS_PER_PROJECT = 1
         first = FakeWebSocket()
         rejected = FakeWebSocket()
@@ -81,18 +81,18 @@ def test_duplicate_client_event_is_acknowledged_without_creating_another() -> No
     user_id = uuid4()
     client_event_id = uuid4()
     existing = SimpleNamespace(client_event_id=client_event_id, sequence_number=7)
-    service = object.__new__(ProjectService)
+    service = object.__new__(ServicioProyectos)
     service.members = SimpleNamespace(
-        get_membership=lambda requested_project_id, requested_user_id: SimpleNamespace(
+        obtener_participacion=lambda requested_project_id, requested_user_id: SimpleNamespace(
             project_role="EDITOR"
         )
     )
     service.projects = SimpleNamespace(
-        get_for_update=lambda requested_project_id: SimpleNamespace(id=project_id),
-        get_event_by_client_id=lambda requested_project_id, requested_user_id, requested_event_id: existing,
+        obtener_para_actualizar=lambda requested_project_id: SimpleNamespace(id=project_id),
+        obtener_evento_por_id_cliente=lambda requested_project_id, requested_user_id, requested_event_id: existing,
     )
 
-    event, was_created = service.record_collaboration_event(
+    event, was_created = service.registrar_evento_colaboracion(
         project_id=project_id,
         diagram_id=None,
         user_id=user_id,
@@ -109,13 +109,13 @@ def test_duplicate_client_event_is_acknowledged_without_creating_another() -> No
 
 
 def test_restore_rejects_malformed_snapshot_before_changing_diagrams() -> None:
-    service = object.__new__(UmlService)
+    service = object.__new__(ServicioUML)
     service.members = SimpleNamespace(
-        get_membership=lambda project_id, user_id: SimpleNamespace(project_role="ORGANIZADOR")
+        obtener_participacion=lambda project_id, user_id: SimpleNamespace(project_role="ORGANIZADOR")
     )
 
     with pytest.raises(HTTPException) as rejected:
-        service.restore_project_snapshot(
+        service.restaurar_instantanea_proyecto(
             uuid4(),
             {"schema_version": 1, "diagrams": [{"id": "invalid"}]},
             uuid4(),
@@ -126,16 +126,16 @@ def test_restore_rejects_malformed_snapshot_before_changing_diagrams() -> None:
 
 def test_collaboration_event_rejects_diagram_from_another_project() -> None:
     project_id = uuid4()
-    service = object.__new__(ProjectService)
+    service = object.__new__(ServicioProyectos)
     service.members = SimpleNamespace(
-        get_membership=lambda requested_project_id, user_id: SimpleNamespace(project_role="EDITOR")
+        obtener_participacion=lambda requested_project_id, user_id: SimpleNamespace(project_role="EDITOR")
     )
     service.db = SimpleNamespace(
         get=lambda model, diagram_id: SimpleNamespace(project_id=uuid4())
     )
 
     with pytest.raises(HTTPException) as rejected:
-        service.record_collaboration_event(
+        service.registrar_evento_colaboracion(
             project_id=project_id,
             diagram_id=uuid4(),
             user_id=uuid4(),

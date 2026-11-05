@@ -1,7 +1,7 @@
 import { Bot } from "lucide-react";
 import { cn } from "../utils/cn";
 
-export type AvatarProps = {
+export type PropiedadesAvatar = {
   name: string;
   userId?: string;
   kind?: "user" | "ai";
@@ -35,7 +35,7 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-export function Avatar({ name, userId, kind = "user", size = "md" }: AvatarProps) {
+export function Avatar({ name, userId, kind = "user", size = "md" }: PropiedadesAvatar) {
   const sizeClasses =
     size === "sm" ? "h-7 w-7 text-xs" : "h-9 w-9 text-sm font-semibold";
 
@@ -71,7 +71,7 @@ export function Avatar({ name, userId, kind = "user", size = "md" }: AvatarProps
   );
 }
 
-export function PresenceStack({
+export function GrupoPresencia({
   people,
   max = 4,
 }: {

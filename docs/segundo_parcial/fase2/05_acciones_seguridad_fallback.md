@@ -43,3 +43,9 @@ Si una solicitud no esta cubierta, informa la limitacion; no inventa que realizo
 ## Observabilidad
 
 El backend registra IDs, proveedor, modelo, intenciones, duraciones, tokens, reintentos, fallback y cantidades. No registra prompt, contenido completo, JWT, claves ni imagenes base64.
+
+## Ajuste posterior del asistente
+
+Las preguntas factuales sobre un diagrama conservan una respuesta rapida basada en el contexto. Cuando se piden mejoras y hay un proveedor configurado, el orquestador consulta ese modelo para obtener retroalimentacion especifica; si devuelve una respuesta sin recomendaciones estructuradas, utiliza la revision local y lo declara en los metadatos. Una consulta sin orden de edicion no conserva acciones que el modelo haya propuesto por error.
+
+Las recomendaciones que necesitan valores o reglas del dominio muestran un campo para que el usuario indique su criterio. El asistente usa ese criterio para preparar una propuesta, que sigue requiriendo confirmacion antes de editar. Si solo esta disponible el motor de reglas y no existe una transformacion segura, se informa esa limitacion sin afirmar que el cambio se realizo. Los resumenes de proyecto y conversacion usan sus datos concretos en vez de un acuse generico.

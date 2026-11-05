@@ -8,38 +8,38 @@ from uuid import UUID, uuid4
 import fakeredis
 import pytest
 
-from app.core.changelog.consumer import ChangeLogConsumer
-from app.core.changelog.contracts import ChangeLogEntry
-from app.core.config.settings import settings
-from app.core.redis.client import redis_key, set_test_client
-from app.modules.asistente_proyecto.models import AiConversation
-from app.modules.asistente_proyecto.services.proactive_advisor_service import (
+from app.core.changelog.consumidor import ConsumidorRegistroCambios
+from app.core.changelog.contratos import EntradaRegistroCambios
+from app.core.config.configuracion import settings
+from app.core.redis.cliente import clave_redis, establecer_cliente_prueba
+from app.modules.asistente_proyecto.models import ConversacionIA
+from app.modules.asistente_proyecto.services.servicio_asesor_proactivo import (
     _MEMORY_COOLDOWN,
     _MEMORY_PENDING,
-    ProactiveAdvisorService,
+    ServicioAsesorProactivo,
 )
-from app.modules.modelado_uml.engine.internal_model import (
-    UmlAttributeModel,
-    UmlClassModel,
-    UmlDiagramModel,
+from app.modules.modelado_uml.engine.modelo_interno import (
+    ModeloAtributoUML,
+    ModeloClaseUML,
+    ModeloDiagramaUML,
 )
-from app.modules.modelado_uml.models import UmlAttribute, UmlClass, UmlDiagram
+from app.modules.modelado_uml.models import AtributoUML, ClaseUML, DiagramaUML
 
 
 @pytest.fixture
 def fake_redis():
     client = fakeredis.FakeRedis(decode_responses=True)
-    set_test_client(client, None)
+    establecer_cliente_prueba(client, None)
     _MEMORY_PENDING.clear()
     _MEMORY_COOLDOWN.clear()
     yield client
-    set_test_client(None, None)
+    establecer_cliente_prueba(None, None)
     _MEMORY_PENDING.clear()
     _MEMORY_COOLDOWN.clear()
 
 
 class FakeSession:
-    def __init__(self, diagram: UmlDiagram, classes: list[UmlClass], conversation: AiConversation | None = None):
+    def __init__(self, diagram: DiagramaUML, classes: list[ClaseUML], conversation: ConversacionIA | None = None):
         self.diagram = diagram
         self.classes = classes
         self.conversation = conversation
@@ -53,7 +53,7 @@ class FakeSession:
         pass
 
     def get(self, model, ident):
-        if model == UmlDiagram and self.diagram and self.diagram.id == ident:
+        if model == DiagramaUML and self.diagram and self.diagram.id == ident:
             return self.diagram
         return None
 
@@ -95,8 +95,8 @@ class FakeSession:
         pass
 
 
-def _make_conversation(project_id: UUID) -> AiConversation:
-    return AiConversation(
+def _make_conversation(project_id: UUID) -> ConversacionIA:
+    return ConversacionIA(
         id=uuid4(),
         project_id=project_id,
         title="Chat Equipo",
@@ -104,8 +104,8 @@ def _make_conversation(project_id: UUID) -> AiConversation:
     )
 
 
-def _make_diagram(project_id: UUID, diagram_id: UUID) -> UmlDiagram:
-    return UmlDiagram(
+def _make_diagram(project_id: UUID, diagram_id: UUID) -> DiagramaUML:
+    return DiagramaUML(
         id=diagram_id,
         project_id=project_id,
         name="Principal",
@@ -117,8 +117,8 @@ def _make_diagram(project_id: UUID, diagram_id: UUID) -> UmlDiagram:
     )
 
 
-def _make_class(diagram_id: UUID, name: str, attributes: list[UmlAttribute] | None = None) -> UmlClass:
-    cls = UmlClass(
+def _make_class(diagram_id: UUID, name: str, attributes: list[AtributoUML] | None = None) -> ClaseUML:
+    cls = ClaseUML(
         id=uuid4(),
         diagram_id=diagram_id,
         name=name,
@@ -133,8 +133,8 @@ def _make_class(diagram_id: UUID, name: str, attributes: list[UmlAttribute] | No
     return cls
 
 
-def _make_attr(name: str, data_type: str = "String") -> UmlAttribute:
-    return UmlAttribute(
+def _make_attr(name: str, data_type: str = "String") -> AtributoUML:
+    return AtributoUML(
         id=uuid4(),
         name=name,
         data_type=data_type,
@@ -147,18 +147,18 @@ def _make_attr(name: str, data_type: str = "String") -> UmlAttribute:
     )
 
 
-def _load_diagram_model(session: FakeSession, _diagram_id: UUID) -> UmlDiagramModel:
-    return UmlDiagramModel(
+def _load_diagram_model(session: FakeSession, _diagram_id: UUID) -> ModeloDiagramaUML:
+    return ModeloDiagramaUML(
         id=str(session.diagram.id),
         project_id=str(session.diagram.project_id),
         name=session.diagram.name,
         classes=[
-            UmlClassModel(
+            ModeloClaseUML(
                 id=str(uml_class.id),
                 name=uml_class.name,
                 visibility=uml_class.visibility,
                 attributes=[
-                    UmlAttributeModel(
+                    ModeloAtributoUML(
                         id=str(attribute.id),
                         name=attribute.name,
                         data_type=attribute.data_type,
@@ -178,8 +178,8 @@ def _make_entry(
     source: str = "ui",
     actor_id: UUID | None = None,
     diagram_id: UUID | None = None,
-) -> ChangeLogEntry:
-    return ChangeLogEntry(
+) -> EntradaRegistroCambios:
+    return EntradaRegistroCambios(
         id=f"1000-{uuid4().hex[:6]}",
         project_id=project_id,
         occurred_at=datetime.now(UTC),
@@ -204,7 +204,7 @@ def test_four_changes_do_not_publish_fifth_with_invalid_diagram_publishes(fake_r
     conv = _make_conversation(project_id)
 
     session = FakeSession(diagram, [empty_class], conv)
-    advisor = ProactiveAdvisorService(
+    advisor = ServicioAsesorProactivo(
         db_factory=lambda: session,
         diagram_model_loader=_load_diagram_model,
     )
@@ -214,13 +214,13 @@ def test_four_changes_do_not_publish_fifth_with_invalid_diagram_publishes(fake_r
 
         # 4 cambios
         for _ in range(4):
-            asyncio.run(advisor.on_change(_make_entry(project_id, diagram_id=diagram_id, actor_id=actor_id)))
+            asyncio.run(advisor.al_cambiar(_make_entry(project_id, diagram_id=diagram_id, actor_id=actor_id)))
 
         # No debe haber publicado nada
         assert mock_pub.await_count == 0
 
         # 5to cambio
-        asyncio.run(advisor.on_change(_make_entry(project_id, diagram_id=diagram_id, actor_id=actor_id)))
+        asyncio.run(advisor.al_cambiar(_make_entry(project_id, diagram_id=diagram_id, actor_id=actor_id)))
 
         # Ahora sí debe publicar mensaje proactivo y recomendaciones
         assert mock_pub.await_count == 1
@@ -238,7 +238,7 @@ def test_during_cooldown_another_five_changes_do_not_publish(fake_redis):
     conv = _make_conversation(project_id)
 
     session = FakeSession(diagram, [empty_class], conv)
-    advisor = ProactiveAdvisorService(
+    advisor = ServicioAsesorProactivo(
         db_factory=lambda: session,
         diagram_model_loader=_load_diagram_model,
     )
@@ -249,14 +249,14 @@ def test_during_cooldown_another_five_changes_do_not_publish(fake_redis):
 
         # Disparar 5 cambios -> 1er mensaje publicado
         for _ in range(5):
-            asyncio.run(advisor.on_change(_make_entry(project_id, diagram_id=diagram_id)))
+            asyncio.run(advisor.al_cambiar(_make_entry(project_id, diagram_id=diagram_id)))
 
         assert mock_pub.await_count == 1
-        fake_redis.set(redis_key("proactive", "cooldown", str(project_id)), "1", ex=120)
+        fake_redis.set(clave_redis("proactive", "cooldown", str(project_id)), "1", ex=120)
 
         # Otros 5 cambios inmediatamente (en cooldown)
         for _ in range(5):
-            asyncio.run(advisor.on_change(_make_entry(project_id, diagram_id=diagram_id)))
+            asyncio.run(advisor.al_cambiar(_make_entry(project_id, diagram_id=diagram_id)))
 
         # No se publicó un segundo mensaje
         assert mock_pub.await_count == 1
@@ -273,7 +273,7 @@ def test_diagram_without_findings_does_not_publish(fake_redis):
     conv = _make_conversation(project_id)
 
     session = FakeSession(diagram, [valid_class], conv)
-    advisor = ProactiveAdvisorService(
+    advisor = ServicioAsesorProactivo(
         db_factory=lambda: session,
         diagram_model_loader=_load_diagram_model,
     )
@@ -282,7 +282,7 @@ def test_diagram_without_findings_does_not_publish(fake_redis):
          patch.object(advisor, "_publish", new_callable=AsyncMock) as mock_pub:
 
         for _ in range(5):
-            asyncio.run(advisor.on_change(_make_entry(project_id, diagram_id=diagram_id)))
+            asyncio.run(advisor.al_cambiar(_make_entry(project_id, diagram_id=diagram_id)))
 
         assert mock_pub.await_count == 0
 
@@ -296,7 +296,7 @@ def test_system_source_is_ignored_ai_counts_as_team(fake_redis):
     conv = _make_conversation(project_id)
 
     session = FakeSession(diagram, [empty_class], conv)
-    advisor = ProactiveAdvisorService(
+    advisor = ServicioAsesorProactivo(
         db_factory=lambda: session,
         diagram_model_loader=_load_diagram_model,
     )
@@ -306,13 +306,13 @@ def test_system_source_is_ignored_ai_counts_as_team(fake_redis):
 
         # 5 cambios con source='system' -> ignorados por completo
         for _ in range(5):
-            asyncio.run(advisor.on_change(_make_entry(project_id, source="system", diagram_id=diagram_id)))
+            asyncio.run(advisor.al_cambiar(_make_entry(project_id, source="system", diagram_id=diagram_id)))
 
         assert mock_pub.await_count == 0
 
         # 5 cambios con source='ai' -> cuentan como cambios del equipo
         for _ in range(5):
-            asyncio.run(advisor.on_change(_make_entry(project_id, source="ai", diagram_id=diagram_id)))
+            asyncio.run(advisor.al_cambiar(_make_entry(project_id, source="ai", diagram_id=diagram_id)))
 
         assert mock_pub.await_count == 1
 
@@ -325,17 +325,17 @@ def test_create_project_version_generates_summary(fake_redis):
     conv = _make_conversation(project_id)
 
     session = FakeSession(diagram, [], conv)
-    advisor = ProactiveAdvisorService(
+    advisor = ServicioAsesorProactivo(
         db_factory=lambda: session,
         diagram_model_loader=_load_diagram_model,
     )
 
     entry = _make_entry(project_id, action="CREATE_PROJECT_VERSION", diagram_id=diagram_id)
 
-    with patch.object(advisor, "_version_summary", return_value="Resumen de versión: Ana creó Factura."), \
+    with patch.object(advisor, "_resumen_version", return_value="Resumen de versión: Ana creó Factura."), \
          patch.object(advisor, "_publish", new_callable=AsyncMock) as mock_pub:
 
-        asyncio.run(advisor.on_change(entry))
+        asyncio.run(advisor.al_cambiar(entry))
 
         assert mock_pub.await_count == 1
         published = mock_pub.await_args.kwargs
@@ -352,7 +352,7 @@ def test_import_xmi_triggers_on_findings(fake_redis):
     conv = _make_conversation(project_id)
 
     session = FakeSession(diagram, [empty_class], conv)
-    advisor = ProactiveAdvisorService(
+    advisor = ServicioAsesorProactivo(
         db_factory=lambda: session,
         diagram_model_loader=_load_diagram_model,
     )
@@ -360,7 +360,7 @@ def test_import_xmi_triggers_on_findings(fake_redis):
     entry = _make_entry(project_id, action="IMPORT_XMI", diagram_id=diagram_id)
 
     with patch.object(advisor, "_publish", new_callable=AsyncMock) as mock_pub:
-        asyncio.run(advisor.on_change(entry))
+        asyncio.run(advisor.al_cambiar(entry))
 
         assert mock_pub.await_count == 1
         assert mock_pub.await_args.kwargs["trigger"] == "import"
@@ -375,23 +375,23 @@ def test_project_without_conversation_logs_and_does_not_fail(fake_redis):
 
     # session SIN conversación (conv = None)
     session = FakeSession(diagram, [empty_class], conversation=None)
-    advisor = ProactiveAdvisorService(
+    advisor = ServicioAsesorProactivo(
         db_factory=lambda: session,
         diagram_model_loader=_load_diagram_model,
     )
 
     with patch.object(settings, "ai_proactive_min_changes", 1), \
-         patch("app.modules.asistente_proyecto.services.proactive_advisor_service.ProjectAiEventPublisher.publish_persisted", new_callable=AsyncMock) as mock_pub:
+         patch("app.modules.asistente_proyecto.services.servicio_asesor_proactivo.PublicadorEventosIAProyecto.publicar_persistido", new_callable=AsyncMock) as mock_pub:
 
         # No debe lanzar excepción
-        asyncio.run(advisor.on_change(_make_entry(project_id, diagram_id=diagram_id)))
+        asyncio.run(advisor.al_cambiar(_make_entry(project_id, diagram_id=diagram_id)))
         assert mock_pub.await_count == 0
 
 
 def test_consumer_xack_and_broadcast(fake_redis):
     project_id = uuid4()
     actor_id = uuid4()
-    global_stream = redis_key("changelog", "all")
+    global_stream = clave_redis("changelog", "all")
 
     # Insertar mensaje en Redis Stream global
     payload = {
@@ -407,7 +407,7 @@ def test_consumer_xack_and_broadcast(fake_redis):
     fake_redis.xadd(global_stream, payload)
 
     advisor_mock = AsyncMock()
-    consumer = ChangeLogConsumer(advisor=advisor_mock)
+    consumer = ConsumidorRegistroCambios(advisor=advisor_mock)
 
     stop_event = asyncio.Event()
 
@@ -415,7 +415,7 @@ def test_consumer_xack_and_broadcast(fake_redis):
         await asyncio.sleep(0.1)
         stop_event.set()
 
-    with patch("app.websocket.connection_manager.manager.broadcast", new_callable=AsyncMock) as mock_broadcast, \
+    with patch("app.websocket.gestor_conexiones.manager.broadcast", new_callable=AsyncMock) as mock_broadcast, \
          patch.object(consumer, "_resolve_actor_name", return_value="Ana Dev"):
 
         async def _run_test():
@@ -423,7 +423,7 @@ def test_consumer_xack_and_broadcast(fake_redis):
 
         asyncio.run(_run_test())
 
-        assert advisor_mock.on_change.await_count >= 1
+        assert advisor_mock.al_cambiar.await_count >= 1
         assert mock_broadcast.await_count >= 1
 
         call_args = mock_broadcast.await_args[0]

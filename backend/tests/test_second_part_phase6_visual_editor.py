@@ -5,15 +5,15 @@ import pytest
 from pydantic import ValidationError
 
 from app.main import app
-from app.modules.generacion_software.coordinated_generator import compile_generation_plan
-from app.modules.generacion_software.coordinated_generator.contracts import build_ui_manifest
-from app.modules.generacion_software.flutter_generator import FlutterGeneratorService
-from app.modules.generacion_software.routers.theme import _revision
-from app.modules.generacion_software.schemas.theme_contract import (
+from app.modules.generacion_software.coordinated_generator import compilar_plan_generacion
+from app.modules.generacion_software.coordinated_generator.contracts import construir_manifiesto_ui
+from app.modules.generacion_software.flutter_generator import ServicioGeneradorFlutter
+from app.modules.generacion_software.routers.temas import _revision_actual
+from app.modules.generacion_software.schemas.contrato_temas import (
     DEFAULT_THEME_V2,
-    FlutterThemeConfigV2,
-    contrast_ratio,
-    normalize_theme,
+    ConfiguracionTemaFlutterV2,
+    normalizar_tema,
+    relacion_contraste,
 )
 
 
@@ -25,7 +25,7 @@ def _model() -> dict:
 
 
 def test_phase6_adapts_v1_and_normalizes_hex() -> None:
-    theme, diagnostics, fields = normalize_theme({
+    theme, diagnostics, fields = normalizar_tema({
         "primary_color": "#0f766e", "font_family": "Roboto", "border_radius": 12,
         "button_style": "outline", "density": "comfortable",
     })
@@ -51,17 +51,17 @@ def test_phase6_shared_component_recipes_match_runtime_contract() -> None:
 def test_phase6_blocks_inaccessible_contrast_and_extra_fields() -> None:
     raw = DEFAULT_THEME_V2.model_dump(mode="json")
     raw["light"]["on_primary"] = raw["light"]["primary"]
-    _, diagnostics, _ = normalize_theme(raw)
+    _, diagnostics, _ = normalizar_tema(raw)
     assert any(item.code == "theme_contrast_insufficient" and item.severity == "error" for item in diagnostics)
-    assert contrast_ratio("#000000", "#FFFFFF") == 21.0
+    assert relacion_contraste("#000000", "#FFFFFF") == 21.0
     with pytest.raises(ValidationError):
-        FlutterThemeConfigV2.model_validate({**DEFAULT_THEME_V2.model_dump(), "unknown": True})
+        ConfiguracionTemaFlutterV2.model_validate({**DEFAULT_THEME_V2.model_dump(), "unknown": True})
 
 
 def test_phase6_ui_manifest_uses_real_entities_and_controls() -> None:
-    plan = compile_generation_plan(_model(), "Academico", source_transformation_id="tx-1",
+    plan = compilar_plan_generacion(_model(), "Academico", source_transformation_id="tx-1",
                                    theme=DEFAULT_THEME_V2.model_dump(mode="json"))
-    manifest = build_ui_manifest(plan)
+    manifest = construir_manifiesto_ui(plan)
     assert manifest.source_hash == plan.canonical_hash
     assert manifest.source_transformation_id == "tx-1"
     assert manifest.modules[0].label == "Curso"
@@ -71,11 +71,11 @@ def test_phase6_ui_manifest_uses_real_entities_and_controls() -> None:
 
 def test_phase6_flutter_contains_dark_theme_and_manifests(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.modules.generacion_software.flutter_generator.generator.project_writer.which",
+        "app.modules.generacion_software.flutter_generator.generator.escritor_proyecto.which",
         lambda _: None,
     )
-    plan = compile_generation_plan(_model(), "Academico", theme=DEFAULT_THEME_V2.model_dump(mode="json"))
-    result = FlutterGeneratorService(tmp_path).generate(
+    plan = compilar_plan_generacion(_model(), "Academico", theme=DEFAULT_THEME_V2.model_dump(mode="json"))
+    result = ServicioGeneradorFlutter(tmp_path).generate(
         _model(), "Academico", "phase6", theme_config=DEFAULT_THEME_V2.model_dump(mode="json"),
         generation_plan=plan,
     )
@@ -109,8 +109,8 @@ def test_phase6_openapi_exposes_theme_and_manifest_lifecycle() -> None:
 
 
 def test_phase6_revision_headers_preserve_zero_and_reject_malformed_values() -> None:
-    assert _revision(None, "*") == 0
-    assert _revision('"flutter-theme-revision-0"') == 0
-    assert _revision('"flutter-theme-revision-12"') == 12
-    assert _revision("12") is None
-    assert _revision('"flutter-theme-revision-x"') is None
+    assert _revision_actual(None, "*") == 0
+    assert _revision_actual('"flutter-theme-revision-0"') == 0
+    assert _revision_actual('"flutter-theme-revision-12"') == 12
+    assert _revision_actual("12") is None
+    assert _revision_actual('"flutter-theme-revision-x"') is None

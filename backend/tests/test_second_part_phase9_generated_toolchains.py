@@ -6,8 +6,8 @@ from uuid import uuid4
 
 import pytest
 
-from app.modules.generacion_software.backend_generator import SpringBootGeneratorService
-from app.modules.generacion_software.flutter_generator import FlutterGeneratorService
+from app.modules.generacion_software.backend_generator import ServicioGeneradorSpringBoot
+from app.modules.generacion_software.flutter_generator import ServicioGeneradorFlutter
 
 
 def _model() -> dict:
@@ -73,7 +73,7 @@ def _run(command: list[str], cwd: Path, timeout: int = 600) -> None:
 def test_generated_spring_project_compiles_without_manual_changes(tmp_path: Path) -> None:
     maven = shutil.which("mvn")
     assert maven, "Maven no esta disponible en PATH."
-    result = SpringBootGeneratorService(tmp_path).generate(
+    result = ServicioGeneradorSpringBoot(tmp_path).generate(
         _model(), "Academico", str(uuid4())
     )
 
@@ -88,7 +88,7 @@ def test_generated_flutter_project_passes_full_toolchain(tmp_path: Path) -> None
     flutter = shutil.which("flutter")
     dart = shutil.which("dart")
     assert flutter and dart, "Flutter y Dart deben estar disponibles en PATH."
-    result = FlutterGeneratorService(tmp_path).generate(
+    result = ServicioGeneradorFlutter(tmp_path).generate(
         _model(),
         "Academico Mobile",
         str(uuid4()),

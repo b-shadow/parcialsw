@@ -1,343 +1,663 @@
-# Catalogo de la base de datos PostgreSQL
+# Diccionario físico de PostgreSQL
 
-Este documento describe el esquema cargado por `backend/app/models.py` y las
-migraciones Alembic vigentes hasta `d2f6a7b8c9d0`.
+Esquema verificado directamente en PostgreSQL con la revisión Alembic `e9a1b3c5d7f8`.
+Solo aparecen las tablas y columnas físicas existentes en PostgreSQL.
 
-## Convenciones
+## Diseño físico de datos
 
-- Todas las tablas tienen `id UUID PK`, `created_at TIMESTAMPTZ` y
-  `updated_at TIMESTAMPTZ` mediante los mixins comunes.
-- `?` indica que el atributo acepta `NULL`.
-- `FK -> tabla.columna` indica una clave foranea.
-- `JSONB` representa estructuras variables validadas por la aplicacion.
-- MongoDB es la unica fuente de verdad del contenido UML, snapshots, mensajes y
-  contexto. PostgreSQL conserva solo registros administrativos y referencias
-  logicas hacia los documentos.
+### Volumen y diccionario de datos
 
-## Acceso y usuarios
-
-### `users`
-
-- Atributos: `full_name VARCHAR(150)`, `email VARCHAR(180)`,
-  `password_hash VARCHAR(255)`, `is_active BOOLEAN`, `last_access_at TIMESTAMPTZ?`.
-- Relaciones: es propietario de proyectos y puede aparecer como autor, miembro,
-  invitado, actor, destinatario o solicitante en los modulos restantes.
-
-### `roles`
-
-- Atributos: `name VARCHAR(50)`, `description TEXT?`, `is_system BOOLEAN`.
-- Relaciones: `roles 1 -- N user_roles`.
-
-### `user_roles`
-
-- Atributos: `user_id UUID FK -> users.id`, `role_id UUID FK -> roles.id`.
-- Restriccion: un solo registro de rol por usuario (`UNIQUE user_id`).
-- Relaciones: resuelve la asociacion entre usuarios y roles globales.
-
-### `user_sessions`
-
-- Atributos: `user_id UUID FK -> users.id`, `refresh_token_hash VARCHAR(255)?`,
-  `ip_address VARCHAR(80)?`, `user_agent VARCHAR(255)?`, `revoked_at TIMESTAMPTZ?`,
-  `expires_at TIMESTAMPTZ`.
-- Relaciones: `users 1 -- N user_sessions`.
-
-### `audit_logs`
-
-- Atributos: `user_id UUID? FK -> users.id`, `project_id UUID? FK -> projects.id`,
-  `module VARCHAR(80)`, `action VARCHAR(120)`, `result VARCHAR(40)`, `detail TEXT?`,
-  `metadata_json JSONB`.
-- Relaciones: cada registro puede estar asociado con un usuario y un proyecto.
-
-## Proyectos y colaboracion
-
-### `projects`
-
-- Atributos: `owner_id UUID FK -> users.id`, `name VARCHAR(160)`,
-  `description TEXT?`, `status VARCHAR(40)`, `settings JSONB`, `revision INTEGER`,
-  `next_version_number INTEGER`.
-- Relaciones: un usuario posee muchos proyectos; cada proyecto agrupa miembros,
-  permisos, invitaciones, diagramas, chats, versiones, generaciones y eventos.
-
-### `project_members`
-
-- Atributos: `project_id UUID FK -> projects.id`, `user_id UUID FK -> users.id`,
-  `project_role VARCHAR(40)`, `joined_at TIMESTAMPTZ?`.
-- Restriccion: `UNIQUE(project_id, user_id)`.
-- Relaciones: tabla asociativa entre proyectos y usuarios; tiene permisos
-  particulares en `project_permissions`.
-
-### `project_permissions`
-
-- Atributos: `member_id UUID FK -> project_members.id`,
-  `permission_code VARCHAR(80)`, `is_allowed BOOLEAN`.
-- Restriccion: `UNIQUE(member_id, permission_code)`.
-- Relaciones: `project_members 1 -- N project_permissions`.
-
-### `project_invitations`
-
-- Atributos: `project_id UUID FK -> projects.id`,
-  `invited_by_user_id UUID FK -> users.id`, `invited_user_id UUID? FK -> users.id`,
-  `invited_email VARCHAR(180)`, `project_role VARCHAR(40)`, `status VARCHAR(40)`,
-  `expires_at TIMESTAMPTZ?`, `responded_at TIMESTAMPTZ?`.
-- Relaciones: pertenece a un proyecto, identifica al emisor y opcionalmente al
-  usuario destinatario ya registrado.
-
-### `collaboration_events`
-
-- Atributos: `project_id UUID FK -> projects.id`,
-  `diagram_id UUID? FK -> uml_diagrams.id`, `user_id UUID FK -> users.id`,
-  `client_event_id UUID`, `sequence_number INTEGER`, `event_type VARCHAR(80)`,
-  `element_type VARCHAR(80)?`, `element_id UUID?`, `base_version INTEGER?`,
-  `payload JSONB`, `actor_display_name VARCHAR(160)?`, `resource_type VARCHAR(80)?`,
-  `resource_id UUID?`, `correlation_id UUID?`, `causation_id UUID?`,
-  `summary_key VARCHAR(160)?`.
-- Restricciones: secuencia unica por proyecto y evento de cliente unico por
-  `project_id`, `user_id` y `client_event_id`.
-- Relaciones: registra acciones colaborativas de un usuario sobre un proyecto y,
-  opcionalmente, su diagrama.
-
-### `project_versions`
-
-- Atributos: `project_id UUID FK -> projects.id`,
-  `created_by_user_id UUID FK -> users.id`, `version_number INTEGER`,
-  `name VARCHAR(120)`, `description TEXT?`, `snapshot JSONB` reservado vacio,
-  `status VARCHAR(40)`,
-  `kind VARCHAR(40)`, `snapshot_schema_version INTEGER`, `snapshot_hash VARCHAR(64)`,
-  `snapshot_size_bytes INTEGER`, `project_revision INTEGER`,
-  `idempotency_key VARCHAR(120)?`, `metadata_json JSONB`,
-  `snapshot_storage VARCHAR(20) = 'mongodb'`.
-- Restricciones: version unica por proyecto e idempotencia por proyecto/usuario.
-- Relaciones: registro SQL de una version; el snapshot canonico se almacena en
-  MongoDB `uml_diagram_versions`. En modo consolidado `snapshot` permanece `{}`.
-
-### `project_restore_operations`
-
-- Atributos: `project_id UUID FK -> projects.id`,
-  `source_version_id UUID FK -> project_versions.id`,
-  `backup_version_id UUID? FK -> project_versions.id`,
-  `requested_by_user_id UUID FK -> users.id`, `idempotency_key VARCHAR(120)`,
-  `status VARCHAR(24)`, `source_snapshot_hash VARCHAR(64)`,
-  `before_snapshot_hash VARCHAR(64)`, `after_snapshot_hash VARCHAR(64)?`,
-  `project_revision_before INTEGER`, `project_revision_after INTEGER?`,
-  `diagnostics_json JSONB`, `started_at TIMESTAMPTZ`, `completed_at TIMESTAMPTZ?`.
-- Restriccion: operacion idempotente por proyecto, usuario y clave.
-- Relaciones: enlaza proyecto, version restaurada, respaldo preventivo y usuario.
-
-## Modelado UML
-
-### `uml_diagrams`
-
-- Atributos: `project_id UUID FK -> projects.id`,
-  `created_by_user_id UUID FK -> users.id`, `name VARCHAR(160)`,
-  `diagram_type VARCHAR(50)`, `status VARCHAR(40)`, `current_version INTEGER`,
-  `description TEXT?`, `metadata_json JSONB`,
-  `content_storage VARCHAR(20) = 'mongodb'`.
-- Relaciones: cada proyecto posee su registro de diagrama; el contenido completo
-  esta en MongoDB `uml_diagrams`.
-
-### `xmi_exchanges`
-
-- Atributos: `diagram_id UUID FK -> uml_diagrams.id`,
-  `user_id UUID FK -> users.id`, `exchange_type VARCHAR(30)`,
-  `tool_name VARCHAR(120)?`, `file_name VARCHAR(255)`, `file_path VARCHAR(500)?`,
-  `status VARCHAR(40)`, `error_detail TEXT?`, `metadata_json JSONB`.
-- Relaciones: registra cada importacion o exportacion XMI de un diagrama y usuario.
-
-## Asistente e IA
-
-### `ai_conversations`
-
-- Atributos: `title VARCHAR(160)`, `created_by_user_id UUID? FK -> users.id`,
-  `project_id UUID FK -> projects.id`, `status VARCHAR(30)`,
-  `summary TEXT?` reservado vacio,
-  `summary_until_sequence INTEGER`, `last_message_sequence INTEGER`,
-  `schema_version INTEGER`, `message_storage VARCHAR(20) = 'mongodb'`.
-- Relaciones: `projects 1 -- N ai_conversations`; los mensajes canonicos estan en
-  MongoDB y se identifican mediante `conversation_id`.
-
-### `ai_project_settings`
-
-- Atributos: `project_id UUID FK -> projects.id`, `enabled BOOLEAN`,
-  `preferred_provider VARCHAR(40)`, `model_name VARCHAR(120)`,
-  `fallback_enabled BOOLEAN`, `require_confirmation BOOLEAN`,
-  `max_context_messages INTEGER`, `summary_trigger_messages INTEGER`,
-  `settings_json JSONB`, `created_by_user_id UUID FK -> users.id`,
-  `updated_by_user_id UUID FK -> users.id`.
-- Restriccion: `UNIQUE(project_id)`, configuracion uno a uno por proyecto.
-
-### `ai_actions`
-
-- Atributos: `project_id UUID FK -> projects.id`,
-  `conversation_id UUID FK -> ai_conversations.id`,
-  `source_message_id UUID` referencia logica a MongoDB `ai_messages._id`,
-  `requested_by_user_id UUID FK -> users.id`, `action_type VARCHAR(80)`,
-  `target_type VARCHAR(80)?`, `target_id UUID?`, `payload JSONB`,
-  `risk_level VARCHAR(20)`, `requires_confirmation BOOLEAN`, `status VARCHAR(30)`,
-  `confirmed_by_user_id UUID? FK -> users.id`, `confirmed_at TIMESTAMPTZ?`,
-  `executed_at TIMESTAMPTZ?`, `result_json JSONB`, `error_message TEXT?`,
-  `idempotency_key UUID`.
-- Restriccion: clave idempotente unica por proyecto.
-- Relaciones: una accion nace de un mensaje y puede ser confirmada por otro usuario.
-
-### `ai_recommendations`
-
-- Atributos: `project_id UUID FK -> projects.id`,
-  `conversation_id UUID FK -> ai_conversations.id`,
-  `source_message_id UUID` referencia logica a MongoDB `ai_messages._id`,
-  `severity VARCHAR(20)`, `title VARCHAR(200)`, `description TEXT`,
-  `references_json JSONB`, `status VARCHAR(30)`,
-  `resolved_by_user_id UUID? FK -> users.id`, `resolved_at TIMESTAMPTZ?`,
-  `resolution_note TEXT?`.
-- Relaciones: recomendacion asociada al proyecto, chat y mensaje documental que la origino.
-
-## Tablas retiradas en `d2f6a7b8c9d0`
-
-La migracion destructiva elimina `uml_classes`, `uml_attributes`, `uml_methods`,
-`uml_method_specifications`, `uml_parameters`, `uml_relationships`,
-`uml_visual_elements` y `ai_messages`. Sus datos existen exclusivamente en las
-colecciones `uml_diagrams` y `ai_messages`. Alembic excluye deliberadamente esos
-nombres del autogenerado para impedir su recreacion accidental.
-
-### `ai_processes`
-
-- Atributos: `user_id UUID FK -> users.id`, `project_id UUID? FK -> projects.id`,
-  `diagram_id UUID? FK -> uml_diagrams.id`, `process_type VARCHAR(80)`,
-  `model_provider VARCHAR(80)`, `model_name VARCHAR(120)?`, `input_payload JSONB`,
-  `output_payload JSONB`, `status VARCHAR(40)`, `error_detail TEXT?`.
-- Relaciones: traza una ejecucion de IA y sus recursos relacionados.
-
-## Generacion de software
-
-### `uml_transformations`
-
-- Atributos: `project_id UUID FK -> projects.id`,
-  `diagram_id UUID FK -> uml_diagrams.id`, `requested_by_user_id UUID FK -> users.id`,
-  `source_version VARCHAR(80)?`, `target_platform VARCHAR(80)`,
-  `intermediate_model JSONB`, `status VARCHAR(40)`, `error_detail TEXT?`.
-- Relaciones: transforma un diagrama para alimentar una generacion.
-
-### `generated_backends`
-
-- Atributos: `project_id UUID FK -> projects.id`,
-  `transformation_id UUID FK -> uml_transformations.id`,
-  `generated_by_user_id UUID FK -> users.id`, `name VARCHAR(160)`,
-  `technology VARCHAR(80)`, `language VARCHAR(40)`, `database_engine VARCHAR(80)`,
-  `version_label VARCHAR(80)`, `status VARCHAR(40)`, `artifact_path VARCHAR(500)?`,
-  `manifest JSONB`, `error_detail TEXT?`.
-- Relaciones: pertenece a un proyecto y transformacion; puede ser utilizado por
-  multiples frontends y artefactos.
-
-### `generated_frontends`
-
-- Atributos: `project_id UUID FK -> projects.id`,
-  `transformation_id UUID FK -> uml_transformations.id`,
-  `generated_by_user_id UUID FK -> users.id`,
-  `backend_id UUID? FK -> generated_backends.id`, `name VARCHAR(160)`,
-  `technology VARCHAR(80)`, `language VARCHAR(40)`, `version_label VARCHAR(80)`,
-  `status VARCHAR(40)`, `artifact_path VARCHAR(500)?`, `manifest JSONB`,
-  `error_detail TEXT?`.
-- Relaciones: puede declarar para que version de backend fue generado.
-
-### `generated_artifacts`
-
-- Atributos: `project_id UUID FK -> projects.id`,
-  `generated_backend_id UUID? FK -> generated_backends.id`,
-  `generated_frontend_id UUID? FK -> generated_frontends.id`,
-  `artifact_type VARCHAR(60)`, `file_name VARCHAR(255)`, `file_path VARCHAR(500)`,
-  `checksum VARCHAR(128)?`, `metadata_json JSONB`.
-- Relaciones: archivo descargable perteneciente a una generacion backend o frontend.
-
-### `coordinated_generations`
-
-- Atributos: `project_id UUID FK -> projects.id`,
-  `transformation_id UUID FK -> uml_transformations.id`,
-  `requested_by_user_id UUID FK -> users.id`,
-  `backend_id UUID? FK -> generated_backends.id`,
-  `frontend_id UUID? FK -> generated_frontends.id`, `client_request_id VARCHAR(120)`,
-  `name VARCHAR(160)`, `status VARCHAR(40)`, `stage VARCHAR(40)`,
-  `plan_hash VARCHAR(64)?`, `plan_json JSONB`, `diagnostics JSONB`, `manifest JSONB`,
-  `artifact_path VARCHAR(500)?`, `error_detail TEXT?`.
-- Restriccion: solicitud unica por transformacion, usuario y `client_request_id`.
-- Relaciones: orquesta y enlaza la generacion coordinada de backend y frontend.
-
-### `flutter_theme_settings`
-
-- Atributos: `project_id UUID FK -> projects.id`, `config_json JSONB`,
-  `preset_name VARCHAR(120)?`, `schema_version INTEGER`, `revision INTEGER`,
-  `created_by_user_id UUID FK -> users.id`, `updated_by_user_id UUID FK -> users.id`.
-- Restriccion: `UNIQUE(project_id)`, configuracion activa uno a uno por proyecto.
-
-### `flutter_theme_presets`
-
-- Atributos: `project_id UUID FK -> projects.id`, `name VARCHAR(120)`,
-  `config_json JSONB`, `schema_version INTEGER`,
-  `created_by_user_id UUID FK -> users.id`, `updated_by_user_id UUID FK -> users.id`.
-- Relaciones: un proyecto puede almacenar multiples presets de tema.
-
-## Notificaciones
-
-### `notifications`
-
-- Atributos: `recipient_user_id UUID FK -> users.id`,
-  `project_id UUID? FK -> projects.id`, `actor_user_id UUID? FK -> users.id`,
-  `type VARCHAR(80)`, `severity VARCHAR(16)`, `title VARCHAR(180)`,
-  `body VARCHAR(500)`, `resource_type VARCHAR(80)?`, `resource_id UUID?`,
-  `deep_link JSONB`, `dedup_key VARCHAR(200)`, `group_key VARCHAR(200)?`,
-  `occurred_at TIMESTAMPTZ`, `read_at TIMESTAMPTZ?`, `clicked_at TIMESTAMPTZ?`,
-  `archived_at TIMESTAMPTZ?`.
-- Restriccion: `UNIQUE(recipient_user_id, dedup_key)`.
-- Relaciones: enlaza destinatario, actor y proyecto; tiene entregas en Outbox.
-
-### `notification_outbox`
-
-- Atributos: `notification_id UUID FK -> notifications.id`, `channel VARCHAR(32)`,
-  `status VARCHAR(24)`, `attempt_count INTEGER`, `available_at TIMESTAMPTZ`,
-  `locked_at TIMESTAMPTZ?`, `locked_by VARCHAR(120)?`,
-  `last_error_code VARCHAR(120)?`, `delivered_at TIMESTAMPTZ?`.
-- Restriccion: `UNIQUE(notification_id, channel)`.
-- Relaciones: `notifications 1 -- N notification_outbox`.
-
-### `notification_preferences`
-
-- Atributos: `user_id UUID FK -> users.id`, `project_id UUID? FK -> projects.id`,
-  `category VARCHAR(80)`, `in_app_enabled BOOLEAN`, `push_enabled BOOLEAN`,
-  `muted_until TIMESTAMPTZ?`.
-- Restriccion: `UNIQUE(user_id, project_id, category)`.
-- Relaciones: preferencia global o particular de un proyecto para un usuario.
-
-### `push_subscriptions`
-
-- Atributos: `user_id UUID FK -> users.id`, `endpoint VARCHAR(2048)`, `p256dh TEXT`,
-  `auth TEXT`, `content_encoding VARCHAR(40)`, `user_agent VARCHAR(512)?`,
-  `expires_at TIMESTAMPTZ?`, `is_active BOOLEAN`, `failure_count INTEGER`,
-  `last_success_at TIMESTAMPTZ?`.
-- Restriccion: `UNIQUE(endpoint)`.
-- Relaciones: un usuario puede registrar multiples dispositivos o navegadores.
-
-## Integracion PostgreSQL-MongoDB
-
-### `nosql_outbox_events`
-
-- Atributos: `aggregate_type VARCHAR(80)`, `aggregate_id UUID`,
-  `event_type VARCHAR(100)`, `payload JSONB`, `idempotency_key VARCHAR(200)`,
-  `status VARCHAR(24)`, `attempt_count INTEGER`, `available_at TIMESTAMPTZ`,
-  `locked_at TIMESTAMPTZ?`, `locked_by VARCHAR(120)?`,
-  `processed_at TIMESTAMPTZ?`, `last_error TEXT?`.
-- Restricciones: `UNIQUE(idempotency_key)` y estado limitado a `pending`,
-  `processing`, `completed`, `retry` o `dead`.
-- Relaciones: no usa FK deliberadamente; identifica el agregado mediante
-  `aggregate_type` y `aggregate_id` y publica mutaciones idempotentes en MongoDB.
-
-## Relaciones principales resumidas
-
-```text
-users 1 -> N projects -> 1 uml_diagrams
-projects N <-> N users mediante project_members
-project_members 1 -> N project_permissions
-projects 1 -> N ai_conversations -> MongoDB ai_messages
-uml_diagrams 1 -> 1 MongoDB uml_diagrams.content
-projects 1 -> N project_versions -> N project_restore_operations
-project_versions 1 -> 1 MongoDB uml_diagram_versions
-uml_transformations 1 -> N generated_backends/generated_frontends
-notifications 1 -> N notification_outbox
-```
+Cada tabla muestra sus columnas reales. **Tamaño** indica longitud máxima para `VARCHAR`, tamaño físico de tipos fijos o `Variable` para `TEXT` y `JSONB`. **Nulos** procede de la restricción SQL `NOT NULL`; **Llave** señala únicamente `PK` y `FK` declaradas en PostgreSQL.
+
+### Acceso y usuarios
+
+#### Tabla 1. Diccionario de `usuarios`
+
+Cuentas de acceso al sistema.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `nombre_completo` | `VARCHAR(150)` | Nombre completo del usuario. | 150 | No | — |
+| `correo` | `VARCHAR(180)` | Correo electrónico de acceso. | 180 | No | — |
+| `hash_contrasena` | `VARCHAR(255)` | Hash de la contraseña. | 255 | No | — |
+| `esta_activo` | `BOOLEAN` | Indica si el registro está activo. | 1 byte | No | — |
+| `fecha_ultimo_acceso` | `TIMESTAMPTZ` | Último acceso del usuario. | 8 bytes | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Unicidad:** UNIQUE(`correo`).
+
+#### Tabla 2. Diccionario de `roles`
+
+Roles globales disponibles para usuarios.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `nombre` | `VARCHAR(50)` | Nombre del registro. | 50 | No | — |
+| `descripcion` | `TEXT` | Descripción del registro. | Variable | Sí | — |
+| `es_sistema` | `BOOLEAN` | Indica si es un rol propio del sistema. | 1 byte | No | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Unicidad:** UNIQUE(`nombre`).
+
+#### Tabla 3. Diccionario de `roles_usuario`
+
+Asignación del rol global a cada usuario.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `usuario_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `rol_id` | `UUID` | Referencia a `roles.id`. | 16 bytes | No | FK |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `rol_id` → `roles.id`; `usuario_id` → `usuarios.id`.
+
+**Unicidad:** UNIQUE(`usuario_id`).
+
+#### Tabla 4. Diccionario de `sesiones_usuario`
+
+Sesiones y tokens de renovación de acceso.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `usuario_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `hash_token_renovacion` | `VARCHAR(255)` | Hash del token de renovación. | 255 | Sí | — |
+| `direccion_ip` | `VARCHAR(80)` | Dirección IP de la sesión. | 80 | Sí | — |
+| `agente_usuario` | `VARCHAR(255)` | Agente del navegador o dispositivo. | 255 | Sí | — |
+| `fecha_revocacion` | `TIMESTAMPTZ` | Fecha de revocación. | 8 bytes | Sí | — |
+| `fecha_expiracion` | `TIMESTAMPTZ` | Fecha de vencimiento. | 8 bytes | No | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `usuario_id` → `usuarios.id`.
+
+#### Tabla 5. Diccionario de `registros_auditoria`
+
+Trazas de auditoría por usuario, proyecto y módulo.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `usuario_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | Sí | FK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | Sí | FK |
+| `modulo` | `VARCHAR(80)` | Módulo que originó la operación. | 80 | No | — |
+| `accion` | `VARCHAR(120)` | Acción realizada. | 120 | No | — |
+| `resultado` | `VARCHAR(40)` | Resultado de la operación. | 40 | No | — |
+| `detalle` | `TEXT` | Detalle adicional de auditoría. | Variable | Sí | — |
+| `metadatos_json` | `JSONB` | Metadatos adicionales en JSON. | Variable | No | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `proyecto_id` → `proyectos.id`; `usuario_id` → `usuarios.id`.
+
+### Proyectos y colaboración
+
+#### Tabla 6. Diccionario de `proyectos`
+
+Identidad, configuración y revisión del proyecto; cada proyecto corresponde a un diagrama de clases en la aplicación.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `propietario_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `nombre` | `VARCHAR(160)` | Nombre del registro. | 160 | No | — |
+| `descripcion` | `TEXT` | Descripción del registro. | Variable | Sí | — |
+| `estado` | `VARCHAR(40)` | Estado actual del proceso o registro. | 40 | No | — |
+| `configuracion` | `JSONB` | Configuración general del proyecto. | Variable | No | — |
+| `revision` | `INTEGER` | Número de revisión para control de cambios. | 4 bytes | No | — |
+| `siguiente_numero_version` | `INTEGER` | Siguiente número de versión del proyecto. | 4 bytes | No | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `propietario_id` → `usuarios.id`.
+
+#### Tabla 7. Diccionario de `integrantes_proyecto`
+
+Usuarios que participan en un proyecto y su rol local.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | No | FK |
+| `usuario_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `rol_proyecto` | `VARCHAR(40)` | Rol del integrante dentro del proyecto. | 40 | No | — |
+| `fecha_incorporacion` | `TIMESTAMPTZ` | Fecha de incorporación al proyecto. | 8 bytes | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `proyecto_id` → `proyectos.id`; `usuario_id` → `usuarios.id`.
+
+**Unicidad:** UNIQUE(`proyecto_id`, `usuario_id`).
+
+#### Tabla 8. Diccionario de `invitaciones_proyecto`
+
+Invitaciones pendientes o resueltas para colaborar.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | No | FK |
+| `usuario_invitador_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `usuario_invitado_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | Sí | FK |
+| `correo_invitado` | `VARCHAR(180)` | Correo de la persona invitada. | 180 | No | — |
+| `rol_proyecto` | `VARCHAR(40)` | Rol del integrante dentro del proyecto. | 40 | No | — |
+| `estado` | `VARCHAR(40)` | Estado actual del proceso o registro. | 40 | No | — |
+| `fecha_expiracion` | `TIMESTAMPTZ` | Fecha de vencimiento. | 8 bytes | Sí | — |
+| `fecha_respuesta` | `TIMESTAMPTZ` | Fecha de respuesta a la invitación. | 8 bytes | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `proyecto_id` → `proyectos.id`; `usuario_invitado_id` → `usuarios.id`; `usuario_invitador_id` → `usuarios.id`.
+
+**Unicidad:** UNIQUE(`proyecto_id`, `lower(correo_invitado::text)`) WHERE `((estado)::text = 'pending'::text)`.
+
+#### Tabla 9. Diccionario de `eventos_colaboracion`
+
+Registro ordenado de eventos colaborativos y de IA.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | No | FK |
+| `diagrama_id` | `UUID` | Referencia a `diagramas_uml.id`. | 16 bytes | Sí | FK |
+| `usuario_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `tipo_evento` | `VARCHAR(80)` | Tipo de evento registrado. | 80 | No | — |
+| `tipo_elemento` | `VARCHAR(80)` | Tipo de elemento afectado. | 80 | Sí | — |
+| `elemento_id` | `UUID` | Identificador lógico del elemento afectado. | 16 bytes | Sí | — |
+| `version_base` | `INTEGER` | Versión del elemento antes del cambio. | 4 bytes | Sí | — |
+| `carga_datos` | `JSONB` | Datos del evento o acción en JSON. | Variable | No | — |
+| `evento_cliente_id` | `UUID` | Identificador idempotente del evento de cliente. | 16 bytes | No | — |
+| `numero_secuencia` | `INTEGER` | Orden del evento en el proyecto o chat. | 4 bytes | No | — |
+| `nombre_visible_actor` | `VARCHAR(160)` | Nombre del actor al registrar el evento. | 160 | Sí | — |
+| `tipo_recurso` | `VARCHAR(80)` | Tipo de recurso vinculado al evento. | 80 | Sí | — |
+| `recurso_id` | `UUID` | Identificador lógico del recurso vinculado. | 16 bytes | Sí | — |
+| `correlacion_id` | `UUID` | Identificador para correlacionar eventos. | 16 bytes | Sí | — |
+| `causa_id` | `UUID` | Identificador del evento que lo originó. | 16 bytes | Sí | — |
+| `clave_resumen` | `VARCHAR(160)` | Clave de resumen de actividad. | 160 | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `diagrama_id` → `diagramas_uml.id`; `proyecto_id` → `proyectos.id`; `usuario_id` → `usuarios.id`.
+
+**Unicidad:** UNIQUE(`proyecto_id`, `numero_secuencia`); UNIQUE(`proyecto_id`, `usuario_id`, `evento_cliente_id`).
+
+#### Tabla 10. Diccionario de `versiones_proyecto`
+
+Registro SQL de versiones del proyecto.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | No | FK |
+| `usuario_creador_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `numero_version` | `INTEGER` | Número de versión dentro del proyecto. | 4 bytes | No | — |
+| `nombre` | `VARCHAR(120)` | Nombre del registro. | 120 | No | — |
+| `descripcion` | `TEXT` | Descripción del registro. | Variable | Sí | — |
+| `instantanea` | `JSONB` | Campo JSON de compatibilidad del registro de versión. | Variable | No | — |
+| `estado` | `VARCHAR(40)` | Estado actual del proceso o registro. | 40 | No | — |
+| `clase` | `VARCHAR(40)` | Clase de versión o registro. | 40 | No | — |
+| `version_esquema_instantanea` | `INTEGER` | Versión del contrato del snapshot. | 4 bytes | No | — |
+| `hash_instantanea` | `VARCHAR(64)` | Hash de integridad de la versión. | 64 | No | — |
+| `tamano_instantanea_bytes` | `INTEGER` | Tamaño del snapshot en bytes. | 4 bytes | No | — |
+| `revision_proyecto` | `INTEGER` | Revisión del proyecto capturada. | 4 bytes | No | — |
+| `clave_idempotencia` | `VARCHAR(120)` | Clave para evitar operaciones duplicadas. | 120 | Sí | — |
+| `metadatos_json` | `JSONB` | Metadatos adicionales en JSON. | Variable | No | — |
+| `almacenamiento_instantanea` | `VARCHAR(20)` | Código de almacenamiento de la versión. | 20 | No | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `proyecto_id` → `proyectos.id`; `usuario_creador_id` → `usuarios.id`.
+
+**Unicidad:** UNIQUE(`proyecto_id`, `numero_version`); UNIQUE(`proyecto_id`, `usuario_creador_id`, `clave_idempotencia`).
+
+#### Tabla 11. Diccionario de `restauraciones_proyecto`
+
+Operaciones idempotentes de restauración y sus respaldos.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | No | FK |
+| `version_origen_id` | `UUID` | Referencia a `versiones_proyecto.id`. | 16 bytes | No | FK |
+| `version_respaldo_id` | `UUID` | Referencia a `versiones_proyecto.id`. | 16 bytes | Sí | FK |
+| `usuario_solicitante_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `clave_idempotencia` | `VARCHAR(120)` | Clave para evitar operaciones duplicadas. | 120 | No | — |
+| `estado` | `VARCHAR(24)` | Estado actual del proceso o registro. | 24 | No | — |
+| `hash_instantanea_origen` | `VARCHAR(64)` | Hash del snapshot que se va a restaurar. | 64 | No | — |
+| `hash_instantanea_anterior` | `VARCHAR(64)` | Hash del estado previo a la restauración. | 64 | No | — |
+| `hash_instantanea_posterior` | `VARCHAR(64)` | Hash del estado posterior a la restauración. | 64 | Sí | — |
+| `revision_proyecto_anterior` | `INTEGER` | Revisión anterior del proyecto. | 4 bytes | No | — |
+| `revision_proyecto_posterior` | `INTEGER` | Revisión posterior del proyecto. | 4 bytes | Sí | — |
+| `diagnosticos_json` | `JSONB` | Diagnósticos de la restauración en JSON. | Variable | No | — |
+| `fecha_inicio` | `TIMESTAMPTZ` | Inicio de la operación. | 8 bytes | No | — |
+| `fecha_finalizacion` | `TIMESTAMPTZ` | Fin de la operación. | 8 bytes | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `proyecto_id` → `proyectos.id`; `usuario_solicitante_id` → `usuarios.id`; `version_origen_id` → `versiones_proyecto.id`; `version_respaldo_id` → `versiones_proyecto.id`.
+
+**Unicidad:** UNIQUE(`proyecto_id`, `usuario_solicitante_id`, `clave_idempotencia`).
+
+### Registro UML e intercambio
+
+#### Tabla 12. Diccionario de `diagramas_uml`
+
+Identidad, estado y metadatos SQL del diagrama.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | No | FK |
+| `usuario_creador_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `nombre` | `VARCHAR(160)` | Nombre del registro. | 160 | No | — |
+| `tipo_diagrama` | `VARCHAR(50)` | Tipo de diagrama registrado. | 50 | No | — |
+| `estado` | `VARCHAR(40)` | Estado actual del proceso o registro. | 40 | No | — |
+| `version_actual` | `INTEGER` | Versión actual del diagrama. | 4 bytes | No | — |
+| `descripcion` | `TEXT` | Descripción del registro. | Variable | Sí | — |
+| `metadatos_json` | `JSONB` | Metadatos adicionales en JSON. | Variable | No | — |
+| `almacenamiento_contenido` | `VARCHAR(20)` | Código de almacenamiento del contenido. | 20 | No | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `proyecto_id` → `proyectos.id`; `usuario_creador_id` → `usuarios.id`.
+
+#### Tabla 13. Diccionario de `intercambios_xmi`
+
+Historial de importaciones y exportaciones XMI.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `diagrama_id` | `UUID` | Referencia a `diagramas_uml.id`. | 16 bytes | No | FK |
+| `usuario_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `tipo_intercambio` | `VARCHAR(30)` | Importación o exportación XMI. | 30 | No | — |
+| `nombre_herramienta` | `VARCHAR(120)` | Herramienta externa de intercambio. | 120 | Sí | — |
+| `nombre_archivo` | `VARCHAR(255)` | Nombre del archivo. | 255 | No | — |
+| `ruta_archivo` | `VARCHAR(500)` | Ruta del archivo generado o recibido. | 500 | Sí | — |
+| `estado` | `VARCHAR(40)` | Estado actual del proceso o registro. | 40 | No | — |
+| `detalle_error` | `TEXT` | Detalle del error si ocurrió. | Variable | Sí | — |
+| `metadatos_json` | `JSONB` | Metadatos adicionales en JSON. | Variable | No | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `diagrama_id` → `diagramas_uml.id`; `usuario_id` → `usuarios.id`.
+
+### Asistente e IA
+
+#### Tabla 14. Diccionario de `conversaciones_ia`
+
+Identidad y metadatos SQL de los chats del proyecto.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | No | FK |
+| `estado` | `VARCHAR(30)` | Estado actual del proceso o registro. | 30 | No | — |
+| `resumen` | `TEXT` | Campo de compatibilidad para el resumen del chat. | Variable | Sí | — |
+| `resumen_hasta_secuencia` | `INTEGER` | Última secuencia incluida en el resumen. | 4 bytes | No | — |
+| `secuencia_ultimo_mensaje` | `INTEGER` | Última secuencia de mensaje del chat. | 4 bytes | No | — |
+| `version_esquema` | `INTEGER` | Versión del contrato de datos. | 4 bytes | No | — |
+| `titulo` | `VARCHAR(160)` | Título mostrado al usuario. | 160 | No | — |
+| `usuario_creador_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | Sí | FK |
+| `almacenamiento_mensajes` | `VARCHAR(20)` | Código de almacenamiento de mensajes. | 20 | No | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `proyecto_id` → `proyectos.id`; `usuario_creador_id` → `usuarios.id`.
+
+#### Tabla 15. Diccionario de `acciones_ia`
+
+Propuestas y confirmaciones de cambios del asistente.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | No | FK |
+| `conversacion_id` | `UUID` | Referencia a `conversaciones_ia.id`. | 16 bytes | No | FK |
+| `mensaje_origen_id` | `UUID` | Identificador del mensaje que originó el registro; sin FK SQL. | 16 bytes | No | — |
+| `usuario_solicitante_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `tipo_accion` | `VARCHAR(80)` | Tipo de cambio propuesto por la IA. | 80 | No | — |
+| `tipo_destino` | `VARCHAR(80)` | Tipo del elemento objetivo. | 80 | Sí | — |
+| `destino_id` | `UUID` | Identificador lógico del elemento objetivo. | 16 bytes | Sí | — |
+| `carga_datos` | `JSONB` | Datos del evento o acción en JSON. | Variable | No | — |
+| `nivel_riesgo` | `VARCHAR(20)` | Nivel de riesgo de la propuesta. | 20 | No | — |
+| `requiere_confirmacion` | `BOOLEAN` | Indica si la propuesta requiere aprobación. | 1 byte | No | — |
+| `estado` | `VARCHAR(30)` | Estado actual del proceso o registro. | 30 | No | — |
+| `usuario_confirmador_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | Sí | FK |
+| `fecha_confirmacion` | `TIMESTAMPTZ` | Fecha de aprobación de la acción. | 8 bytes | Sí | — |
+| `fecha_ejecucion` | `TIMESTAMPTZ` | Fecha de ejecución de la acción. | 8 bytes | Sí | — |
+| `resultado_json` | `JSONB` | Resultado de ejecutar la acción en JSON. | Variable | No | — |
+| `mensaje_error` | `TEXT` | Mensaje de error de la acción. | Variable | Sí | — |
+| `clave_idempotencia` | `UUID` | Clave para evitar operaciones duplicadas. | 16 bytes | No | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `conversacion_id` → `conversaciones_ia.id`; `proyecto_id` → `proyectos.id`; `usuario_confirmador_id` → `usuarios.id`; `usuario_solicitante_id` → `usuarios.id`.
+
+**Unicidad:** UNIQUE(`proyecto_id`, `clave_idempotencia`).
+
+#### Tabla 16. Diccionario de `recomendaciones_ia`
+
+Recomendaciones emitidas por el asistente y su resolución.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | No | FK |
+| `conversacion_id` | `UUID` | Referencia a `conversaciones_ia.id`. | 16 bytes | No | FK |
+| `mensaje_origen_id` | `UUID` | Identificador del mensaje que originó el registro; sin FK SQL. | 16 bytes | No | — |
+| `categoria` | `VARCHAR(50)` | Categoría de la recomendación o preferencia. | 50 | No | — |
+| `severidad` | `VARCHAR(20)` | Severidad del aviso o recomendación. | 20 | No | — |
+| `titulo` | `VARCHAR(200)` | Título mostrado al usuario. | 200 | No | — |
+| `descripcion` | `TEXT` | Descripción del registro. | Variable | No | — |
+| `referencias_json` | `JSONB` | Referencias de la recomendación en JSON. | Variable | No | — |
+| `estado` | `VARCHAR(30)` | Estado actual del proceso o registro. | 30 | No | — |
+| `usuario_resolutor_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | Sí | FK |
+| `fecha_resolucion` | `TIMESTAMPTZ` | Fecha de resolución de la recomendación. | 8 bytes | Sí | — |
+| `nota_resolucion` | `TEXT` | Motivo o nota de resolución. | Variable | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `conversacion_id` → `conversaciones_ia.id`; `proyecto_id` → `proyectos.id`; `usuario_resolutor_id` → `usuarios.id`.
+
+#### Tabla 17. Diccionario de `procesos_ia`
+
+Trazas de ejecuciones de IA.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `usuario_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | Sí | FK |
+| `diagrama_id` | `UUID` | Referencia a `diagramas_uml.id`. | 16 bytes | Sí | FK |
+| `tipo_proceso` | `VARCHAR(80)` | Tipo de procesamiento de IA. | 80 | No | — |
+| `proveedor_modelo` | `VARCHAR(80)` | Proveedor que ejecutó el modelo. | 80 | No | — |
+| `nombre_modelo` | `VARCHAR(120)` | Nombre del modelo de IA. | 120 | Sí | — |
+| `carga_entrada` | `JSONB` | Entrada registrada para la ejecución de IA. | Variable | No | — |
+| `carga_salida` | `JSONB` | Salida registrada de la ejecución de IA. | Variable | No | — |
+| `estado` | `VARCHAR(40)` | Estado actual del proceso o registro. | 40 | No | — |
+| `detalle_error` | `TEXT` | Detalle del error si ocurrió. | Variable | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `diagrama_id` → `diagramas_uml.id`; `proyecto_id` → `proyectos.id`; `usuario_id` → `usuarios.id`.
+
+### Generación de software
+
+#### Tabla 18. Diccionario de `transformaciones_uml`
+
+Transformaciones derivadas del diagrama para generar software; no son el contenido UML canónico.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | No | FK |
+| `diagrama_id` | `UUID` | Referencia a `diagramas_uml.id`. | 16 bytes | No | FK |
+| `usuario_solicitante_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `version_origen` | `VARCHAR(80)` | Versión de origen de la transformación. | 80 | Sí | — |
+| `plataforma_destino` | `VARCHAR(80)` | Plataforma objetivo de generación. | 80 | No | — |
+| `modelo_intermedio` | `JSONB` | Modelo intermedio derivado para generar código; no es el diagrama canónico. | Variable | No | — |
+| `estado` | `VARCHAR(40)` | Estado actual del proceso o registro. | 40 | No | — |
+| `detalle_error` | `TEXT` | Detalle del error si ocurrió. | Variable | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `diagrama_id` → `diagramas_uml.id`; `proyecto_id` → `proyectos.id`; `usuario_solicitante_id` → `usuarios.id`.
+
+#### Tabla 19. Diccionario de `backends_generados`
+
+Versiones de backend generadas y sus artefactos.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | No | FK |
+| `transformacion_id` | `UUID` | Referencia a `transformaciones_uml.id`. | 16 bytes | No | FK |
+| `usuario_generador_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `nombre` | `VARCHAR(160)` | Nombre del registro. | 160 | No | — |
+| `tecnologia` | `VARCHAR(80)` | Tecnología del artefacto generado. | 80 | No | — |
+| `lenguaje` | `VARCHAR(40)` | Lenguaje de programación generado. | 40 | No | — |
+| `motor_base_datos` | `VARCHAR(80)` | Motor de base de datos del backend generado. | 80 | No | — |
+| `etiqueta_version` | `VARCHAR(80)` | Etiqueta visible de la versión generada. | 80 | No | — |
+| `estado` | `VARCHAR(40)` | Estado actual del proceso o registro. | 40 | No | — |
+| `ruta_artefacto` | `VARCHAR(500)` | Ruta del artefacto descargable. | 500 | Sí | — |
+| `manifiesto` | `JSONB` | Manifiesto del resultado de generación en JSON. | Variable | No | — |
+| `detalle_error` | `TEXT` | Detalle del error si ocurrió. | Variable | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `proyecto_id` → `proyectos.id`; `transformacion_id` → `transformaciones_uml.id`; `usuario_generador_id` → `usuarios.id`.
+
+#### Tabla 20. Diccionario de `frontends_generados`
+
+Versiones Flutter generadas y backend de origen.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | No | FK |
+| `transformacion_id` | `UUID` | Referencia a `transformaciones_uml.id`. | 16 bytes | No | FK |
+| `usuario_generador_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `backend_id` | `UUID` | Referencia a `backends_generados.id`. | 16 bytes | Sí | FK |
+| `nombre` | `VARCHAR(160)` | Nombre del registro. | 160 | No | — |
+| `tecnologia` | `VARCHAR(80)` | Tecnología del artefacto generado. | 80 | No | — |
+| `lenguaje` | `VARCHAR(40)` | Lenguaje de programación generado. | 40 | No | — |
+| `etiqueta_version` | `VARCHAR(80)` | Etiqueta visible de la versión generada. | 80 | No | — |
+| `estado` | `VARCHAR(40)` | Estado actual del proceso o registro. | 40 | No | — |
+| `ruta_artefacto` | `VARCHAR(500)` | Ruta del artefacto descargable. | 500 | Sí | — |
+| `manifiesto` | `JSONB` | Manifiesto del resultado de generación en JSON. | Variable | No | — |
+| `detalle_error` | `TEXT` | Detalle del error si ocurrió. | Variable | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `backend_id` → `backends_generados.id`; `proyecto_id` → `proyectos.id`; `transformacion_id` → `transformaciones_uml.id`; `usuario_generador_id` → `usuarios.id`.
+
+#### Tabla 21. Diccionario de `artefactos_generados`
+
+Archivos descargables producidos por la generación.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | No | FK |
+| `backend_generado_id` | `UUID` | Referencia a `backends_generados.id`. | 16 bytes | Sí | FK |
+| `frontend_generado_id` | `UUID` | Referencia a `frontends_generados.id`. | 16 bytes | Sí | FK |
+| `tipo_artefacto` | `VARCHAR(60)` | Tipo de archivo generado. | 60 | No | — |
+| `nombre_archivo` | `VARCHAR(255)` | Nombre del archivo. | 255 | No | — |
+| `ruta_archivo` | `VARCHAR(500)` | Ruta del archivo generado o recibido. | 500 | No | — |
+| `suma_verificacion` | `VARCHAR(128)` | Suma de verificación del archivo. | 128 | Sí | — |
+| `metadatos_json` | `JSONB` | Metadatos adicionales en JSON. | Variable | No | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `backend_generado_id` → `backends_generados.id`; `frontend_generado_id` → `frontends_generados.id`; `proyecto_id` → `proyectos.id`.
+
+#### Tabla 22. Diccionario de `generaciones_coordinadas`
+
+Estado de la generación coordinada de backend y frontend.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | No | FK |
+| `transformacion_id` | `UUID` | Referencia a `transformaciones_uml.id`. | 16 bytes | No | FK |
+| `usuario_solicitante_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `backend_id` | `UUID` | Referencia a `backends_generados.id`. | 16 bytes | Sí | FK |
+| `frontend_id` | `UUID` | Referencia a `frontends_generados.id`. | 16 bytes | Sí | FK |
+| `solicitud_cliente_id` | `VARCHAR(120)` | Identificador idempotente de la solicitud. | 120 | No | — |
+| `nombre` | `VARCHAR(160)` | Nombre del registro. | 160 | No | — |
+| `estado` | `VARCHAR(40)` | Estado actual del proceso o registro. | 40 | No | — |
+| `etapa` | `VARCHAR(40)` | Etapa actual del proceso de generación. | 40 | No | — |
+| `hash_plan` | `VARCHAR(64)` | Hash del plan de generación. | 64 | Sí | — |
+| `plan_json` | `JSONB` | Plan de generación en JSON. | Variable | No | — |
+| `diagnosticos` | `JSONB` | Diagnósticos de generación en JSON. | Variable | No | — |
+| `manifiesto` | `JSONB` | Manifiesto del resultado de generación en JSON. | Variable | No | — |
+| `ruta_artefacto` | `VARCHAR(500)` | Ruta del artefacto descargable. | 500 | Sí | — |
+| `detalle_error` | `TEXT` | Detalle del error si ocurrió. | Variable | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `backend_id` → `backends_generados.id`; `frontend_id` → `frontends_generados.id`; `proyecto_id` → `proyectos.id`; `transformacion_id` → `transformaciones_uml.id`; `usuario_solicitante_id` → `usuarios.id`.
+
+**Unicidad:** UNIQUE(`transformacion_id`, `usuario_solicitante_id`, `solicitud_cliente_id`).
+
+#### Tabla 23. Diccionario de `temas_flutter_predefinidos`
+
+Temas Flutter reutilizables del proyecto.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | No | FK |
+| `nombre` | `VARCHAR(120)` | Nombre del registro. | 120 | No | — |
+| `configuracion_json` | `JSONB` | Configuración visual Flutter en JSON. | Variable | No | — |
+| `version_esquema` | `INTEGER` | Versión del contrato de datos. | 4 bytes | No | — |
+| `usuario_creador_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `usuario_actualizador_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `proyecto_id` → `proyectos.id`; `usuario_actualizador_id` → `usuarios.id`; `usuario_creador_id` → `usuarios.id`.
+
+**Unicidad:** UNIQUE(`proyecto_id`, `lower(nombre::text)`).
+
+### Notificaciones
+
+#### Tabla 24. Diccionario de `notificaciones`
+
+Avisos dirigidos a usuarios.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `usuario_destinatario_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | Sí | FK |
+| `usuario_actor_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | Sí | FK |
+| `tipo` | `VARCHAR(80)` | Tipo de notificación. | 80 | No | — |
+| `severidad` | `VARCHAR(16)` | Severidad del aviso o recomendación. | 16 | No | — |
+| `titulo` | `VARCHAR(180)` | Título mostrado al usuario. | 180 | No | — |
+| `cuerpo` | `VARCHAR(500)` | Contenido de la notificación. | 500 | No | — |
+| `tipo_recurso` | `VARCHAR(80)` | Tipo de recurso vinculado al evento. | 80 | Sí | — |
+| `recurso_id` | `UUID` | Identificador lógico del recurso vinculado. | 16 bytes | Sí | — |
+| `enlace_directo` | `JSONB` | Destino de navegación de la notificación en JSON. | Variable | No | — |
+| `clave_deduplicacion` | `VARCHAR(200)` | Clave para no duplicar el aviso. | 200 | No | — |
+| `clave_grupo` | `VARCHAR(200)` | Clave de agrupación de avisos. | 200 | Sí | — |
+| `fecha_suceso` | `TIMESTAMPTZ` | Fecha del suceso notificado. | 8 bytes | No | — |
+| `fecha_lectura` | `TIMESTAMPTZ` | Fecha de lectura del aviso. | 8 bytes | Sí | — |
+| `fecha_clic` | `TIMESTAMPTZ` | Fecha de apertura del aviso. | 8 bytes | Sí | — |
+| `fecha_archivo` | `TIMESTAMPTZ` | Fecha de archivo del aviso. | 8 bytes | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `proyecto_id` → `proyectos.id`; `usuario_actor_id` → `usuarios.id`; `usuario_destinatario_id` → `usuarios.id`.
+
+**Unicidad:** UNIQUE(`usuario_destinatario_id`, `clave_deduplicacion`).
+
+#### Tabla 25. Diccionario de `bandeja_salida_notificaciones`
+
+Entregas pendientes o completadas de avisos.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `notificacion_id` | `UUID` | Referencia a `notificaciones.id`. | 16 bytes | No | FK |
+| `canal` | `VARCHAR(32)` | Canal de entrega de la notificación. | 32 | No | — |
+| `estado` | `VARCHAR(24)` | Estado actual del proceso o registro. | 24 | No | — |
+| `numero_intentos` | `INTEGER` | Número de intentos de entrega o publicación. | 4 bytes | No | — |
+| `fecha_disponible` | `TIMESTAMPTZ` | Fecha desde la que se puede procesar. | 8 bytes | No | — |
+| `fecha_bloqueo` | `TIMESTAMPTZ` | Fecha en que un trabajador tomó el registro. | 8 bytes | Sí | — |
+| `bloqueado_por` | `VARCHAR(120)` | Trabajador que tomó el registro. | 120 | Sí | — |
+| `codigo_ultimo_error` | `VARCHAR(120)` | Código del último fallo de entrega. | 120 | Sí | — |
+| `fecha_entrega` | `TIMESTAMPTZ` | Fecha de entrega de la notificación. | 8 bytes | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `notificacion_id` → `notificaciones.id`.
+
+**Unicidad:** UNIQUE(`notificacion_id`, `canal`).
+
+#### Tabla 26. Diccionario de `preferencias_notificaciones`
+
+Preferencias de notificación por usuario y proyecto.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `usuario_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `proyecto_id` | `UUID` | Referencia a `proyectos.id`. | 16 bytes | Sí | FK |
+| `categoria` | `VARCHAR(80)` | Categoría de la recomendación o preferencia. | 80 | No | — |
+| `habilitado_en_aplicacion` | `BOOLEAN` | Permite notificaciones dentro de la aplicación. | 1 byte | No | — |
+| `push_habilitado` | `BOOLEAN` | Permite notificaciones push. | 1 byte | No | — |
+| `silenciado_hasta` | `TIMESTAMPTZ` | Silencio de avisos hasta esta fecha. | 8 bytes | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `proyecto_id` → `proyectos.id`; `usuario_id` → `usuarios.id`.
+
+**Unicidad:** UNIQUE(`usuario_id`, `categoria`) WHERE `(proyecto_id IS NULL)`; UNIQUE(`usuario_id`, `proyecto_id`, `categoria`).
+
+#### Tabla 27. Diccionario de `suscripciones_push`
+
+Suscripciones push de navegadores y dispositivos.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `usuario_id` | `UUID` | Referencia a `usuarios.id`. | 16 bytes | No | FK |
+| `punto_acceso` | `VARCHAR(2048)` | URL de suscripción push. | 2048 | No | — |
+| `p256dh` | `TEXT` | Clave pública de cifrado push. | Variable | No | — |
+| `autenticacion` | `TEXT` | Secreto de autenticación push. | Variable | No | — |
+| `codificacion_contenido` | `VARCHAR(40)` | Codificación del contenido push. | 40 | No | — |
+| `agente_usuario` | `VARCHAR(512)` | Agente del navegador o dispositivo. | 512 | Sí | — |
+| `fecha_expiracion` | `TIMESTAMPTZ` | Fecha de vencimiento. | 8 bytes | Sí | — |
+| `esta_activo` | `BOOLEAN` | Indica si el registro está activo. | 1 byte | No | — |
+| `numero_fallos` | `INTEGER` | Número de fallos de entrega push. | 4 bytes | No | — |
+| `fecha_ultimo_exito` | `TIMESTAMPTZ` | Última entrega push correcta. | 8 bytes | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Relaciones:** `usuario_id` → `usuarios.id`.
+
+**Unicidad:** UNIQUE(`punto_acceso`).
+
+### Infraestructura SQL
+
+#### Tabla 28. Diccionario de `bandeja_salida_nosql`
+
+Tabla SQL de eventos transaccionales pendientes de publicación.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `UUID` | Identificador del registro. | 16 bytes | No | PK |
+| `tipo_agregado` | `VARCHAR(80)` | Tipo de agregado asociado al evento SQL. | 80 | No | — |
+| `agregado_id` | `UUID` | Identificador del agregado asociado al evento SQL. | 16 bytes | No | — |
+| `tipo_evento` | `VARCHAR(100)` | Tipo de evento registrado. | 100 | No | — |
+| `carga_datos` | `JSONB` | Datos del evento o acción en JSON. | Variable | No | — |
+| `clave_idempotencia` | `VARCHAR(200)` | Clave para evitar operaciones duplicadas. | 200 | No | — |
+| `estado` | `VARCHAR(24)` | Estado actual del proceso o registro. | 24 | No | — |
+| `numero_intentos` | `INTEGER` | Número de intentos de entrega o publicación. | 4 bytes | No | — |
+| `fecha_disponible` | `TIMESTAMPTZ` | Fecha desde la que se puede procesar. | 8 bytes | No | — |
+| `fecha_bloqueo` | `TIMESTAMPTZ` | Fecha en que un trabajador tomó el registro. | 8 bytes | Sí | — |
+| `bloqueado_por` | `VARCHAR(120)` | Trabajador que tomó el registro. | 120 | Sí | — |
+| `fecha_procesamiento` | `TIMESTAMPTZ` | Fecha de publicación satisfactoria. | 8 bytes | Sí | — |
+| `ultimo_error` | `TEXT` | Descripción del último error de publicación. | Variable | Sí | — |
+| `fecha_creacion` | `TIMESTAMPTZ` | Fecha de creación del registro. | 8 bytes | No | — |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | Fecha de última actualización. | 8 bytes | No | — |
+
+**Unicidad:** UNIQUE(`clave_idempotencia`).
+
+### Control de migraciones
+
+#### Tabla 29. Diccionario de `alembic_version`
+
+Revisión de migraciones Alembic aplicada a PostgreSQL.
+
+| Atributo | Tipo de dato | Descripción | Tamaño | Nulos | Llave |
+| --- | --- | --- | --- | --- | --- |
+| `version_num` | `VARCHAR(32)` | Revisión Alembic aplicada. | 32 | No | PK |

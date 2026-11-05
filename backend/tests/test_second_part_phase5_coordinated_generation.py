@@ -4,15 +4,15 @@ from pathlib import Path
 import pytest
 
 from app.main import app
-from app.modules.generacion_software.coordinated_generator import compile_generation_plan
+from app.modules.generacion_software.coordinated_generator import compilar_plan_generacion
 from app.modules.generacion_software.coordinated_generator.services import (
-    CoordinatedGeneratorService,
+    ServicioGeneradorCoordinado,
 )
 from app.modules.generacion_software.coordinated_generator.validators import (
-    validate_cross_contract,
+    validar_contrato_cruzado,
 )
-from app.modules.generacion_software.coordinated_generator.validators.preflight import (
-    GenerationPreflightError,
+from app.modules.generacion_software.coordinated_generator.validators.verificacion_previa import (
+    ErrorVerificacionPreviaGeneracion,
 )
 
 
@@ -133,8 +133,8 @@ def _model(*, ready: bool = True) -> dict:
 
 
 def test_phase5_plan_is_deterministic_and_shared() -> None:
-    first = compile_generation_plan(_model(), "Academico")
-    second = compile_generation_plan(_model(), "Academico")
+    first = compilar_plan_generacion(_model(), "Academico")
+    second = compilar_plan_generacion(_model(), "Academico")
 
     assert first.ready
     assert first.canonical_hash == second.canonical_hash
@@ -152,8 +152,8 @@ def test_phase5_plan_is_deterministic_and_shared() -> None:
 
 
 def test_phase5_preflight_blocks_draft_before_writing(tmp_path: Path) -> None:
-    service = CoordinatedGeneratorService(tmp_path)
-    with pytest.raises(GenerationPreflightError):
+    service = ServicioGeneradorCoordinado(tmp_path)
+    with pytest.raises(ErrorVerificacionPreviaGeneracion):
         service.generate(
             _model(ready=False), "Academico", "blocked", verify=False,
             allow_unverified=True,
@@ -163,10 +163,10 @@ def test_phase5_preflight_blocks_draft_before_writing(tmp_path: Path) -> None:
 
 def test_phase5_generates_both_projects_and_atomic_bundle(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.modules.generacion_software.flutter_generator.generator.project_writer.which",
+        "app.modules.generacion_software.flutter_generator.generator.escritor_proyecto.which",
         lambda _: None,
     )
-    result = CoordinatedGeneratorService(tmp_path).generate(
+    result = ServicioGeneradorCoordinado(tmp_path).generate(
         _model(), "Academico", "generation-1", verify=False, allow_unverified=True
     )
 
@@ -188,7 +188,7 @@ def test_phase5_generates_both_projects_and_atomic_bundle(tmp_path: Path, monkey
 
 
 def test_phase5_cross_validation_detects_route_drift() -> None:
-    plan = compile_generation_plan(_model(), "Academico")
+    plan = compilar_plan_generacion(_model(), "Academico")
     good = {
         "functional_routes": [
             {"operation_id": route.operation_id, "http_method": route.http_method, "path": route.effective_path}
@@ -200,7 +200,7 @@ def test_phase5_cross_validation_detects_route_drift() -> None:
         },
     }
     broken = {**good, "functional_routes": []}
-    diagnostics = validate_cross_contract(plan, good, broken)
+    diagnostics = validar_contrato_cruzado(plan, good, broken)
     assert {item.code for item in diagnostics} == {"cross_contract_missing_route"}
 
 

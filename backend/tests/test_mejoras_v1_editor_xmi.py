@@ -6,20 +6,20 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.modules.modelado_uml.engine.internal_model import (
-    UmlAttributeModel,
-    UmlClassModel,
-    UmlDiagramModel,
-    UmlMethodModel,
-    UmlRelationshipModel,
+from app.modules.modelado_uml.engine.modelo_interno import (
+    ModeloAtributoUML,
+    ModeloClaseUML,
+    ModeloDiagramaUML,
+    ModeloMetodoUML,
+    ModeloRelacionUML,
 )
-from app.modules.modelado_uml.engine.xmi import export_xmi, import_xmi
+from app.modules.modelado_uml.engine.xmi import exportar_xmi, importar_xmi
 from app.modules.modelado_uml.schemas.uml import (
-    UmlAttributeCreateRequest,
-    UmlClassCreateRequest,
-    UmlRelationshipCreateRequest,
+    SolicitudCreacionAtributoUML,
+    SolicitudCreacionClaseUML,
+    SolicitudCreacionRelacionUML,
 )
-from app.modules.modelado_uml.services.uml_service import UmlService
+from app.modules.modelado_uml.services.servicio_uml import ServicioUML
 
 
 class _DrawingImportRepository:
@@ -29,34 +29,34 @@ class _DrawingImportRepository:
         self.visuals = []
         self.relationships = []
 
-    def add_diagram(self, diagram):
+    def agregar_diagrama(self, diagram):
         diagram.id = uuid4()
         self.diagrams.append(diagram)
         return diagram
 
-    def add_class(self, uml_class):
+    def agregar_clase(self, uml_class):
         uml_class.id = uuid4()
         self.classes.append(uml_class)
         return uml_class
 
-    def add_visual_element(self, visual):
+    def agregar_elemento_visual(self, visual):
         visual.id = uuid4()
         self.visuals.append(visual)
         return visual
 
-    def add_attribute(self, attribute):
+    def agregar_atributo(self, attribute):
         attribute.id = uuid4()
         return attribute
 
-    def add_method(self, method):
+    def agregar_metodo(self, method):
         method.id = uuid4()
         return method
 
-    def add_parameter(self, parameter):
+    def agregar_parametro(self, parameter):
         parameter.id = uuid4()
         return parameter
 
-    def add_relationship(self, relationship):
+    def agregar_relacion(self, relationship):
         relationship.id = uuid4()
         self.relationships.append(relationship)
         return relationship
@@ -64,25 +64,25 @@ class _DrawingImportRepository:
 
 def test_class_element_type_validation_interface_ok_and_tabla_fails():
     # 201: element_type='interface' es válido
-    valid_req = UmlClassCreateRequest(name="Repositorio", element_type="interface")
+    valid_req = SolicitudCreacionClaseUML(name="Repositorio", element_type="interface")
     assert valid_req.element_type == "interface"
 
     # 422: element_type='tabla' es inválido
     with pytest.raises(ValidationError) as exc_info:
-        UmlClassCreateRequest(name="TablaInvalida", element_type="tabla")
+        SolicitudCreacionClaseUML(name="TablaInvalida", element_type="tabla")
     assert "El tipo de elemento debe ser uno de" in str(exc_info.value)
 
 
 def test_attribute_visibility_validation_protected_ok_and_friend_fails():
     # 201: visibility='protected' es válido
-    valid_attr = UmlAttributeCreateRequest(
+    valid_attr = SolicitudCreacionAtributoUML(
         name="token", data_type="String", visibility="protected"
     )
     assert valid_attr.visibility == "protected"
 
     # 422: visibility='friend' es inválido
     with pytest.raises(ValidationError) as exc_info:
-        UmlAttributeCreateRequest(
+        SolicitudCreacionAtributoUML(
             name="secreto", data_type="String", visibility="friend"
         )
     assert "La visibilidad debe ser una de" in str(exc_info.value)
@@ -92,14 +92,14 @@ def test_relationship_type_dependency_and_realization_are_valid():
     src_id = uuid4()
     tgt_id = uuid4()
 
-    rel_dep = UmlRelationshipCreateRequest(
+    rel_dep = SolicitudCreacionRelacionUML(
         source_class_id=src_id,
         target_class_id=tgt_id,
         relationship_type="dependency",
     )
     assert rel_dep.relationship_type == "dependency"
 
-    rel_real = UmlRelationshipCreateRequest(
+    rel_real = SolicitudCreacionRelacionUML(
         source_class_id=src_id,
         target_class_id=tgt_id,
         relationship_type="realization",
@@ -107,7 +107,7 @@ def test_relationship_type_dependency_and_realization_are_valid():
     assert rel_real.relationship_type == "realization"
 
     with pytest.raises(ValidationError):
-        UmlRelationshipCreateRequest(
+        SolicitudCreacionRelacionUML(
             source_class_id=src_id,
             target_class_id=tgt_id,
             relationship_type="tipo_inexistente",
@@ -116,75 +116,75 @@ def test_relationship_type_dependency_and_realization_are_valid():
 
 def test_xmi_roundtrip_preserves_composition_aggregation_inheritance_interface_enum_abstract():
     # Construir modelo con todas las variantes requeridas
-    clase_interface = UmlClassModel(
+    clase_interface = ModeloClaseUML(
         id="c-interface",
         name="IServicio",
         element_type="interface",
         visibility="public",
         attributes=[
-            UmlAttributeModel(name="versionApi", data_type="String", visibility="public")
+            ModeloAtributoUML(name="versionApi", data_type="String", visibility="public")
         ],
         methods=[
-            UmlMethodModel(name="ejecutar", return_type="void", visibility="public")
+            ModeloMetodoUML(name="ejecutar", return_type="void", visibility="public")
         ],
     )
-    clase_enum = UmlClassModel(
+    clase_enum = ModeloClaseUML(
         id="c-enum",
         name="EstadoOrden",
         element_type="enum",
         visibility="public",
         attributes=[
-            UmlAttributeModel(name="PENDIENTE", data_type="String", visibility="public"),
-            UmlAttributeModel(name="ENTREGADO", data_type="String", visibility="public"),
+            ModeloAtributoUML(name="PENDIENTE", data_type="String", visibility="public"),
+            ModeloAtributoUML(name="ENTREGADO", data_type="String", visibility="public"),
         ],
         methods=[],
     )
-    clase_abstract = UmlClassModel(
+    clase_abstract = ModeloClaseUML(
         id="c-abstract",
         name="EntidadBase",
         element_type="abstract_class",
         visibility="public",
         attributes=[
-            UmlAttributeModel(name="id", data_type="Long", visibility="protected"),
-            UmlAttributeModel(name="activo", data_type="Boolean", visibility="package"),
+            ModeloAtributoUML(name="id", data_type="Long", visibility="protected"),
+            ModeloAtributoUML(name="activo", data_type="Boolean", visibility="package"),
         ],
         methods=[
-            UmlMethodModel(name="validar", return_type="Boolean", visibility="protected")
+            ModeloMetodoUML(name="validar", return_type="Boolean", visibility="protected")
         ],
     )
-    clase_orden = UmlClassModel(
+    clase_orden = ModeloClaseUML(
         id="c-orden",
         name="Orden",
         element_type="class",
         visibility="public",
         attributes=[
-            UmlAttributeModel(name="codigo", data_type="String", visibility="private")
+            ModeloAtributoUML(name="codigo", data_type="String", visibility="private")
         ],
         methods=[],
     )
-    clase_item = UmlClassModel(
+    clase_item = ModeloClaseUML(
         id="c-item",
         name="ItemOrden",
         element_type="class",
         visibility="public",
         attributes=[
-            UmlAttributeModel(name="cantidad", data_type="Integer", visibility="private")
+            ModeloAtributoUML(name="cantidad", data_type="Integer", visibility="private")
         ],
         methods=[],
     )
-    clase_cliente = UmlClassModel(
+    clase_cliente = ModeloClaseUML(
         id="c-cliente",
         name="Cliente",
         element_type="class",
         visibility="public",
         attributes=[
-            UmlAttributeModel(name="nombre", data_type="String", visibility="public")
+            ModeloAtributoUML(name="nombre", data_type="String", visibility="public")
         ],
         methods=[],
     )
 
     relationships = [
-        UmlRelationshipModel(
+        ModeloRelacionUML(
             id="rel-comp",
             source_class_id="Orden",
             target_class_id="ItemOrden",
@@ -192,7 +192,7 @@ def test_xmi_roundtrip_preserves_composition_aggregation_inheritance_interface_e
             source_cardinality="1",
             target_cardinality="1..*",
         ),
-        UmlRelationshipModel(
+        ModeloRelacionUML(
             id="rel-agg",
             source_class_id="Orden",
             target_class_id="Cliente",
@@ -200,19 +200,19 @@ def test_xmi_roundtrip_preserves_composition_aggregation_inheritance_interface_e
             source_cardinality="0..*",
             target_cardinality="1",
         ),
-        UmlRelationshipModel(
+        ModeloRelacionUML(
             id="rel-inh",
             source_class_id="Orden",
             target_class_id="EntidadBase",
             relationship_type="inheritance",
         ),
-        UmlRelationshipModel(
+        ModeloRelacionUML(
             id="rel-real",
             source_class_id="Orden",
             target_class_id="IServicio",
             relationship_type="realization",
         ),
-        UmlRelationshipModel(
+        ModeloRelacionUML(
             id="rel-dep",
             source_class_id="Orden",
             target_class_id="EstadoOrden",
@@ -220,7 +220,7 @@ def test_xmi_roundtrip_preserves_composition_aggregation_inheritance_interface_e
         ),
     ]
 
-    diagram = UmlDiagramModel(
+    diagram = ModeloDiagramaUML(
         name="SistemaVentas",
         classes=[
             clase_interface,
@@ -234,8 +234,8 @@ def test_xmi_roundtrip_preserves_composition_aggregation_inheritance_interface_e
     )
 
     # Exportar e importar
-    xmi_content = export_xmi(diagram)
-    reimported = import_xmi(xmi_content, name="SistemaVentas")
+    xmi_content = exportar_xmi(diagram)
+    reimported = importar_xmi(xmi_content, name="SistemaVentas")
 
     class_by_name = {c.name: c for c in reimported.classes}
     assert "IServicio" in class_by_name
@@ -269,7 +269,7 @@ def test_import_exportar_xml_fixture_no_errors_same_class_count():
     fixture_path = Path(__file__).resolve().parents[2] / "exportar.xml"
     content = fixture_path.read_text(encoding="utf-8", errors="replace")
 
-    imported = import_xmi(content, name="exportar")
+    imported = importar_xmi(content, name="exportar")
     assert imported.name == "clases"
     assert len(imported.classes) == 4
     class_names = {c.name for c in imported.classes}
@@ -297,7 +297,7 @@ def test_import_xmi_with_uml_dependency_and_uml_abstraction_without_500():
 </XMI>"""
 
     # Antes causaba AttributeError: 'NoneType' object has no attribute 'replace' -> HTTP 500
-    imported = import_xmi(xmi_content, name="prueba")
+    imported = importar_xmi(xmi_content, name="prueba")
     assert len(imported.classes) == 3
     assert len(imported.relationships) == 2
 
@@ -311,10 +311,10 @@ def test_import_xmi_with_uml_dependency_and_uml_abstraction_without_500():
 
     # Verificar integración con _persist_internal_model
     repository = _DrawingImportRepository()
-    service = UmlService.__new__(UmlService)
+    service = ServicioUML.__new__(ServicioUML)
     service.uml = repository
 
-    diagram = service._persist_internal_model(imported, uuid4(), uuid4())
+    diagram = service._persistir_modelo_interno(imported, uuid4(), uuid4())
     assert diagram.id is not None
     assert len(repository.classes) == 3
     assert len(repository.relationships) == 2

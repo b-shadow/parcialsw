@@ -4,14 +4,14 @@ from datetime import UTC, datetime
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from xml.etree import ElementTree
 
-from app.modules.modelado_uml.engine.internal_model import (
-    UmlAttributeModel,
-    UmlClassModel,
-    UmlDiagramModel,
-    UmlMethodModel,
-    UmlParameterModel,
-    UmlRelationshipModel,
-    UmlVisualModel,
+from app.modules.modelado_uml.engine.modelo_interno import (
+    ModeloAtributoUML,
+    ModeloClaseUML,
+    ModeloDiagramaUML,
+    ModeloMetodoUML,
+    ModeloParametroUML,
+    ModeloRelacionUML,
+    ModeloVisualUML,
 )
 
 XMI_NS = "http://www.omg.org/XMI"
@@ -25,7 +25,7 @@ ElementTree.register_namespace("xmi", XMI_NS)
 ElementTree.register_namespace("uml", UML2_NS)
 
 
-def _xml_id(value: str | None, fallback: str) -> str:
+def _id_xml(value: str | None, fallback: str) -> str:
     base = str(value or fallback).strip() or fallback
     normalized = re.sub(r"[^A-Za-z0-9_.-]", "_", base).replace("-", "_")
     if not re.match(r"[A-Za-z_]", normalized):
@@ -33,7 +33,7 @@ def _xml_id(value: str | None, fallback: str) -> str:
     return normalized
 
 
-def _uuid_from_seed(value: str | None, fallback: str) -> UUID:
+def _uuid_desde_semilla(value: str | None, fallback: str) -> UUID:
     seed = str(value or fallback).strip() or fallback
     candidate = seed.strip("{}")
     for prefix in ("MX_EAID_", "EAID_", "EAPK_"):
@@ -47,34 +47,34 @@ def _uuid_from_seed(value: str | None, fallback: str) -> UUID:
         return uuid5(NAMESPACE_URL, seed)
 
 
-def _ea_guid_fragment(value: str | None, fallback: str) -> str:
-    return str(_uuid_from_seed(value, fallback)).upper().replace("-", "_")
+def _fragmento_guid_ea(value: str | None, fallback: str) -> str:
+    return str(_uuid_desde_semilla(value, fallback)).upper().replace("-", "_")
 
 
-def _ea_id(value: str | None, fallback: str, prefix: str = "EAID") -> str:
+def _id_ea(value: str | None, fallback: str, prefix: str = "EAID") -> str:
     if str(value or "").startswith(("EAID_", "EAPK_", "MX_EAID_")):
-        normalized = _xml_id(value, fallback)
+        normalized = _id_xml(value, fallback)
     else:
-        normalized = _ea_guid_fragment(value, fallback)
+        normalized = _fragmento_guid_ea(value, fallback)
     if normalized.startswith(("EAID_", "EAPK_", "MX_EAID_")):
         return normalized
     return f"{prefix}_{normalized}"
 
 
-def _ea_guid(value: str | None, fallback: str) -> str:
-    return f"{{{str(_uuid_from_seed(value, fallback)).upper()}}}"
+def _guid_ea(value: str | None, fallback: str) -> str:
+    return f"{{{str(_uuid_desde_semilla(value, fallback)).upper()}}}"
 
 
-def _ea_return_guid(value: str | None, fallback: str) -> str:
-    operation_guid = str(_uuid_from_seed(value, fallback)).upper()
+def _guid_retorno_ea(value: str | None, fallback: str) -> str:
+    operation_guid = str(_uuid_desde_semilla(value, fallback)).upper()
     return f"{{RETURNID-{operation_guid[9:]}}}"
 
 
-def _timestamp() -> str:
+def _marca_tiempo() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _xmi_attr(node: ElementTree.Element, name: str) -> str | None:
+def _atributo_xmi(node: ElementTree.Element, name: str) -> str | None:
     return (
         node.attrib.get(f"{{{XMI_NS}}}{name}")
         or node.attrib.get(f"xmi:{name}")
@@ -83,27 +83,27 @@ def _xmi_attr(node: ElementTree.Element, name: str) -> str | None:
     )
 
 
-def _is_tag(node: ElementTree.Element, name: str) -> bool:
+def _es_etiqueta(node: ElementTree.Element, name: str) -> bool:
     return node.tag.endswith(name)
 
 
-def _tagged_value(node: ElementTree.Element, tag: str) -> str | None:
+def _valor_etiquetado(node: ElementTree.Element, tag: str) -> str | None:
     for child in node.iter():
-        if _is_tag(child, "TaggedValue") and child.attrib.get("tag") == tag:
+        if _es_etiqueta(child, "TaggedValue") and child.attrib.get("tag") == tag:
             return child.attrib.get("value")
     return None
 
 
-def _multiplicity_from_end(end: ElementTree.Element | None, fallback: str | None = None) -> str | None:
+def _multiplicidad_desde_extremo(end: ElementTree.Element | None, fallback: str | None = None) -> str | None:
     if end is None:
         return fallback
     multiplicity = (
         end.attrib.get("multiplicity")
-        or _tagged_value(end, "multiplicity")
-        or _tagged_value(end, "cardinality")
+        or _valor_etiquetado(end, "multiplicity")
+        or _valor_etiquetado(end, "cardinality")
     )
-    lower = _tagged_value(end, "lowerBound") or end.attrib.get("lower")
-    upper = _tagged_value(end, "upperBound") or end.attrib.get("upper")
+    lower = _valor_etiquetado(end, "lowerBound") or end.attrib.get("lower")
+    upper = _valor_etiquetado(end, "upperBound") or end.attrib.get("upper")
     if lower and upper:
         multiplicity = upper if lower == upper else f"{lower}..{upper}"
     elif upper:
@@ -111,12 +111,12 @@ def _multiplicity_from_end(end: ElementTree.Element | None, fallback: str | None
     return multiplicity or fallback
 
 
-def _aggregation_from_end(end: ElementTree.Element | None) -> str | None:
+def _agregacion_desde_extremo(end: ElementTree.Element | None) -> str | None:
     if end is None:
         return None
     aggregation = (
         end.attrib.get("aggregation")
-        or _tagged_value(end, "aggregation")
+        or _valor_etiquetado(end, "aggregation")
         or ""
     ).strip().lower()
     if aggregation in {"shared", "aggregate", "aggregation"}:
@@ -126,18 +126,18 @@ def _aggregation_from_end(end: ElementTree.Element | None) -> str | None:
     return None
 
 
-def _direct_children(node: ElementTree.Element, name: str) -> list[ElementTree.Element]:
-    return [child for child in list(node) if _is_tag(child, name)]
+def _hijos_directos(node: ElementTree.Element, name: str) -> list[ElementTree.Element]:
+    return [child for child in list(node) if _es_etiqueta(child, name)]
 
 
-def _feature_children(class_node: ElementTree.Element, name: str) -> list[ElementTree.Element]:
-    features = [child for child in class_node if _is_tag(child, "Classifier.feature")]
+def _hijos_caracteristica(class_node: ElementTree.Element, name: str) -> list[ElementTree.Element]:
+    features = [child for child in class_node if _es_etiqueta(child, "Classifier.feature")]
     if not features:
-        return [child for child in class_node if _is_tag(child, name) or _is_tag(child, f"owned{name}")]
-    return [child for feature in features for child in feature if _is_tag(child, name) or _is_tag(child, f"owned{name}")]
+        return [child for child in class_node if _es_etiqueta(child, name) or _es_etiqueta(child, f"owned{name}")]
+    return [child for feature in features for child in feature if _es_etiqueta(child, name) or _es_etiqueta(child, f"owned{name}")]
 
 
-def _parse_diagram_geometry(geometry: str | None) -> UmlVisualModel | None:
+def _analizar_geometria_diagrama(geometry: str | None) -> ModeloVisualUML | None:
     if not geometry:
         return None
     values: dict[str, float] = {}
@@ -152,7 +152,7 @@ def _parse_diagram_geometry(geometry: str | None) -> UmlVisualModel | None:
                 continue
     if not {"Left", "Top", "Right", "Bottom"}.issubset(values):
         return None
-    return UmlVisualModel(
+    return ModeloVisualUML(
         x=values["Left"],
         y=values["Top"],
         width=max(80, values["Right"] - values["Left"]),
@@ -160,20 +160,20 @@ def _parse_diagram_geometry(geometry: str | None) -> UmlVisualModel | None:
     )
 
 
-def _class_diagram_subjects(root: ElementTree.Element) -> tuple[str | None, set[str], dict[str, UmlVisualModel]]:
+def _elementos_diagrama_clases(root: ElementTree.Element) -> tuple[str | None, set[str], dict[str, ModeloVisualUML]]:
     for diagram in root.iter():
-        if not _is_tag(diagram, "Diagram") or diagram.attrib.get("diagramType") != "ClassDiagram":
+        if not _es_etiqueta(diagram, "Diagram") or diagram.attrib.get("diagramType") != "ClassDiagram":
             continue
         subjects: set[str] = set()
-        visuals: dict[str, UmlVisualModel] = {}
+        visuals: dict[str, ModeloVisualUML] = {}
         for diagram_element in diagram.iter():
-            if not _is_tag(diagram_element, "DiagramElement"):
+            if not _es_etiqueta(diagram_element, "DiagramElement"):
                 continue
             subject = diagram_element.attrib.get("subject")
             if not subject:
                 continue
             subjects.add(subject)
-            visual = _parse_diagram_geometry(diagram_element.attrib.get("geometry"))
+            visual = _analizar_geometria_diagrama(diagram_element.attrib.get("geometry"))
             if visual is None:
                 continue
             visuals[subject] = visual
@@ -181,7 +181,7 @@ def _class_diagram_subjects(root: ElementTree.Element) -> tuple[str | None, set[
     return None, set(), {}
 
 
-def _visuals_overlap_for_editor(classes: list[UmlClassModel]) -> bool:
+def _visuales_se_superponen_editor(classes: list[ModeloClaseUML]) -> bool:
     positioned_classes = [uml_class for uml_class in classes if uml_class.visual]
     if len(positioned_classes) < 3:
         return False
@@ -194,13 +194,13 @@ def _visuals_overlap_for_editor(classes: list[UmlClassModel]) -> bool:
     return False
 
 
-def _normalize_visuals_for_editor(
-    classes: list[UmlClassModel], relationships: list[UmlRelationshipModel]
+def _normalizar_visuales_editor(
+    classes: list[ModeloClaseUML], relationships: list[ModeloRelacionUML]
 ) -> None:
-    if not _visuals_overlap_for_editor(classes):
+    if not _visuales_se_superponen_editor(classes):
         return
 
-    rows: list[list[UmlClassModel]] = []
+    rows: list[list[ModeloClaseUML]] = []
     for uml_class in sorted(classes, key=lambda item: (item.visual.y, item.visual.x)):
         for row in rows:
             row_average_y = sum(item.visual.y for item in row) / len(row)
@@ -240,21 +240,21 @@ def _normalize_visuals_for_editor(
         association_class.visual.width = max(association_class.visual.width or 0, editor_class_width)
 
 
-def _owned_attribute_type(attribute: UmlAttributeModel) -> str:
+def _tipo_atributo_propio(attribute: ModeloAtributoUML) -> str:
     return attribute.data_type or "String"
 
 
-def _owned_operation_return_type(method: UmlMethodModel) -> str:
+def _tipo_retorno_operacion_propia(method: ModeloMetodoUML) -> str:
     return method.return_type or "void"
 
 
-def _collect_data_types(diagram: UmlDiagramModel, export_token: str) -> dict[str, str]:
+def _reunir_tipos_datos(diagram: ModeloDiagramaUML, export_token: str) -> dict[str, str]:
     data_types: list[str] = []
     for uml_class in diagram.classes:
         for attribute in uml_class.attributes:
-            data_types.append(_owned_attribute_type(attribute))
+            data_types.append(_tipo_atributo_propio(attribute))
         for method in uml_class.methods:
-            data_types.append(_owned_operation_return_type(method))
+            data_types.append(_tipo_retorno_operacion_propia(method))
             for parameter in method.parameters:
                 data_types.append(parameter.data_type)
     data_types.append("void")
@@ -267,49 +267,49 @@ def _collect_data_types(diagram: UmlDiagramModel, export_token: str) -> dict[str
     return ids
 
 
-def _tagged_values(parent: ElementTree.Element, values: dict[str, str]) -> ElementTree.Element:
+def _valores_etiquetados(parent: ElementTree.Element, values: dict[str, str]) -> ElementTree.Element:
     tagged_values = ElementTree.SubElement(parent, "UML:ModelElement.taggedValue")
     for tag, value in values.items():
         ElementTree.SubElement(tagged_values, "UML:TaggedValue", {"tag": tag, "value": value})
     return tagged_values
 
 
-def _type_reference(parent: ElementTree.Element, wrapper_tag: str, type_id: str) -> None:
+def _referencia_tipo(parent: ElementTree.Element, wrapper_tag: str, type_id: str) -> None:
     wrapper = ElementTree.SubElement(parent, wrapper_tag)
     ElementTree.SubElement(wrapper, "UML:Classifier", {"xmi.idref": type_id})
 
 
-def _relationship_export_id(
-    relationship: UmlRelationshipModel,
+def _id_exportacion_relacion(
+    relationship: ModeloRelacionUML,
     source_id: str,
     target_id: str,
 ) -> str:
-    return _ea_id(relationship.id, f"{source_id}_{target_id}_{relationship.relationship_type}")
+    return _id_ea(relationship.id, f"{source_id}_{target_id}_{relationship.relationship_type}")
 
 
-def export_xmi(diagram: UmlDiagramModel) -> str:
+def exportar_xmi(diagram: ModeloDiagramaUML) -> str:
     export_token = uuid4().hex[:12].upper()
 
-    def export_id(value: str | None, fallback: str, prefix: str = "EAID") -> str:
-        return _ea_id(f"{export_token}_{value or fallback}", fallback, prefix)
+    def exportar_id(value: str | None, fallback: str, prefix: str = "EAID") -> str:
+        return _id_ea(f"{export_token}_{value or fallback}", fallback, prefix)
 
-    def export_guid(value: str | None, fallback: str) -> str:
-        return _ea_guid(f"{export_token}_{value or fallback}", fallback)
+    def exportar_guid(value: str | None, fallback: str) -> str:
+        return _guid_ea(f"{export_token}_{value or fallback}", fallback)
 
-    def export_return_guid(value: str | None, fallback: str) -> str:
-        return _ea_return_guid(f"{export_token}_{value or fallback}", fallback)
+    def exportar_guid_retorno(value: str | None, fallback: str) -> str:
+        return _guid_retorno_ea(f"{export_token}_{value or fallback}", fallback)
 
-    package_id = export_id(diagram.id, f"package_{diagram.name}", "EAPK")
+    package_id = exportar_id(diagram.id, f"package_{diagram.name}", "EAPK")
     model_id = f"MX_{package_id.replace('EAPK_', 'EAID_', 1)}"
-    diagram_id = export_id(None, f"diagram_{diagram.name}")
-    root_class_id = export_id(None, "EARootClass")
-    data_type_ids = _collect_data_types(diagram, export_token)
+    diagram_id = exportar_id(None, f"diagram_{diagram.name}")
+    root_class_id = exportar_id(None, "EARootClass")
+    data_type_ids = _reunir_tipos_datos(diagram, export_token)
     root = ElementTree.Element(
         "XMI",
         {
             "xmi.version": "1.1",
             "xmlns:UML": UML_NS,
-            "timestamp": _timestamp(),
+            "timestamp": _marca_tiempo(),
         },
     )
 
@@ -351,12 +351,12 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
             "isAbstract": "false",
         },
     )
-    _tagged_values(
+    _valores_etiquetados(
         package,
         {
             "ea_package_id": "1",
-            "created": _timestamp(),
-            "modified": _timestamp(),
+            "created": _marca_tiempo(),
+            "modified": _marca_tiempo(),
             "iscontrolled": "FALSE",
             "version": "1.0",
             "isprotected": "FALSE",
@@ -382,17 +382,17 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
 
     relationship_local_id = 1
     for relationship in diagram.relationships:
-        source_id = export_id(relationship.source_class_id, "source")
-        target_id = export_id(relationship.target_class_id, "target")
+        source_id = exportar_id(relationship.source_class_id, "source")
+        target_id = exportar_id(relationship.target_class_id, "target")
         relationship_id_by_original[relationship.id or f"{source_id}_{target_id}"] = (
-            export_id(
+            exportar_id(
                 relationship.id,
                 f"{source_id}_{target_id}_{relationship.relationship_type}",
             )
         )
 
     for index, uml_class in enumerate(diagram.classes, start=1):
-        class_id = export_id(uml_class.id, uml_class.name)
+        class_id = exportar_id(uml_class.id, uml_class.name)
         class_id_by_original[uml_class.id or uml_class.name] = class_id
         class_id_by_original[uml_class.name] = class_id
         class_name_by_original[uml_class.id or uml_class.name] = uml_class.name
@@ -455,8 +455,8 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
             "version": "1.0",
             "isActive": "false",
             "package": package_id,
-            "date_created": _timestamp(),
-            "date_modified": _timestamp(),
+            "date_created": _marca_tiempo(),
+            "date_modified": _marca_tiempo(),
             "gentype": "Java",
             "tagged": "0",
             "package_name": diagram.name,
@@ -477,11 +477,11 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
             class_tagged_values["isAbstract"] = "true"
         if stereotype:
             class_tagged_values["stereotype"] = stereotype
-        _tagged_values(class_node, class_tagged_values)
+        _valores_etiquetados(class_node, class_tagged_values)
         features_node = ElementTree.SubElement(class_node, "UML:Classifier.feature")
 
         for attribute_index, attribute in enumerate(uml_class.attributes):
-            attribute_type = _owned_attribute_type(attribute)
+            attribute_type = _tipo_atributo_propio(attribute)
             attribute_node = ElementTree.SubElement(
                 features_node,
                 "UML:Attribute",
@@ -496,12 +496,12 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
             initial_value = ElementTree.SubElement(attribute_node, "UML:Attribute.initialValue")
             expression_attrs = {"body": attribute.initial_value} if attribute.initial_value else {}
             ElementTree.SubElement(initial_value, "UML:Expression", expression_attrs)
-            _type_reference(
+            _referencia_tipo(
                 attribute_node,
                 "UML:StructuralFeature.type",
                 data_type_ids.get(attribute_type, data_type_ids["void"]),
             )
-            _tagged_values(
+            _valores_etiquetados(
                 attribute_node,
                 {
                     "type": attribute_type,
@@ -511,14 +511,14 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
                     "collection": "false",
                     "position": str(attribute.order_index),
                     "duplicates": "0",
-                    "ea_guid": export_guid(attribute.id, f"{class_id}_{attribute.name}"),
+                    "ea_guid": exportar_guid(attribute.id, f"{class_id}_{attribute.name}"),
                     "ea_localid": str(attribute_local_id),
                     "styleex": "volatile=0;",
                 },
             )
             attribute_local_id += 1
         for method_index, method in enumerate(uml_class.methods):
-            return_type = _owned_operation_return_type(method)
+            return_type = _tipo_retorno_operacion_propia(method)
             operation_node = ElementTree.SubElement(
                 features_node,
                 "UML:Operation",
@@ -530,7 +530,7 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
                     "concurrency": "sequential",
                 },
             )
-            _tagged_values(
+            _valores_etiquetados(
                 operation_node,
                 {
                     "type": return_type,
@@ -539,7 +539,7 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
                     "concurrency": "Sequential",
                     "position": str(method.order_index),
                     "pure": "0",
-                    "ea_guid": export_guid(method.id, f"{class_id}_{method.name}"),
+                    "ea_guid": exportar_guid(method.id, f"{class_id}_{method.name}"),
                     "ea_localid": str(operation_local_id),
                     **(
                         {
@@ -566,18 +566,18 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
                     "UML:Parameter",
                     {"name": parameter.name, "kind": "in", "visibility": "public"},
                 )
-                _type_reference(
+                _referencia_tipo(
                     parameter_node,
                     "UML:Parameter.type",
                     data_type_ids.get(parameter.data_type, data_type_ids["void"]),
                 )
-                _tagged_values(
+                _valores_etiquetados(
                     parameter_node,
                     {
                         "pos": str(parameter.order_index or parameter_index),
                         "type": parameter.data_type,
                         "const": "0",
-                        "ea_guid": export_guid(
+                        "ea_guid": exportar_guid(
                             parameter.id,
                             f"{class_id}_{method.name}_{parameter.name}",
                         ),
@@ -597,18 +597,18 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
                 "UML:Parameter",
                 {"kind": "return", "visibility": "public"},
             )
-            _type_reference(
+            _referencia_tipo(
                 return_parameter,
                 "UML:Parameter.type",
                 data_type_ids.get(return_type, data_type_ids["void"]),
             )
-            _tagged_values(
+            _valores_etiquetados(
                 return_parameter,
                 {
                     "pos": "0",
                     "type": return_type,
                     "const": "0",
-                    "ea_guid": export_return_guid(method.id, f"{class_id}_{method.name}"),
+                    "ea_guid": exportar_guid_retorno(method.id, f"{class_id}_{method.name}"),
                 },
             )
             default_value = ElementTree.SubElement(return_parameter, "UML:Parameter.defaultValue")
@@ -617,13 +617,13 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
     for relationship in diagram.relationships:
         source_id = class_id_by_original.get(
             relationship.source_class_id,
-            export_id(relationship.source_class_id, "source"),
+            exportar_id(relationship.source_class_id, "source"),
         )
         target_id = class_id_by_original.get(
             relationship.target_class_id,
-            export_id(relationship.target_class_id, "target"),
+            exportar_id(relationship.target_class_id, "target"),
         )
-        relationship_id = export_id(
+        relationship_id = exportar_id(
             relationship.id,
             f"{source_id}_{target_id}_{relationship.relationship_type}",
         )
@@ -651,7 +651,7 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
             if relationship.target_cardinality:
                 generalization_values["targetMultiplicity"] = relationship.target_cardinality
             if generalization_values:
-                _tagged_values(generalization_node, generalization_values)
+                _valores_etiquetados(generalization_node, generalization_values)
             continue
 
         if relationship_type in {"dependency", "realization", "implementation"}:
@@ -721,7 +721,7 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
         if relationship.target_cardinality:
             association_tagged_values["rb"] = relationship.target_cardinality
             association_tagged_values["targetMultiplicity"] = relationship.target_cardinality
-        _tagged_values(association_node, association_tagged_values)
+        _valores_etiquetados(association_node, association_tagged_values)
         relationship_local_id += 1
         connection_node = ElementTree.SubElement(association_node, "UML:Association.connection")
         source_end_attributes = {
@@ -758,7 +758,7 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
             "UML:AssociationEnd",
             source_end_attributes,
         )
-        _tagged_values(
+        _valores_etiquetados(
             source_end,
             {
                 "containment": "Unspecified",
@@ -776,7 +776,7 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
             "UML:AssociationEnd",
             target_end_attributes,
         )
-        _tagged_values(
+        _valores_etiquetados(
             target_end,
             {
                 "containment": "Unspecified",
@@ -815,13 +815,13 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
             "toolName": "Enterprise Architect 2.5",
         },
     )
-    _tagged_values(
+    _valores_etiquetados(
         diagram_node,
         {
             "version": "1.0",
             "author": "CASE Inteligente",
-            "created_date": _timestamp(),
-            "modified_date": _timestamp(),
+            "created_date": _marca_tiempo(),
+            "modified_date": _marca_tiempo(),
             "package": package_id,
             "type": "Logical",
             "swimlanes": (
@@ -856,19 +856,19 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
                 "geometry": f"Left={left};Top={top};Right={right};Bottom={bottom};",
                 "subject": class_id,
                 "seqno": str(sequence),
-                "style": f"DUID={_xml_id(None, f'duid_{sequence}')};",
+                "style": f"DUID={_id_xml(None, f'duid_{sequence}')};",
             },
         )
     for relationship in diagram.relationships:
         source_id = class_id_by_original.get(
             relationship.source_class_id,
-            export_id(relationship.source_class_id, "source"),
+            exportar_id(relationship.source_class_id, "source"),
         )
         target_id = class_id_by_original.get(
             relationship.target_class_id,
-            export_id(relationship.target_class_id, "target"),
+            exportar_id(relationship.target_class_id, "target"),
         )
-        relationship_id = export_id(
+        relationship_id = exportar_id(
             relationship.id,
             f"{source_id}_{target_id}_{relationship.relationship_type}",
         )
@@ -900,49 +900,49 @@ def export_xmi(diagram: UmlDiagramModel) -> str:
     )
 
 
-def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramModel:
+def importar_xmi(content: str, name: str = "Diagrama importado") -> ModeloDiagramaUML:
     root = ElementTree.fromstring(content)
-    classes: list[UmlClassModel] = []
-    relationships: list[UmlRelationshipModel] = []
+    classes: list[ModeloClaseUML] = []
+    relationships: list[ModeloRelacionUML] = []
     id_to_class_name: dict[str, str] = {}
-    diagram_name, diagram_subjects, visual_by_subject = _class_diagram_subjects(root)
+    diagram_name, diagram_subjects, visual_by_subject = _elementos_diagrama_clases(root)
     has_class_diagram_filter = len(diagram_subjects) > 0
 
     for node in root.iter():
-        node_type = _xmi_attr(node, "type")
-        is_class_node = (node.tag.endswith("packagedElement") and node_type == "uml:Class") or _is_tag(node, "Class")
+        node_type = _atributo_xmi(node, "type")
+        is_class_node = (node.tag.endswith("packagedElement") and node_type == "uml:Class") or _es_etiqueta(node, "Class")
         if is_class_node:
             if node.attrib.get("name") == "EARootClass":
                 continue
-            class_id = _xmi_attr(node, "id")
+            class_id = _atributo_xmi(node, "id")
             if has_class_diagram_filter and class_id not in diagram_subjects:
                 continue
             attributes = []
-            for order_index, child in enumerate(_feature_children(node, "Attribute")):
-                lower_bound = _tagged_value(child, "lowerBound")
-                upper_bound = _tagged_value(child, "upperBound")
+            for order_index, child in enumerate(_hijos_caracteristica(node, "Attribute")):
+                lower_bound = _valor_etiquetado(child, "lowerBound")
+                upper_bound = _valor_etiquetado(child, "upperBound")
                 multiplicity = child.attrib.get("multiplicity")
                 if upper_bound and upper_bound != "1":
                     multiplicity = upper_bound
                 attributes.append(
-                    UmlAttributeModel(
-                        id=_xmi_attr(child, "id"),
+                    ModeloAtributoUML(
+                        id=_atributo_xmi(child, "id"),
                         name=child.attrib.get("name", "atributo"),
-                        data_type=child.attrib.get("type") or _tagged_value(child, "type") or "String",
+                        data_type=child.attrib.get("type") or _valor_etiquetado(child, "type") or "String",
                         visibility=child.attrib.get("visibility", "private"),
                         multiplicity=multiplicity,
                         is_required=lower_bound != "0",
-                        order_index=int(_tagged_value(child, "position") or order_index),
+                        order_index=int(_valor_etiquetado(child, "position") or order_index),
                     )
                 )
             methods = []
-            for order_index, child in enumerate(_feature_children(node, "Operation")):
+            for order_index, child in enumerate(_hijos_caracteristica(node, "Operation")):
                 parameters = []
                 for parameter_index, parameter in enumerate(
 
                         item
                         for item in child.iter()
-                        if _is_tag(item, "Parameter")
+                        if _es_etiqueta(item, "Parameter")
                         and item.attrib.get("kind", "in") != "return"
 
                 ):
@@ -950,26 +950,26 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                         (
                             expression.attrib.get("body")
                             for expression in parameter.iter()
-                            if _is_tag(expression, "Expression")
+                            if _es_etiqueta(expression, "Expression")
                             and expression.attrib.get("body") is not None
                         ),
                         None,
                     )
                     parameters.append(
-                        UmlParameterModel(
-                            id=_xmi_attr(parameter, "id"),
+                        ModeloParametroUML(
+                            id=_atributo_xmi(parameter, "id"),
                             name=parameter.attrib.get("name", f"parametro{parameter_index + 1}"),
                             data_type=parameter.attrib.get("type")
-                            or _tagged_value(parameter, "type")
+                            or _valor_etiquetado(parameter, "type")
                             or "String",
                             default_value=default_value,
                             order_index=int(
-                                _tagged_value(parameter, "pos") or parameter_index
+                                _valor_etiquetado(parameter, "pos") or parameter_index
                             ),
                         )
                     )
                 specification = None
-                raw_specification = _tagged_value(child, "case_method_specification_v1")
+                raw_specification = _valor_etiquetado(child, "case_method_specification_v1")
                 if raw_specification and len(raw_specification.encode("utf-8")) <= 64 * 1024:
                     try:
                         candidate = json.loads(raw_specification)
@@ -978,21 +978,21 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                     except (TypeError, ValueError, json.JSONDecodeError):
                         specification = None
                 methods.append(
-                    UmlMethodModel(
-                        id=_xmi_attr(child, "id"),
+                    ModeloMetodoUML(
+                        id=_atributo_xmi(child, "id"),
                         name=child.attrib.get("name", "operacion"),
                         return_type=child.attrib.get("returnType")
-                        or _tagged_value(child, "type")
+                        or _valor_etiquetado(child, "type")
                         or next(
                             (
-                                parameter.attrib.get("type") or _tagged_value(parameter, "type")
+                                parameter.attrib.get("type") or _valor_etiquetado(parameter, "type")
                                 for parameter in child.iter()
-                                if _is_tag(parameter, "Parameter") and parameter.attrib.get("kind") == "return"
+                                if _es_etiqueta(parameter, "Parameter") and parameter.attrib.get("kind") == "return"
                             ),
                             None,
                         ),
                         visibility=child.attrib.get("visibility", "public"),
-                        order_index=int(_tagged_value(child, "position") or order_index),
+                        order_index=int(_valor_etiquetado(child, "position") or order_index),
                         parameters=parameters,
                         specification=specification,
                     )
@@ -1001,8 +1001,8 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
             if class_id:
                 id_to_class_name[class_id] = class_name
             class_metadata = {"external_xmi_id": class_id} if class_id else {}
-            ea_ntype = _tagged_value(node, "ea_ntype")
-            con_id = _tagged_value(node, "conID")
+            ea_ntype = _valor_etiquetado(node, "ea_ntype")
+            con_id = _valor_etiquetado(node, "conID")
             if ea_ntype:
                 class_metadata["ea_ntype"] = ea_ntype
             if con_id:
@@ -1010,12 +1010,12 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
 
             is_abstract = (
                 node.attrib.get("isAbstract", "").lower() == "true"
-                or _tagged_value(node, "isAbstract") == "true"
+                or _valor_etiquetado(node, "isAbstract") == "true"
             )
-            ea_stype = (_tagged_value(node, "ea_stype") or "").strip().lower()
+            ea_stype = (_valor_etiquetado(node, "ea_stype") or "").strip().lower()
             raw_stereotype = (
                 node.attrib.get("stereotype")
-                or _tagged_value(node, "stereotype")
+                or _valor_etiquetado(node, "stereotype")
                 or ""
             ).strip().lower().strip("«»")
 
@@ -1033,7 +1033,7 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                 stereotype = raw_stereotype or None
 
             classes.append(
-                UmlClassModel(
+                ModeloClaseUML(
                     id=class_id,
                     name=class_name,
                     visibility=node.attrib.get("visibility", "public"),
@@ -1041,66 +1041,66 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                     stereotype=stereotype,
                     attributes=attributes,
                     methods=methods,
-                    visual=visual_by_subject.get(class_id or "", UmlVisualModel()),
+                    visual=visual_by_subject.get(class_id or "", ModeloVisualUML()),
                     metadata_json=class_metadata,
                 )
             )
 
     for node in root.iter():
-        node_type = _xmi_attr(node, "type")
-        if _is_tag(node, "generalization") or _is_tag(node, "Generalization"):
+        node_type = _atributo_xmi(node, "type")
+        if _es_etiqueta(node, "generalization") or _es_etiqueta(node, "Generalization"):
             source_id = node.attrib.get("source") or node.attrib.get("subtype", "")
             target_id = node.attrib.get("target") or node.attrib.get("general") or node.attrib.get("supertype", "")
             relationships.append(
-                UmlRelationshipModel(
-                    id=_xmi_attr(node, "id"),
+                ModeloRelacionUML(
+                    id=_atributo_xmi(node, "id"),
                     source_class_id=id_to_class_name.get(source_id, source_id),
                     target_class_id=id_to_class_name.get(target_id, target_id),
                     relationship_type="inheritance",
                     label=node.attrib.get("name"),
-                    source_cardinality=_tagged_value(node, "sourceMultiplicity"),
-                    target_cardinality=_tagged_value(node, "targetMultiplicity"),
+                    source_cardinality=_valor_etiquetado(node, "sourceMultiplicity"),
+                    target_cardinality=_valor_etiquetado(node, "targetMultiplicity"),
                 )
             )
-        elif _is_tag(node, "Association") or (node.tag.endswith("packagedElement") and node_type == "uml:Association"):
-            relationship_id = _xmi_attr(node, "id")
+        elif _es_etiqueta(node, "Association") or (node.tag.endswith("packagedElement") and node_type == "uml:Association"):
+            relationship_id = _atributo_xmi(node, "id")
             if has_class_diagram_filter and relationship_id not in diagram_subjects:
                 continue
             source_id = node.attrib.get("source", "")
             target_id = node.attrib.get("target", "")
             if not (source_id and target_id):
-                ends = [child.attrib.get("type", "") for child in node.iter() if _is_tag(child, "AssociationEnd") or _is_tag(child, "ownedEnd")]
+                ends = [child.attrib.get("type", "") for child in node.iter() if _es_etiqueta(child, "AssociationEnd") or _es_etiqueta(child, "ownedEnd")]
                 if len(ends) >= 2:
                     source_id, target_id = ends[0], ends[1]
             if source_id not in id_to_class_name or target_id not in id_to_class_name:
                 continue
-            all_ends = [child for child in node.iter() if _is_tag(child, "AssociationEnd") or _is_tag(child, "ownedEnd")]
+            all_ends = [child for child in node.iter() if _es_etiqueta(child, "AssociationEnd") or _es_etiqueta(child, "ownedEnd")]
             source_end = next((end for end in all_ends if end.attrib.get("type") == source_id), None)
             target_end = next((end for end in all_ends if end.attrib.get("type") == target_id), None)
             if source_end is None:
                 source_end = all_ends[0] if all_ends else None
             if target_end is None:
                 target_end = all_ends[1] if len(all_ends) > 1 else None
-            source_aggregation = _aggregation_from_end(source_end)
-            target_aggregation = _aggregation_from_end(target_end)
+            source_aggregation = _agregacion_desde_extremo(source_end)
+            target_aggregation = _agregacion_desde_extremo(target_end)
             relationship_type = target_aggregation or source_aggregation or "association"
             if source_aggregation and not target_aggregation:
                 source_id, target_id = target_id, source_id
                 source_end, target_end = target_end, source_end
-            source_multiplicity = _multiplicity_from_end(
+            source_multiplicity = _multiplicidad_desde_extremo(
                 source_end,
-                _tagged_value(node, "sourceMultiplicity") or _tagged_value(node, "lb"),
+                _valor_etiquetado(node, "sourceMultiplicity") or _valor_etiquetado(node, "lb"),
             )
-            target_multiplicity = _multiplicity_from_end(
+            target_multiplicity = _multiplicidad_desde_extremo(
                 target_end,
-                _tagged_value(node, "targetMultiplicity") or _tagged_value(node, "rb"),
+                _valor_etiquetado(node, "targetMultiplicity") or _valor_etiquetado(node, "rb"),
             )
-            association_class_id = _tagged_value(node, "associationclass")
+            association_class_id = _valor_etiquetado(node, "associationclass")
             metadata = {"external_xmi_id": relationship_id}
             if association_class_id and association_class_id in id_to_class_name:
                 metadata["association_class_id"] = association_class_id
             relationships.append(
-                UmlRelationshipModel(
+                ModeloRelacionUML(
                     id=relationship_id,
                     source_class_id=id_to_class_name.get(source_id, source_id),
                     target_class_id=id_to_class_name.get(target_id, target_id),
@@ -1111,19 +1111,19 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                     metadata_json=metadata,
                 )
             )
-        elif _is_tag(node, "Dependency") or _is_tag(node, "Abstraction") or (node.tag.endswith("packagedElement") and node_type and node_type != "uml:Class"):
-            relationship_id = _xmi_attr(node, "id")
+        elif _es_etiqueta(node, "Dependency") or _es_etiqueta(node, "Abstraction") or (node.tag.endswith("packagedElement") and node_type and node_type != "uml:Class"):
+            relationship_id = _atributo_xmi(node, "id")
             if has_class_diagram_filter and relationship_id not in diagram_subjects:
                 continue
             source_id = node.attrib.get("source") or node.attrib.get("client", "")
             target_id = node.attrib.get("target") or node.attrib.get("supplier", "")
             if not source_id:
                 for child in node.iter():
-                    if _is_tag(child, "client"):
-                        ref = _xmi_attr(child, "idref") or child.attrib.get("xmi.idref") or child.attrib.get("idref")
+                    if _es_etiqueta(child, "client"):
+                        ref = _atributo_xmi(child, "idref") or child.attrib.get("xmi.idref") or child.attrib.get("idref")
                         if not ref:
                             for sub in child.iter():
-                                ref = _xmi_attr(sub, "idref") or sub.attrib.get("xmi.idref")
+                                ref = _atributo_xmi(sub, "idref") or sub.attrib.get("xmi.idref")
                                 if ref:
                                     break
                         if ref:
@@ -1131,11 +1131,11 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                             break
             if not target_id:
                 for child in node.iter():
-                    if _is_tag(child, "supplier"):
-                        ref = _xmi_attr(child, "idref") or child.attrib.get("xmi.idref") or child.attrib.get("idref")
+                    if _es_etiqueta(child, "supplier"):
+                        ref = _atributo_xmi(child, "idref") or child.attrib.get("xmi.idref") or child.attrib.get("idref")
                         if not ref:
                             for sub in child.iter():
-                                ref = _xmi_attr(sub, "idref") or sub.attrib.get("xmi.idref")
+                                ref = _atributo_xmi(sub, "idref") or sub.attrib.get("xmi.idref")
                                 if ref:
                                     break
                         if ref:
@@ -1149,7 +1149,7 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
             if node_type:
                 clean_type = node_type.replace("uml:", "").lower()
             else:
-                clean_type = "realization" if _is_tag(node, "Abstraction") else "dependency"
+                clean_type = "realization" if _es_etiqueta(node, "Abstraction") else "dependency"
 
             if clean_type in {"abstraction", "realization", "realisation", "implementation"}:
                 relationship_type = "realization"
@@ -1164,7 +1164,7 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
             tgt = id_to_class_name.get(target_id, target_id)
             if src and tgt:
                 relationships.append(
-                    UmlRelationshipModel(
+                    ModeloRelacionUML(
                         id=relationship_id,
                         source_class_id=src,
                         target_class_id=tgt,
@@ -1172,5 +1172,5 @@ def import_xmi(content: str, name: str = "Diagrama importado") -> UmlDiagramMode
                         label=node.attrib.get("name"),
                     )
                 )
-    _normalize_visuals_for_editor(classes, relationships)
-    return UmlDiagramModel(name=diagram_name or name, classes=classes, relationships=relationships)
+    _normalizar_visuales_editor(classes, relationships)
+    return ModeloDiagramaUML(name=diagram_name or name, classes=classes, relationships=relationships)

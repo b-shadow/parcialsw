@@ -2,7 +2,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.main import app
-from app.modules.generacion_software.backend_generator import SpringBootGeneratorService
+from app.modules.generacion_software.backend_generator import ServicioGeneradorSpringBoot
 
 
 def _intermediate_model() -> dict:
@@ -35,7 +35,7 @@ def _intermediate_model() -> dict:
 
 
 def test_spring_boot_generator_writes_complete_project(tmp_path: Path) -> None:
-    result = SpringBootGeneratorService(storage_root=tmp_path).generate(
+    result = ServicioGeneradorSpringBoot(storage_root=tmp_path).generate(
         _intermediate_model(),
         "Sistema Ventas",
         str(uuid4()),
@@ -103,7 +103,7 @@ def test_spring_boot_generator_uses_multiplicity_and_association_class_foreign_k
         ],
     }
 
-    result = SpringBootGeneratorService(storage_root=tmp_path).generate(model, "Academico", str(uuid4()))
+    result = ServicioGeneradorSpringBoot(storage_root=tmp_path).generate(model, "Academico", str(uuid4()))
 
     tema_request = (result.project_dir / "src/main/java/com/caseinteligente/generated/academico/dto/TemaRequest.java").read_text(
         encoding="utf-8"
@@ -161,7 +161,7 @@ def test_spring_boot_generator_applies_multiplicity_owner_rules(tmp_path: Path) 
         ],
     }
 
-    result = SpringBootGeneratorService(storage_root=tmp_path).generate(model, "Biblioteca", str(uuid4()))
+    result = ServicioGeneradorSpringBoot(storage_root=tmp_path).generate(model, "Biblioteca", str(uuid4()))
 
     pedido_request = (
         result.project_dir / "src/main/java/com/caseinteligente/generated/biblioteca/dto/PedidoRequest.java"

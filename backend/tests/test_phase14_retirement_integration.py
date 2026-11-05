@@ -3,7 +3,7 @@ import os
 import pytest
 from sqlalchemy import inspect
 
-from app.core.database.session import engine
+from app.core.database.sesion import engine
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 pytestmark = pytest.mark.skipif(
@@ -28,9 +28,9 @@ def test_phase14_document_content_tables_are_physically_retired() -> None:
     tables = set(inspector.get_table_names())
 
     assert RETIRED_TABLES.isdisjoint(tables)
-    assert {"projects", "uml_diagrams", "ai_conversations", "project_versions"} <= tables
+    assert {"proyectos", "diagramas_uml", "conversaciones_ia", "versiones_proyecto"} <= tables
 
-    for table_name in ("ai_actions", "ai_recommendations"):
+    for table_name in ("acciones_ia", "recomendaciones_ia"):
         foreign_keys = inspector.get_foreign_keys(table_name)
         assert all(
             foreign_key.get("referred_table") != "ai_messages"

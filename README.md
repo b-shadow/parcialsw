@@ -38,6 +38,6 @@ IA:
 cd ai-engine
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m ai_engine.inference.health
+.\.venv\Scripts\python.exe -m ai_engine.inference.estado
 ```
 

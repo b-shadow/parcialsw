@@ -1,45 +1,45 @@
 from ai_engine.providers.base import (
-    AiProvider,
-    ProviderHealth,
-    ProviderMessage,
-    ProviderRequest,
-    ProviderResponse,
+    EstadoProveedor,
+    MensajeProveedor,
+    ProveedorIA,
+    RespuestaProveedor,
+    SolicitudProveedor,
 )
-from ai_engine.providers.errors import (
-    AiProviderError,
-    ContextTooLargeError,
-    InvalidStructuredOutputError,
-    ModelNotInstalledError,
-    ProviderProtocolError,
-    ProviderTimeoutError,
-    ProviderUnavailableError,
+from ai_engine.providers.errores import (
+    ErrorContextoDemasiadoGrande,
+    ErrorModeloNoInstalado,
+    ErrorProtocoloProveedor,
+    ErrorProveedorIA,
+    ErrorProveedorNoDisponible,
+    ErrorSalidaEstructuradaInvalida,
+    ErrorTiempoEsperaProveedor,
 )
 
 __all__ = [
-    "AiProvider",
-    "AiProviderError",
-    "ContextTooLargeError",
-    "GeminiProvider",
-    "InvalidStructuredOutputError",
-    "ModelNotInstalledError",
-    "OllamaProvider",
-    "ProviderHealth",
-    "ProviderMessage",
-    "ProviderProtocolError",
-    "ProviderRequest",
-    "ProviderResponse",
-    "ProviderTimeoutError",
-    "ProviderUnavailableError",
+    "ErrorContextoDemasiadoGrande",
+    "ErrorModeloNoInstalado",
+    "ErrorProtocoloProveedor",
+    "ErrorProveedorIA",
+    "ErrorProveedorNoDisponible",
+    "ErrorSalidaEstructuradaInvalida",
+    "ErrorTiempoEsperaProveedor",
+    "EstadoProveedor",
+    "MensajeProveedor",
+    "ProveedorGemini",
+    "ProveedorIA",
+    "ProveedorOllama",
+    "RespuestaProveedor",
+    "SolicitudProveedor",
 ]
 
 
 def __getattr__(name: str):
-    if name == "OllamaProvider":
-        from ai_engine.providers.ollama_provider import OllamaProvider
+    if name == "ProveedorOllama":
+        from ai_engine.providers.proveedor_ollama import ProveedorOllama
 
-        return OllamaProvider
-    if name == "GeminiProvider":
-        from ai_engine.providers.gemini_provider import GeminiProvider
+        return ProveedorOllama
+    if name == "ProveedorGemini":
+        from ai_engine.providers.proveedor_gemini import ProveedorGemini
 
-        return GeminiProvider
+        return ProveedorGemini
     raise AttributeError(name)

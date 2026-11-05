@@ -1,19 +1,19 @@
-from app.modules.modelado_uml.engine.internal_model import (
-    UmlAttributeModel,
-    UmlClassModel,
-    UmlDiagramModel,
-    UmlMethodModel,
-    UmlParameterModel,
-    UmlRelationshipModel,
-    UmlVisualModel,
+from app.modules.modelado_uml.engine.modelo_interno import (
+    ModeloAtributoUML,
+    ModeloClaseUML,
+    ModeloDiagramaUML,
+    ModeloMetodoUML,
+    ModeloParametroUML,
+    ModeloRelacionUML,
+    ModeloVisualUML,
 )
 
 __all__ = [
-    "UmlAttributeModel",
-    "UmlClassModel",
-    "UmlDiagramModel",
-    "UmlMethodModel",
-    "UmlParameterModel",
-    "UmlRelationshipModel",
-    "UmlVisualModel",
+    "ModeloAtributoUML",
+    "ModeloClaseUML",
+    "ModeloDiagramaUML",
+    "ModeloMetodoUML",
+    "ModeloParametroUML",
+    "ModeloRelacionUML",
+    "ModeloVisualUML",
 ]

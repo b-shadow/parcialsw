@@ -1,3 +1,3 @@
-from app.modules.notificaciones.repositories.push_repository import PushRepository
+from app.modules.notificaciones.repositories.repositorio_push import RepositorioPush
 
-__all__ = ["PushRepository"]
+__all__ = ["RepositorioPush"]

@@ -1,44 +1,48 @@
+import logging
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.core.changelog.hooks import install_change_log_hooks
-from app.core.config.settings import settings
-from app.core.database.session import SessionLocal
-from app.core.nosql.client import mongo_manager
-from app.core.nosql.sync_client import sync_mongo_manager
-from app.core.observability import RequestLoggingMiddleware
-from app.core.redis.client import redis_status
-from app.core.security.headers import SecurityHeadersMiddleware
-from app.core.workers import start_background_workers
-from app.modules.acceso_usuarios.routers.auth import router as auth_router
-from app.modules.acceso_usuarios.routers.health import router as acceso_router
-from app.modules.acceso_usuarios.routers.users import router as users_router
+from app.core.api.intermediario import NombresContratoMiddleware
+from app.core.changelog.ganchos import instalar_ganchos_registro_cambios
+from app.core.config.configuracion import settings
+from app.core.database.sesion import SessionLocal
+from app.core.nosql.cliente import mongo_manager
+from app.core.nosql.cliente_sincrono import sync_mongo_manager
+from app.core.observability import IntermediarioRegistroSolicitudes
+from app.core.redis.cliente import redis_status
+from app.core.security.cabeceras import IntermediarioCabecerasSeguridad
+from app.core.trabajadores import start_background_workers
+from app.modules.acceso_usuarios.routers.autenticacion import router as auth_router
+from app.modules.acceso_usuarios.routers.estado import router as acceso_router
+from app.modules.acceso_usuarios.routers.usuarios import router as users_router
 from app.modules.asistente_proyecto.routers import router as assistant_project_router
 from app.modules.generacion_software.routers.ai import router as ai_router
-from app.modules.generacion_software.routers.generation import router as generation_router
-from app.modules.generacion_software.routers.health import router as generacion_router
-from app.modules.generacion_software.routers.theme import router as theme_router
-from app.modules.modelado_uml.routers.health import router as uml_router
+from app.modules.generacion_software.routers.estado import router as generacion_router
+from app.modules.generacion_software.routers.generacion import router as generation_router
+from app.modules.generacion_software.routers.temas import router as theme_router
+from app.modules.modelado_uml.routers.estado import router as uml_router
 from app.modules.modelado_uml.routers.uml import router as uml_functional_router
 from app.modules.notificaciones.routers import router as notifications_router
-from app.modules.proyectos_colaboracion.routers.change_log import router as change_log_router
-from app.modules.proyectos_colaboracion.routers.health import router as proyectos_router
-from app.modules.proyectos_colaboracion.routers.invitations import (
+from app.modules.proyectos_colaboracion.routers.estado import router as proyectos_router
+from app.modules.proyectos_colaboracion.routers.invitaciones import (
     my_router as my_invitations_router,
 )
-from app.modules.proyectos_colaboracion.routers.invitations import (
+from app.modules.proyectos_colaboracion.routers.invitaciones import (
     router as invitations_router,
 )
-from app.modules.proyectos_colaboracion.routers.mobile import router as mobile_router
-from app.modules.proyectos_colaboracion.routers.projects import router as projects_router
+from app.modules.proyectos_colaboracion.routers.movil import router as mobile_router
+from app.modules.proyectos_colaboracion.routers.proyectos import router as projects_router
+from app.modules.proyectos_colaboracion.routers.registro_cambios import router as change_log_router
 from app.websocket.router import router as websocket_router
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -53,8 +57,8 @@ async def lifespan(app: FastAPI):
         await mongo_manager.close()
 
 
-def create_app() -> FastAPI:
-    install_change_log_hooks()
+def crear_aplicacion() -> FastAPI:
+    instalar_ganchos_registro_cambios()
 
     app = FastAPI(
         title=settings.app_name,
@@ -64,8 +68,21 @@ def create_app() -> FastAPI:
     )
     app.state.mongo_manager = mongo_manager
 
-    app.add_middleware(RequestLoggingMiddleware)
-    app.add_middleware(SecurityHeadersMiddleware)
+    @app.exception_handler(Exception)
+    async def unhandled_error(request: Request, exc: Exception) -> JSONResponse:
+        logger.exception("Unhandled API error on %s", request.url.path, exc_info=exc)
+        response = JSONResponse(
+            status_code=500,
+            content={"detail": {"code": "INTERNAL_SERVER_ERROR", "message": "Error interno del servidor"}},
+        )
+        origin = request.headers.get("origin")
+        if origin in settings.cors_origins:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+        return response
+
+    app.add_middleware(IntermediarioRegistroSolicitudes)
+    app.add_middleware(IntermediarioCabecerasSeguridad)
     if settings.allowed_hosts != ["*"]:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 
@@ -76,6 +93,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(NombresContratoMiddleware)
 
     app.include_router(acceso_router, prefix=settings.api_prefix)
     app.include_router(assistant_project_router, prefix=settings.api_prefix)
@@ -114,23 +132,23 @@ def create_app() -> FastAPI:
         mongodb_ready = mongodb_health.available or not mongodb_health.required
         required_migrations = []
         if settings.ai_messages_migration_required:
-            from app.core.nosql.commands.migrate_ai_memory import MIGRATION_NAME as AI_MIGRATION
+            from app.core.nosql.commands.migrar_memoria_ia import MIGRATION_NAME as AI_MIGRATION
 
             required_migrations.append(("ai_memory_migration", AI_MIGRATION))
         if settings.uml_versions_migration_required:
-            from app.core.nosql.commands.migrate_uml_versions import (
+            from app.core.nosql.commands.migrar_versiones_uml import (
                 MIGRATION_NAME as UML_VERSION_MIGRATION,
             )
 
             required_migrations.append(("uml_version_migration", UML_VERSION_MIGRATION))
         if settings.uml_diagrams_migration_required:
-            from app.core.nosql.commands.migrate_uml_diagrams import (
+            from app.core.nosql.commands.migrar_diagramas_uml import (
                 MIGRATION_NAME as UML_DIAGRAM_MIGRATION,
             )
 
             required_migrations.append(("uml_diagram_migration", UML_DIAGRAM_MIGRATION))
         if settings.phase14_consolidation_required:
-            from app.core.nosql.commands.consolidate import (
+            from app.core.nosql.commands.consolidar import (
                 MIGRATION_NAME as CONSOLIDATION_MIGRATION,
             )
 
@@ -140,12 +158,12 @@ def create_app() -> FastAPI:
         if required_migrations and mongodb_health.available:
             from pymongo.errors import PyMongoError
 
-            from app.core.nosql.contracts import MongoCollection
+            from app.core.nosql.contratos import ColeccionMongo
 
             for component, migration_name in required_migrations:
                 try:
                     checkpoint = await app.state.mongo_manager.database[
-                        MongoCollection.MIGRATION_CHECKPOINTS.value
+                        ColeccionMongo.MIGRATION_CHECKPOINTS.value
                     ].find_one({"migration_name": migration_name}, {"status": 1})
                     migration_statuses[component] = (
                         checkpoint.get("status", "missing") if checkpoint else "missing"
@@ -156,10 +174,10 @@ def create_app() -> FastAPI:
             migration_statuses = {component: "unavailable" for component, _ in required_migrations}
         reconciliation_status: str | None = None
         if settings.nosql_reconciliation_required and mongodb_health.available:
-            from app.core.nosql.contracts import MongoCollection
+            from app.core.nosql.contratos import ColeccionMongo
 
             audit = await app.state.mongo_manager.database[
-                MongoCollection.OPERATIONAL_AUDITS.value
+                ColeccionMongo.OPERATIONAL_AUDITS.value
             ].find_one({}, {"status": 1, "created_at": 1}, sort=[("created_at", -1)])
             if audit is None:
                 reconciliation_status = "missing"
@@ -223,4 +241,4 @@ def create_app() -> FastAPI:
     return app
 
 
-app = create_app()
+app = crear_aplicacion()

@@ -1,3 +1,3 @@
-from app.core.observability.request_logging import RequestLoggingMiddleware
+from app.core.observability.registro_solicitudes import IntermediarioRegistroSolicitudes
 
-__all__ = ["RequestLoggingMiddleware"]
+__all__ = ["IntermediarioRegistroSolicitudes"]

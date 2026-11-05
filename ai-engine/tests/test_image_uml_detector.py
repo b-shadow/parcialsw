@@ -4,17 +4,17 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from ai_engine.preprocessing.image_uml_detector import (
-    DetectedBox,
-    _normalize_type,
+from ai_engine.preprocessing.detector_imagen_uml import (
+    CajaDetectada,
+    _analizar_caja_clase,
+    _analizar_o_completar_clases,
+    _CandidatoOCR,
+    _leer_geometria_cardinalidad,
+    _normalizar_tipo,
     _ocr_is_available,
-    _OcrCandidate,
-    _parse_class_box,
-    _parse_or_complete_classes,
-    _read_cardinality_geometry,
     _recover_common_term,
     _score_ocr_candidate,
-    analyze_uml_image,
+    analizar_imagen_uml,
 )
 
 
@@ -27,7 +27,7 @@ def _encode(image: np.ndarray) -> str:
 def test_real_handwritten_photo_keeps_three_uml_boxes_and_association_class() -> None:
     image_path = Path(__file__).parents[2] / "imapru.jpeg"
 
-    detection = analyze_uml_image(base64.b64encode(image_path.read_bytes()).decode("ascii"))
+    detection = analizar_imagen_uml(base64.b64encode(image_path.read_bytes()).decode("ascii"))
 
     assert len(detection.boxes) == 3
     assert detection.signature == "association_class_triangular"
@@ -85,7 +85,7 @@ def test_detector_handles_low_contrast_noise_and_rotation() -> None:
     matrix = cv2.getRotationMatrix2D((width / 2, height / 2), 5.5, 1)
     rotated = cv2.warpAffine(image, matrix, (width, height), borderValue=(255, 255, 255))
 
-    detection = analyze_uml_image(_encode(rotated))
+    detection = analizar_imagen_uml(_encode(rotated))
 
     assert len(detection.boxes) == 2
     assert len(detection.classes) == 2
@@ -95,8 +95,8 @@ def test_detector_handles_low_contrast_noise_and_rotation() -> None:
 
 
 def test_parser_recovers_uml_syntax_and_approximate_types_from_irregular_ocr() -> None:
-    parsed = _parse_class_box(
-        DetectedBox(
+    parsed = _analizar_caja_clase(
+        CajaDetectada(
             0,
             0,
             300,
@@ -126,14 +126,14 @@ def test_ocr_candidate_prefers_uml_structure_over_high_confidence_noise() -> Non
 
 
 def test_type_normalization_tolerates_common_handwriting_ocr_errors() -> None:
-    assert _normalize_type("UUlD") == "UUID"
-    assert _normalize_type("Dote") == "Date"
-    assert _normalize_type("vo1d") == "void"
+    assert _normalizar_tipo("UUlD") == "UUID"
+    assert _normalizar_tipo("Dote") == "Date"
+    assert _normalizar_tipo("vo1d") == "void"
 
 
 def test_parser_infers_types_for_bare_handwritten_attribute_names() -> None:
-    parsed = _parse_class_box(
-        DetectedBox(0, 0, 260, 220, "Producto\nid\nnombre\nprecio\nstock")
+    parsed = _analizar_caja_clase(
+        CajaDetectada(0, 0, 260, 220, "Producto\nid\nnombre\nprecio\nstock")
     )
 
     assert parsed.name == "Producto"
@@ -147,7 +147,7 @@ def test_parser_infers_types_for_bare_handwritten_attribute_names() -> None:
 
 def test_handwritten_header_voting_recovers_noisy_common_class_name() -> None:
     name, score = _recover_common_term(
-        [_OcrCandidate(text="[cueste ]", confidence=34, score=20)],
+        [_CandidatoOCR(text="[cueste ]", confidence=34, score=20)],
         ("Cliente", "Producto", "Venta"),
         0.60,
     )
@@ -159,8 +159,8 @@ def test_handwritten_header_voting_recovers_noisy_common_class_name() -> None:
 def test_header_voting_requires_a_clear_winner() -> None:
     name, score = _recover_common_term(
         [
-            _OcrCandidate(text="Reserva", confidence=45, score=20),
-            _OcrCandidate(text="Pedido", confidence=45, score=20),
+            _CandidatoOCR(text="Reserva", confidence=45, score=20),
+            _CandidatoOCR(text="Pedido", confidence=45, score=20),
         ],
         ("Reserva", "Pedido"),
         0.60,
@@ -171,11 +171,11 @@ def test_header_voting_requires_a_clear_winner() -> None:
 
 
 def test_unreadable_and_duplicate_classes_are_not_filled_with_invented_members() -> None:
-    classes = _parse_or_complete_classes(
+    classes = _analizar_o_completar_clases(
         [
-            DetectedBox(0, 0, 100, 100, "Cliente\n- correo: String"),
-            DetectedBox(120, 0, 100, 100, "Cliente\n- nombre: String"),
-            DetectedBox(240, 0, 100, 100, ""),
+            CajaDetectada(0, 0, 100, 100, "Cliente\n- correo: String"),
+            CajaDetectada(120, 0, 100, 100, "Cliente\n- nombre: String"),
+            CajaDetectada(240, 0, 100, 100, ""),
         ]
     )
 
@@ -204,14 +204,14 @@ def test_cardinality_geometry_distinguishes_star_one_and_one_to_many() -> None:
     cv2.line(one, (50, 0), (50, 99), (0, 0, 0), 2)
     cv2.line(one, (39, 38), (39, 61), (0, 0, 0), 3)
 
-    assert _read_cardinality_geometry(star, "horizontal", 50) == "*"
-    assert _read_cardinality_geometry(one_to_many, "horizontal", 50) == "1..*"
-    assert _read_cardinality_geometry(one, "vertical", 50) == "1"
+    assert _leer_geometria_cardinalidad(star, "horizontal", 50) == "*"
+    assert _leer_geometria_cardinalidad(one_to_many, "horizontal", 50) == "1..*"
+    assert _leer_geometria_cardinalidad(one, "vertical", 50) == "1"
 
 
 def test_invalid_or_oversized_image_is_rejected_without_crashing() -> None:
-    invalid = analyze_uml_image(base64.b64encode(b"not an image").decode("ascii"))
-    oversized = analyze_uml_image(base64.b64encode(b"x" * (15 * 1024 * 1024 + 1)).decode("ascii"))
+    invalid = analizar_imagen_uml(base64.b64encode(b"not an image").decode("ascii"))
+    oversized = analizar_imagen_uml(base64.b64encode(b"x" * (15 * 1024 * 1024 + 1)).decode("ascii"))
 
     assert invalid.classes == []
     assert "imagen valida" in invalid.observations[0]

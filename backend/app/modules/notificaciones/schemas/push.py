@@ -4,22 +4,22 @@ from uuid import UUID
 from pydantic import BaseModel, Field, HttpUrl
 
 
-class PushKeys(BaseModel):
+class ClavesPush(BaseModel):
     p256dh: str = Field(min_length=16, max_length=512)
     auth: str = Field(min_length=8, max_length=256)
 
 
-class PushSubscriptionCreate(BaseModel):
+class CreacionSuscripcionPush(BaseModel):
     endpoint: HttpUrl
     expiration_time: datetime | None = None
-    keys: PushKeys
+    keys: ClavesPush
 
 
-class PushSubscriptionDelete(BaseModel):
+class EliminacionSuscripcionPush(BaseModel):
     endpoint: HttpUrl
 
 
-class PushSubscriptionResponse(BaseModel):
+class RespuestaSuscripcionPush(BaseModel):
     id: UUID
     endpoint: str
     is_active: bool
@@ -28,6 +28,6 @@ class PushSubscriptionResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class PushConfigResponse(BaseModel):
+class RespuestaConfiguracionPush(BaseModel):
     enabled: bool
     public_key: str | None = None

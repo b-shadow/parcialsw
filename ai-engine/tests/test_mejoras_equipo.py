@@ -3,36 +3,36 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from ai_engine.context.contracts import (
-    ActorContext,
-    AiProjectContext,
-    ContextConstraints,
-    ProjectContext,
-    TeamActivityItem,
+from ai_engine.context.contratos import (
+    ContextoActor,
+    ContextoIAProyecto,
+    ContextoProyecto,
+    ElementoActividadEquipo,
+    RestriccionesContexto,
 )
-from ai_engine.orchestration.intent_classifier import IntentClassifier
-from ai_engine.providers.rule_engine_provider import RuleEngineProvider
+from ai_engine.orchestration.clasificador_intenciones import ClasificadorIntenciones
+from ai_engine.providers.proveedor_reglas import ProveedorReglas
 
 
-def _base_context() -> AiProjectContext:
-    return AiProjectContext(
-        project=ProjectContext(
+def _base_context() -> ContextoIAProyecto:
+    return ContextoIAProyecto(
+        project=ContextoProyecto(
             id=uuid4(),
             name="Sistema de Ventas",
             description="Proyecto colaborativo",
         ),
-        actor=ActorContext(
+        actor=ContextoActor(
             id=uuid4(),
             display_name="Carlos",
             project_role="EDITOR",
             permissions=["diagrams.edit", "ai.prompt"],
         ),
-        constraints=ContextConstraints(),
+        constraints=RestriccionesContexto(),
     )
 
 
 def test_classify_que_hizo_cada_uno_detects_coordinate_team() -> None:
-    classifier = IntentClassifier()
+    classifier = ClasificadorIntenciones()
     intents = classifier.classify("¿Qué hizo cada uno?")
     assert intents, "Debe detectar al menos una intención"
     assert intents[0].name == "coordinate_team"
@@ -56,13 +56,13 @@ def test_classify_que_hizo_cada_uno_detects_coordinate_team() -> None:
 def test_rule_engine_names_both_members_and_their_actions() -> None:
     context = _base_context()
     context.team_activity = [
-        TeamActivityItem(
+        ElementoActividadEquipo(
             user_id=uuid4(),
             display_name="Ana",
             actions=["creó Producto y Categoria", "relacionó Producto con Categoria"],
             last_at=datetime.now(UTC),
         ),
-        TeamActivityItem(
+        ElementoActividadEquipo(
             user_id=uuid4(),
             display_name="Beto",
             actions=["creó Factura", "agregó atributo total"],
@@ -70,8 +70,8 @@ def test_rule_engine_names_both_members_and_their_actions() -> None:
         ),
     ]
 
-    provider = RuleEngineProvider()
-    intents = IntentClassifier().classify("¿Qué hizo cada uno?")
+    provider = ProveedorReglas()
+    intents = ClasificadorIntenciones().classify("¿Qué hizo cada uno?")
     result = provider.complete("¿Qué hizo cada uno?", context, intents)
 
     assert "Ana" in result.answer
@@ -84,13 +84,13 @@ def test_rule_engine_names_both_members_and_their_actions() -> None:
 def test_two_members_touching_same_class_suggests_coordination() -> None:
     context = _base_context()
     context.team_activity = [
-        TeamActivityItem(
+        ElementoActividadEquipo(
             user_id=uuid4(),
             display_name="Ana",
             actions=["creó Producto y Categoria"],
             last_at=datetime.now(UTC),
         ),
-        TeamActivityItem(
+        ElementoActividadEquipo(
             user_id=uuid4(),
             display_name="Beto",
             actions=["modificó Producto y agregó precio"],
@@ -98,8 +98,8 @@ def test_two_members_touching_same_class_suggests_coordination() -> None:
         ),
     ]
 
-    provider = RuleEngineProvider()
-    intents = IntentClassifier().classify("¿Qué hizo cada uno?")
+    provider = ProveedorReglas()
+    intents = ClasificadorIntenciones().classify("¿Qué hizo cada uno?")
     result = provider.complete("¿Qué hizo cada uno?", context, intents)
 
     # Debe contener sugerencia de coordinación
@@ -114,7 +114,7 @@ def test_ai_project_context_without_team_activity_backwards_compatible() -> None
     assert context.team_activity == []
 
     # El motor de reglas responde apropiadamente si está vacío
-    provider = RuleEngineProvider()
-    intents = IntentClassifier().classify("¿Qué hizo cada uno?")
+    provider = ProveedorReglas()
+    intents = ClasificadorIntenciones().classify("¿Qué hizo cada uno?")
     result = provider.complete("¿Qué hizo cada uno?", context, intents)
     assert "no hay actividad" in result.answer.lower()

@@ -1,6 +1,6 @@
 """MongoDB infrastructure for the PostgreSQL/MongoDB persistence boundary."""
 
-from app.core.nosql.client import MongoManager, mongo_manager
-from app.core.nosql.contracts import MongoCollection
+from app.core.nosql.cliente import GestorMongo, mongo_manager
+from app.core.nosql.contratos import ColeccionMongo
 
-__all__ = ["MongoCollection", "MongoManager", "mongo_manager"]
+__all__ = ["ColeccionMongo", "GestorMongo", "mongo_manager"]

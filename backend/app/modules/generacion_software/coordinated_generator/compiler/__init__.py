@@ -1,8 +1,11 @@
-from app.modules.generacion_software.coordinated_generator.compiler.plan_compiler import (
-    compile_generation_plan,
+from app.modules.generacion_software.coordinated_generator.compiler.compilador_plan import (
+    compilar_plan_generacion,
 )
-from app.modules.generacion_software.coordinated_generator.compiler.type_registry import (
-    resolve_logical_type,
+from app.modules.generacion_software.coordinated_generator.compiler.registro_tipos import (
+    resolver_tipo_logico,
 )
 
-__all__ = ["compile_generation_plan", "resolve_logical_type"]
+__all__ = [
+    "compilar_plan_generacion",
+    "resolver_tipo_logico",
+]

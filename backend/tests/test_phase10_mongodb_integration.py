@@ -7,9 +7,9 @@ import pytest
 from pymongo import AsyncMongoClient
 from pymongo.errors import WriteError
 
-from app.core.nosql.contracts import MongoCollection, UmlDiagramDocument
-from app.core.nosql.repositories import UmlDiagramRepository
-from app.core.nosql.schema import ensure_mongo_schema
+from app.core.nosql.contratos import ColeccionMongo, DocumentoDiagramaUML
+from app.core.nosql.esquema import asegurar_esquema_mongo
+from app.core.nosql.repositorios import RepositorioDiagramasUML
 
 MONGODB_TEST_URI = os.getenv("MONGODB_TEST_URI")
 pytestmark = pytest.mark.skipif(not MONGODB_TEST_URI, reason="MONGODB_TEST_URI is not configured")
@@ -27,11 +27,11 @@ def test_phase10_real_mongodb_contracts_indexes_and_repository() -> None:
         database = client[database_name]
         try:
             await client.admin.command("ping")
-            await ensure_mongo_schema(database)
-            await ensure_mongo_schema(database)
+            await asegurar_esquema_mongo(database)
+            await asegurar_esquema_mongo(database)
 
             now = datetime.now(UTC)
-            document = UmlDiagramDocument(
+            document = DocumentoDiagramaUML(
                 _id=uuid4(),
                 project_id=uuid4(),
                 revision=1,
@@ -40,7 +40,7 @@ def test_phase10_real_mongodb_contracts_indexes_and_repository() -> None:
                 created_at=now,
                 updated_at=now,
             )
-            repository = UmlDiagramRepository(database)
+            repository = RepositorioDiagramasUML(database)
             stored = await repository.upsert(document)
             loaded = await repository.get(document.id)
 
@@ -48,11 +48,11 @@ def test_phase10_real_mongodb_contracts_indexes_and_repository() -> None:
             assert loaded is not None and loaded.project_id == document.project_id
             assert await repository.count() == 1
 
-            indexes = await database[MongoCollection.UML_DIAGRAMS.value].index_information()
-            assert "uq_uml_diagrams_project" in indexes
+            indexes = await database[ColeccionMongo.UML_DIAGRAMS.value].index_information()
+            assert "uq_diagramas_uml_proyecto" in indexes
 
             with pytest.raises(WriteError):
-                await database[MongoCollection.UML_DIAGRAMS.value].insert_one(
+                await database[ColeccionMongo.UML_DIAGRAMS.value].insert_one(
                     {"_id": str(uuid4()), "schema_version": 1}
                 )
         finally:

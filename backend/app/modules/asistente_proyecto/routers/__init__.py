@@ -1,3 +1,3 @@
-from app.modules.asistente_proyecto.routers.assistant import router
+from app.modules.asistente_proyecto.routers.rutas_asistente import router
 
 __all__ = ["router"]

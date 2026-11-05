@@ -50,11 +50,11 @@ target-version = "py312"
 # Estos adaptadores son fronteras de tolerancia a fallos: Redis, WebSocket y
 # enriquecimientos opcionales nunca deben interrumpir la transaccion principal.
 "app/core/changelog/*.py" = ["BLE001", "S110"]
-"app/core/redis/client.py" = ["BLE001"]
-"app/modules/acceso_usuarios/services/audit_service.py" = ["BLE001", "S110"]
-"app/modules/asistente_proyecto/services/context_builder.py" = ["BLE001"]
-"app/modules/asistente_proyecto/services/proactive_advisor_service.py" = ["BLE001", "S110"]
-"app/modules/proyectos_colaboracion/validators/project_validator.py" = ["BLE001", "S110"]
+"app/core/redis/cliente.py" = ["BLE001"]
+"app/modules/acceso_usuarios/services/servicio_auditoria.py" = ["BLE001", "S110"]
+"app/modules/asistente_proyecto/services/constructor_contexto.py" = ["BLE001"]
+"app/modules/asistente_proyecto/services/servicio_asesor_proactivo.py" = ["BLE001", "S110"]
+"app/modules/proyectos_colaboracion/validators/validador_proyecto.py" = ["BLE001", "S110"]
 
 [tool.pytest.ini_options]
 pythonpath = ["../ai-engine"]

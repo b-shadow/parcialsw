@@ -1,3 +1,5 @@
-from ai_engine.training.dataset_strategy import get_dataset_strategy
+from ai_engine.training.estrategia_datos import obtener_estrategia_datos
 
-__all__ = ["get_dataset_strategy"]
+__all__ = [
+    "obtener_estrategia_datos",
+]

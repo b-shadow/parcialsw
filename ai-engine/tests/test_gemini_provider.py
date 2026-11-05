@@ -6,9 +6,9 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
-from ai_engine.providers.base import ProviderMessage, ProviderRequest
-from ai_engine.providers.errors import ProviderUnavailableError
-from ai_engine.providers.gemini_provider import GeminiProvider
+from ai_engine.providers.base import MensajeProveedor, SolicitudProveedor
+from ai_engine.providers.errores import ErrorProveedorNoDisponible
+from ai_engine.providers.proveedor_gemini import ProveedorGemini
 
 
 class SampleOutput(BaseModel):
@@ -16,19 +16,19 @@ class SampleOutput(BaseModel):
     count: int
 
 
-def _request() -> ProviderRequest:
-    return ProviderRequest(
+def _request() -> SolicitudProveedor:
+    return SolicitudProveedor(
         model="gemini-2.5-flash",
         messages=[
-            ProviderMessage(role="system", content="Responde en JSON."),
-            ProviderMessage(role="user", content="Hola"),
+            MensajeProveedor(role="system", content="Responde en JSON."),
+            MensajeProveedor(role="user", content="Hola"),
         ],
         correlation_id=uuid4(),
     )
 
 
 def test_gemini_health_without_api_key() -> None:
-    provider = GeminiProvider(api_key=None)
+    provider = ProveedorGemini(api_key=None)
     health = asyncio.run(provider.health())
     assert health.available is False
     assert health.error_code == "missing_api_key"
@@ -66,8 +66,8 @@ def test_gemini_valid_json_response_and_headers() -> None:
         return httpx.Response(404)
 
     transport = httpx.MockTransport(handler)
-    provider = GeminiProvider(api_key="secret-api-key-123", transport=transport)
-    response = asyncio.run(provider.complete_structured(_request(), SampleOutput))
+    provider = ProveedorGemini(api_key="secret-api-key-123", transport=transport)
+    response = asyncio.run(provider.completar_estructura(_request(), SampleOutput))
     asyncio.run(provider.aclose())
 
     assert response.provider == "gemini"
@@ -117,8 +117,8 @@ def test_gemini_retries_on_invalid_json_then_succeeds() -> None:
         )
 
     transport = httpx.MockTransport(handler)
-    provider = GeminiProvider(api_key="test-key", transport=transport, max_retries=2)
-    response = asyncio.run(provider.complete_structured(_request(), SampleOutput))
+    provider = ProveedorGemini(api_key="test-key", transport=transport, max_retries=2)
+    response = asyncio.run(provider.completar_estructura(_request(), SampleOutput))
     asyncio.run(provider.aclose())
 
     assert response.retries == 1
@@ -132,10 +132,10 @@ def test_gemini_rate_limit_429_exhausts_retries_without_leaking_key() -> None:
         return httpx.Response(429, json={"error": {"message": "Resource has been exhausted"}})
 
     transport = httpx.MockTransport(handler)
-    provider = GeminiProvider(api_key=api_key_secret, transport=transport, max_retries=1)
+    provider = ProveedorGemini(api_key=api_key_secret, transport=transport, max_retries=1)
 
-    with pytest.raises(ProviderUnavailableError) as exc_info:
-        asyncio.run(provider.complete_structured(_request(), SampleOutput))
+    with pytest.raises(ErrorProveedorNoDisponible) as exc_info:
+        asyncio.run(provider.completar_estructura(_request(), SampleOutput))
     asyncio.run(provider.aclose())
 
     err_msg = str(exc_info.value)

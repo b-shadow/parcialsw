@@ -6,51 +6,51 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.database.session import get_db
-from app.core.security.dependencies import get_current_user
-from app.modules.acceso_usuarios.models import User
-from app.modules.asistente_proyecto.schemas import AiActionResponse
-from app.modules.asistente_proyecto.services.event_publisher import ProjectAiEventPublisher
-from app.modules.modelado_uml.models import UmlClass, UmlDiagram, UmlRelationship
-from app.modules.modelado_uml.schemas.method_specification import (
-    MethodSpecificationEnvelope,
-    MethodSpecificationProposalResponse,
-    MethodSpecificationRefineRequest,
-    MethodSpecificationValidationResponse,
-    UmlMethodSpecificationCreate,
-    UmlMethodSpecificationPatch,
-    UmlMethodSpecificationResponse,
+from app.core.database.sesion import obtener_sesion_bd
+from app.core.security.dependencias import obtener_usuario_actual
+from app.modules.acceso_usuarios.models import Usuario
+from app.modules.asistente_proyecto.schemas import RespuestaAccionIA
+from app.modules.asistente_proyecto.services.publicador_eventos import PublicadorEventosIAProyecto
+from app.modules.modelado_uml.models import ClaseUML, DiagramaUML, RelacionUML
+from app.modules.modelado_uml.schemas.especificacion_metodo import (
+    CreacionEspecificacionMetodoUML,
+    EnvolturaEspecificacionMetodo,
+    ParcheEspecificacionMetodoUML,
+    RespuestaEspecificacionMetodoUML,
+    RespuestaPropuestaEspecificacionMetodo,
+    RespuestaValidacionEspecificacionMetodo,
+    SolicitudRefinamientoEspecificacionMetodo,
 )
 from app.modules.modelado_uml.schemas.uml import (
-    DiagramCreateRequest,
-    DiagramModelResponse,
-    DiagramResponse,
-    MoveElementRequest,
-    TextToUmlRequest,
-    UmlAttributeCreateRequest,
-    UmlAttributeResponse,
-    UmlAttributeUpdateRequest,
-    UmlClassCreateRequest,
-    UmlClassResponse,
-    UmlClassUpdateRequest,
-    UmlMethodCreateRequest,
-    UmlMethodResponse,
-    UmlMethodUpdateRequest,
-    UmlParameterCreateRequest,
-    UmlParameterResponse,
-    UmlParameterUpdateRequest,
-    UmlRelationshipCreateRequest,
-    UmlRelationshipResponse,
-    UmlRelationshipUpdateRequest,
-    UmlValidationResponse,
-    UmlVisualElementResponse,
-    XmiExportResponse,
-    XmiImportRequest,
+    RespuestaAtributoUML,
+    RespuestaClaseUML,
+    RespuestaDiagrama,
+    RespuestaElementoVisualUML,
+    RespuestaExportacionXMI,
+    RespuestaMetodoUML,
+    RespuestaModeloDiagrama,
+    RespuestaParametroUML,
+    RespuestaRelacionUML,
+    RespuestaValidacionUML,
+    SolicitudActualizacionAtributoUML,
+    SolicitudActualizacionClaseUML,
+    SolicitudActualizacionMetodoUML,
+    SolicitudActualizacionParametroUML,
+    SolicitudActualizacionRelacionUML,
+    SolicitudCreacionAtributoUML,
+    SolicitudCreacionClaseUML,
+    SolicitudCreacionDiagrama,
+    SolicitudCreacionMetodoUML,
+    SolicitudCreacionParametroUML,
+    SolicitudCreacionRelacionUML,
+    SolicitudImportacionXMI,
+    SolicitudMoverElemento,
+    SolicitudTextoAUML,
 )
-from app.modules.modelado_uml.services.method_specification_service import (
-    MethodSpecificationService,
+from app.modules.modelado_uml.services.servicio_especificacion_metodo import (
+    ServicioEspecificacionMetodo,
 )
-from app.modules.modelado_uml.services.uml_service import UmlService
+from app.modules.modelado_uml.services.servicio_uml import ServicioUML
 
 router = APIRouter(prefix="/uml", tags=["modelado-uml"])
 logger = logging.getLogger(__name__)
@@ -58,15 +58,15 @@ logger = logging.getLogger(__name__)
 
 @router.get(
     "/methods/{method_id}/specification",
-    response_model=MethodSpecificationEnvelope,
+    response_model=EnvolturaEspecificacionMetodo,
 )
-def get_method_specification(
+def obtener_especificacion_metodo(
     method_id: UUID,
     response: Response,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
 ) -> object:
-    result = MethodSpecificationService(db).get(method_id, current_user.id)
+    result = ServicioEspecificacionMetodo(db).get(method_id, current_user.id)
     if result.specification:
         response.headers["ETag"] = f'"revision-{result.specification.revision}"'
     return result
@@ -74,18 +74,18 @@ def get_method_specification(
 
 @router.put(
     "/methods/{method_id}/specification",
-    response_model=UmlMethodSpecificationResponse,
+    response_model=RespuestaEspecificacionMetodoUML,
 )
 async def put_method_specification(
     method_id: UUID,
-    payload: UmlMethodSpecificationCreate,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    payload: CreacionEspecificacionMetodoUML,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
     response: Response,
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
     if_none_match: Annotated[str | None, Header(alias="If-None-Match")] = None,
 ) -> object:
-    service = MethodSpecificationService(db)
+    service = ServicioEspecificacionMetodo(db)
     expected = _parse_revision(if_match) if if_match else None
     if if_none_match != "*" and expected is None:
         raise HTTPException(status_code=428, detail="Use If-Match o If-None-Match")
@@ -96,7 +96,7 @@ async def put_method_specification(
         expected_revision=expected,
         create_only=if_none_match == "*",
     )
-    context = service.event_context(method_id, current_user.id)
+    context = service.contexto_evento(method_id, current_user.id)
     event_type = "METHOD_SPECIFICATION_CREATED" if item.revision == 1 else "METHOD_SPECIFICATION_UPDATED"
     await _publish_method_event(context, current_user, event_type, item.revision, list(payload.model_fields_set))
     response.headers["ETag"] = f'"revision-{item.revision}"'
@@ -105,23 +105,23 @@ async def put_method_specification(
 
 @router.patch(
     "/methods/{method_id}/specification",
-    response_model=UmlMethodSpecificationResponse,
+    response_model=RespuestaEspecificacionMetodoUML,
 )
 async def patch_method_specification(
     method_id: UUID,
-    payload: UmlMethodSpecificationPatch,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    payload: ParcheEspecificacionMetodoUML,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
     response: Response,
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> object:
     if if_match is None:
         raise HTTPException(status_code=428, detail="Use If-Match con la revision observada")
-    service = MethodSpecificationService(db)
+    service = ServicioEspecificacionMetodo(db)
     item = service.patch(
         method_id, payload, current_user.id, expected_revision=_parse_revision(if_match)
     )
-    context = service.event_context(method_id, current_user.id)
+    context = service.contexto_evento(method_id, current_user.id)
     await _publish_method_event(
         context,
         current_user,
@@ -134,15 +134,15 @@ async def patch_method_specification(
 
 
 @router.delete("/methods/{method_id}/specification", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_method_specification(
+async def eliminar_especificacion_metodo(
     method_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> None:
     if if_match is None:
         raise HTTPException(status_code=428, detail="Use If-Match con la revision observada")
-    service = MethodSpecificationService(db)
+    service = ServicioEspecificacionMetodo(db)
     context = service.delete(
         method_id, current_user.id, expected_revision=_parse_revision(if_match)
     )
@@ -153,35 +153,35 @@ async def delete_method_specification(
 
 @router.post(
     "/methods/{method_id}/specification/validate",
-    response_model=MethodSpecificationValidationResponse,
+    response_model=RespuestaValidacionEspecificacionMetodo,
 )
-def validate_method_specification(
+def validar_especificacion_metodo(
     method_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
     strict: bool = Query(default=False),
 ) -> object:
-    return MethodSpecificationService(db).validate(
+    return ServicioEspecificacionMetodo(db).validate(
         method_id, current_user.id, strict=strict
     )
 
 
 @router.post(
     "/methods/{method_id}/specification/refine",
-    response_model=MethodSpecificationProposalResponse,
+    response_model=RespuestaPropuestaEspecificacionMetodo,
 )
 async def refine_method_specification(
     method_id: UUID,
-    payload: MethodSpecificationRefineRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    payload: SolicitudRefinamientoEspecificacionMetodo,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
 ) -> object:
-    proposal, action, context = MethodSpecificationService(db).refine(
+    proposal, action, context = ServicioEspecificacionMetodo(db).refine(
         method_id, payload, current_user.id
     )
     try:
-        publisher = ProjectAiEventPublisher()
-        await publisher.publish_persisted(
+        publisher = PublicadorEventosIAProyecto()
+        await publisher.publicar_persistido(
             project_id=context.diagram.project_id,
             actor_user_id=current_user.id,
             event_type="METHOD_SPECIFICATION_REFINED",
@@ -195,11 +195,11 @@ async def refine_method_specification(
             correlation_id=uuid4(),
             diagram_id=context.diagram.id,
         )
-        await publisher.publish_persisted(
+        await publisher.publicar_persistido(
             project_id=context.diagram.project_id,
             actor_user_id=current_user.id,
             event_type="AI_ACTION_PROPOSED",
-            payload=AiActionResponse.model_validate(action).model_dump(mode="json"),
+            payload=RespuestaAccionIA.model_validate(action).model_dump(mode="json"),
             correlation_id=uuid4(),
             diagram_id=context.diagram.id,
         )
@@ -217,7 +217,7 @@ def _parse_revision(value: str) -> int:
 
 async def _publish_method_event(context, user, event_type, revision, changed_fields):
     try:
-        await ProjectAiEventPublisher().publish_persisted(
+        await PublicadorEventosIAProyecto().publicar_persistido(
             project_id=context.diagram.project_id,
             actor_user_id=user.id,
             event_type=event_type,
@@ -235,255 +235,255 @@ async def _publish_method_event(context, user, event_type, revision, changed_fie
         logger.exception("No se pudo publicar el evento de especificacion ya confirmada")
 
 
-@router.post("/diagrams", response_model=DiagramResponse, status_code=status.HTTP_201_CREATED)
-def create_diagram(
-    payload: DiagramCreateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlDiagram:
-    return UmlService(db).create_diagram(payload, current_user.id)
+@router.post("/diagrams", response_model=RespuestaDiagrama, status_code=status.HTTP_201_CREATED)
+def crear_diagrama(
+    payload: SolicitudCreacionDiagrama,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> DiagramaUML:
+    return ServicioUML(db).crear_diagrama(payload, current_user.id)
 
 
-@router.get("/projects/{project_id}/diagrams", response_model=list[DiagramResponse])
-def list_diagrams(
+@router.get("/projects/{project_id}/diagrams", response_model=list[RespuestaDiagrama])
+def listar_diagramas(
     project_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> list[UmlDiagram]:
-    return UmlService(db).list_diagrams(project_id, current_user.id)
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> list[DiagramaUML]:
+    return ServicioUML(db).listar_diagramas(project_id, current_user.id)
 
 
 @router.delete("/diagrams/{diagram_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_diagram(
+def eliminar_diagrama(
     diagram_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
 ) -> None:
-    UmlService(db).delete_diagram(diagram_id, current_user.id)
+    ServicioUML(db).eliminar_diagrama(diagram_id, current_user.id)
 
 
 @router.post(
     "/diagrams/{diagram_id}/classes",
-    response_model=UmlClassResponse,
+    response_model=RespuestaClaseUML,
     status_code=status.HTTP_201_CREATED,
 )
-def create_class(
+def crear_clase(
     diagram_id: UUID,
-    payload: UmlClassCreateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlClass:
-    return UmlService(db).create_class(diagram_id, payload, current_user.id)
+    payload: SolicitudCreacionClaseUML,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> ClaseUML:
+    return ServicioUML(db).crear_clase(diagram_id, payload, current_user.id)
 
 
-@router.get("/diagrams/{diagram_id}/classes", response_model=list[UmlClassResponse])
-def list_classes(
+@router.get("/diagrams/{diagram_id}/classes", response_model=list[RespuestaClaseUML])
+def listar_clases(
     diagram_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> list[UmlClass]:
-    return UmlService(db).list_classes(diagram_id, current_user.id)
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> list[ClaseUML]:
+    return ServicioUML(db).listar_clases(diagram_id, current_user.id)
 
 
-@router.get("/diagrams/{diagram_id}/model", response_model=DiagramModelResponse)
-def get_diagram_model(
+@router.get("/diagrams/{diagram_id}/model", response_model=RespuestaModeloDiagrama)
+def obtener_modelo_diagrama(
     diagram_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> DiagramModelResponse:
-    return UmlService(db).get_diagram_model(diagram_id, current_user.id)
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> RespuestaModeloDiagrama:
+    return ServicioUML(db).obtener_modelo_diagrama(diagram_id, current_user.id)
 
 
-@router.patch("/classes/{class_id}", response_model=UmlClassResponse)
-def update_class(
+@router.patch("/classes/{class_id}", response_model=RespuestaClaseUML)
+def actualizar_clase(
     class_id: UUID,
-    payload: UmlClassUpdateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlClass:
-    return UmlService(db).update_class(class_id, payload, current_user.id)
+    payload: SolicitudActualizacionClaseUML,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> ClaseUML:
+    return ServicioUML(db).actualizar_clase(class_id, payload, current_user.id)
 
 
 @router.delete("/classes/{class_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_class(
+def eliminar_clase(
     class_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
 ) -> None:
-    UmlService(db).delete_class(class_id, current_user.id)
+    ServicioUML(db).eliminar_clase(class_id, current_user.id)
 
 
-@router.post("/classes/{class_id}/attributes", response_model=UmlAttributeResponse, status_code=status.HTTP_201_CREATED)
-def add_attribute(
+@router.post("/classes/{class_id}/attributes", response_model=RespuestaAtributoUML, status_code=status.HTTP_201_CREATED)
+def agregar_atributo(
     class_id: UUID,
-    payload: UmlAttributeCreateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlAttributeResponse:
-    return UmlService(db).add_attribute(class_id, payload, current_user.id)
+    payload: SolicitudCreacionAtributoUML,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> RespuestaAtributoUML:
+    return ServicioUML(db).agregar_atributo(class_id, payload, current_user.id)
 
 
-@router.patch("/attributes/{attribute_id}", response_model=UmlAttributeResponse)
-def update_attribute(
+@router.patch("/attributes/{attribute_id}", response_model=RespuestaAtributoUML)
+def actualizar_atributo(
     attribute_id: UUID,
-    payload: UmlAttributeUpdateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlAttributeResponse:
-    return UmlService(db).update_attribute(attribute_id, payload, current_user.id)
+    payload: SolicitudActualizacionAtributoUML,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> RespuestaAtributoUML:
+    return ServicioUML(db).actualizar_atributo(attribute_id, payload, current_user.id)
 
 
 @router.delete("/attributes/{attribute_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_attribute(
+def eliminar_atributo(
     attribute_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
 ) -> None:
-    UmlService(db).delete_attribute(attribute_id, current_user.id)
+    ServicioUML(db).eliminar_atributo(attribute_id, current_user.id)
 
 
-@router.post("/classes/{class_id}/methods", response_model=UmlMethodResponse, status_code=status.HTTP_201_CREATED)
-def add_method(
+@router.post("/classes/{class_id}/methods", response_model=RespuestaMetodoUML, status_code=status.HTTP_201_CREATED)
+def agregar_metodo(
     class_id: UUID,
-    payload: UmlMethodCreateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlMethodResponse:
-    return UmlService(db).add_method(class_id, payload, current_user.id)
+    payload: SolicitudCreacionMetodoUML,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> RespuestaMetodoUML:
+    return ServicioUML(db).agregar_metodo(class_id, payload, current_user.id)
 
 
-@router.patch("/methods/{method_id}", response_model=UmlMethodResponse)
-def update_method(
+@router.patch("/methods/{method_id}", response_model=RespuestaMetodoUML)
+def actualizar_metodo(
     method_id: UUID,
-    payload: UmlMethodUpdateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlMethodResponse:
-    return UmlService(db).update_method(method_id, payload, current_user.id)
+    payload: SolicitudActualizacionMetodoUML,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> RespuestaMetodoUML:
+    return ServicioUML(db).actualizar_metodo(method_id, payload, current_user.id)
 
 
 @router.delete("/methods/{method_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_method(
+def eliminar_metodo(
     method_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
 ) -> None:
-    UmlService(db).delete_method(method_id, current_user.id)
+    ServicioUML(db).eliminar_metodo(method_id, current_user.id)
 
 
-@router.post("/methods/{method_id}/parameters", response_model=UmlParameterResponse, status_code=status.HTTP_201_CREATED)
-def add_parameter(
+@router.post("/methods/{method_id}/parameters", response_model=RespuestaParametroUML, status_code=status.HTTP_201_CREATED)
+def agregar_parametro(
     method_id: UUID,
-    payload: UmlParameterCreateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlParameterResponse:
-    return UmlService(db).add_parameter(method_id, payload, current_user.id)
+    payload: SolicitudCreacionParametroUML,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> RespuestaParametroUML:
+    return ServicioUML(db).agregar_parametro(method_id, payload, current_user.id)
 
 
-@router.patch("/parameters/{parameter_id}", response_model=UmlParameterResponse)
-def update_parameter(
+@router.patch("/parameters/{parameter_id}", response_model=RespuestaParametroUML)
+def actualizar_parametro(
     parameter_id: UUID,
-    payload: UmlParameterUpdateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlParameterResponse:
-    return UmlService(db).update_parameter(parameter_id, payload, current_user.id)
+    payload: SolicitudActualizacionParametroUML,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> RespuestaParametroUML:
+    return ServicioUML(db).actualizar_parametro(parameter_id, payload, current_user.id)
 
 
 @router.delete("/parameters/{parameter_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_parameter(
+def eliminar_parametro(
     parameter_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
 ) -> None:
-    UmlService(db).delete_parameter(parameter_id, current_user.id)
+    ServicioUML(db).eliminar_parametro(parameter_id, current_user.id)
 
 
 @router.post(
     "/diagrams/{diagram_id}/relationships",
-    response_model=UmlRelationshipResponse,
+    response_model=RespuestaRelacionUML,
     status_code=status.HTTP_201_CREATED,
 )
-def create_relationship(
+def crear_relacion(
     diagram_id: UUID,
-    payload: UmlRelationshipCreateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlRelationship:
-    return UmlService(db).create_relationship(diagram_id, payload, current_user.id)
+    payload: SolicitudCreacionRelacionUML,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> RelacionUML:
+    return ServicioUML(db).crear_relacion(diagram_id, payload, current_user.id)
 
 
-@router.patch("/relationships/{relationship_id}", response_model=UmlRelationshipResponse)
-def update_relationship(
+@router.patch("/relationships/{relationship_id}", response_model=RespuestaRelacionUML)
+def actualizar_relacion(
     relationship_id: UUID,
-    payload: UmlRelationshipUpdateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlRelationship:
-    return UmlService(db).update_relationship(relationship_id, payload, current_user.id)
+    payload: SolicitudActualizacionRelacionUML,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> RelacionUML:
+    return ServicioUML(db).actualizar_relacion(relationship_id, payload, current_user.id)
 
 
 @router.delete("/relationships/{relationship_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_relationship(
+def eliminar_relacion(
     relationship_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
 ) -> None:
-    UmlService(db).delete_relationship(relationship_id, current_user.id)
+    ServicioUML(db).eliminar_relacion(relationship_id, current_user.id)
 
 
-@router.patch("/diagrams/{diagram_id}/visual-elements", response_model=UmlVisualElementResponse)
-def move_element(
+@router.patch("/diagrams/{diagram_id}/visual-elements", response_model=RespuestaElementoVisualUML)
+def mover_elemento(
     diagram_id: UUID,
-    payload: MoveElementRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlVisualElementResponse:
-    return UmlService(db).move_element(diagram_id, payload, current_user.id)
+    payload: SolicitudMoverElemento,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> RespuestaElementoVisualUML:
+    return ServicioUML(db).mover_elemento(diagram_id, payload, current_user.id)
 
 
-@router.post("/diagrams/{diagram_id}/validate", response_model=UmlValidationResponse)
-def validate_diagram(
+@router.post("/diagrams/{diagram_id}/validate", response_model=RespuestaValidacionUML)
+def validar_diagrama(
     diagram_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlValidationResponse:
-    return UmlService(db).validate_diagram(diagram_id, current_user.id)
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> RespuestaValidacionUML:
+    return ServicioUML(db).validar_diagrama(diagram_id, current_user.id)
 
 
-@router.post("/generate", response_model=DiagramResponse, status_code=status.HTTP_201_CREATED)
-def generate_from_prompt(
-    payload: TextToUmlRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlDiagram:
-    return UmlService(db).generate_from_prompt(payload, current_user.id)
+@router.post("/generate", response_model=RespuestaDiagrama, status_code=status.HTTP_201_CREATED)
+def generar_desde_instruccion(
+    payload: SolicitudTextoAUML,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> DiagramaUML:
+    return ServicioUML(db).generar_desde_instruccion(payload, current_user.id)
 
 
-@router.post("/xmi/import", response_model=DiagramResponse, status_code=status.HTTP_201_CREATED)
-def import_xmi_diagram(
-    payload: XmiImportRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlDiagram:
-    return UmlService(db).import_diagram_xmi(payload, current_user.id)
+@router.post("/xmi/import", response_model=RespuestaDiagrama, status_code=status.HTTP_201_CREATED)
+def importar_diagrama_xmi(
+    payload: SolicitudImportacionXMI,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> DiagramaUML:
+    return ServicioUML(db).importar_diagrama_xmi(payload, current_user.id)
 
 
-@router.post("/diagrams/{diagram_id}/xmi/import", response_model=DiagramResponse)
-def import_xmi_into_diagram(
+@router.post("/diagrams/{diagram_id}/xmi/import", response_model=RespuestaDiagrama)
+def importar_xmi_en_diagrama(
     diagram_id: UUID,
-    payload: XmiImportRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> UmlDiagram:
-    return UmlService(db).import_diagram_xmi_into_existing(diagram_id, payload, current_user.id)
+    payload: SolicitudImportacionXMI,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> DiagramaUML:
+    return ServicioUML(db).importar_diagrama_xmi_en_existente(diagram_id, payload, current_user.id)
 
 
-@router.get("/diagrams/{diagram_id}/xmi", response_model=XmiExportResponse)
-def export_xmi_diagram(
+@router.get("/diagrams/{diagram_id}/xmi", response_model=RespuestaExportacionXMI)
+def exportar_diagrama_xmi(
     diagram_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-) -> XmiExportResponse:
-    return UmlService(db).export_diagram_xmi(diagram_id, current_user.id)
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> RespuestaExportacionXMI:
+    return ServicioUML(db).exportar_diagrama_xmi(diagram_id, current_user.id)

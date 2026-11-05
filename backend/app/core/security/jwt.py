@@ -3,10 +3,10 @@ from uuid import UUID
 
 from jose import JWTError, jwt
 
-from app.core.config.settings import settings
+from app.core.config.configuracion import settings
 
 
-def create_access_token(user_id: UUID, expires_delta: timedelta | None = None) -> str:
+def crear_token_acceso(user_id: UUID, expires_delta: timedelta | None = None) -> str:
     expires_at = datetime.now(UTC) + (
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )

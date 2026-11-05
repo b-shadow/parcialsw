@@ -111,6 +111,8 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg://case_test:case_test_password@127.0.0.1:5432/case_inteligente_nosql_test
       MONGODB_TEST_URI: mongodb://case_test:case_test_password@127.0.0.1:27017/?authSource=admin
+      MONGODB_URI: mongodb://case_test:case_test_password@127.0.0.1:27017/?authSource=admin
+      MONGODB_DATABASE: case_inteligente_nosql_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -125,7 +127,7 @@ jobs:
       - name: Prepare pre-cutover PostgreSQL schema
         working-directory: backend
         run: python -m alembic upgrade c1e5f6a7b8c9
-      - name: Validate MongoDB schema and all document migrations
+      - name: Validate MongoDB schema before SQL retirement
         working-directory: backend
         env:
           NOSQL_CONSOLIDATED_MODE: "false"
@@ -136,16 +138,20 @@ jobs:
         run: >-
           python -m pytest
           tests/test_phase10_mongodb_integration.py
-          tests/test_phase11_ai_memory_integration.py
-          tests/test_phase12_uml_versions_integration.py
-          tests/test_phase13_uml_diagrams_integration.py
-          tests/test_phase14_backup_integration.py
           -q
       - name: Complete physical retirement
         working-directory: backend
         run: |
           python -m alembic upgrade head
-          python -m pytest tests/test_phase14_retirement_integration.py -q
+          python -m pytest \
+            tests/test_phase14_retirement_integration.py \
+            tests/test_current_ai_memory_integration.py \
+            tests/test_current_uml_diagrams_integration.py \
+            tests/test_assistant_mongodb_integration.py \
+            tests/test_mongo_nombres_integracion.py \
+            tests/test_http_contrato_espanol_integracion.py \
+            tests/test_phase14_backup_integration.py \
+            -q
           python -m alembic check
 
   frontend-quality:

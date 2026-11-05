@@ -16,4 +16,4 @@ COPY ai-engine/README.md ./README.md
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir .
 
-CMD ["python", "-m", "ai_engine.inference.health"]
+CMD ["python", "-m", "ai_engine.inference.estado"]

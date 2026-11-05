@@ -1,22 +1,22 @@
-from ai_engine.inference.health import check_health
-from ai_engine.preprocessing import analyze_uml_image
-from ai_engine.services import LocalAIService
-from ai_engine.services.contracts import (
-    ImageProcessingRequest,
-    SoftwarePlanRequest,
-    UmlAttribute,
-    UmlClass,
-    UmlGenerationRequest,
-    UmlMethod,
-    UmlModificationRequest,
-    UmlRelationship,
-    UmlValidationRequest,
-    VoiceProcessingRequest,
+from ai_engine.inference.estado import comprobar_estado
+from ai_engine.preprocessing import analizar_imagen_uml
+from ai_engine.services import ServicioIALocal
+from ai_engine.services.contratos import (
+    AtributoUMLMotor,
+    ClaseUMLMotor,
+    MetodoUMLMotor,
+    RelacionUMLMotor,
+    SolicitudGeneracionUML,
+    SolicitudModificacionUML,
+    SolicitudPlanSoftware,
+    SolicitudProcesamientoImagen,
+    SolicitudProcesamientoVoz,
+    SolicitudValidacionUML,
 )
 
 
 def test_ai_engine_health_is_offline() -> None:
-    health = check_health()
+    health = comprobar_estado()
 
     assert health["status"] == "ok"
     assert health["mode"] == "local-offline"
@@ -24,13 +24,13 @@ def test_ai_engine_health_is_offline() -> None:
 
 
 def test_text_voice_and_image_generate_structured_uml() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    text = service.text_to_uml(
-        UmlGenerationRequest(prompt="Crear sistema de biblioteca con libros, usuarios y prestamos")
+    text = service.texto_a_uml(
+        SolicitudGeneracionUML(prompt="Crear sistema de biblioteca con libros, usuarios y prestamos")
     )
-    voice = service.voice_to_uml(VoiceProcessingRequest(transcript="Sistema academico con cursos y docentes"))
-    image = service.image_to_uml(ImageProcessingRequest(description="Diagrama UML con Cliente y Pedido"))
+    voice = service.voz_a_uml(SolicitudProcesamientoVoz(transcript="Sistema academico con cursos y docentes"))
+    image = service.imagen_a_uml(SolicitudProcesamientoImagen(description="Diagrama UML con Cliente y Pedido"))
 
     assert text.classes
     assert voice.classes
@@ -58,7 +58,7 @@ def test_image_detector_identifies_association_class_geometry(monkeypatch) -> No
     ok, encoded = cv2.imencode(".jpg", image)
 
     assert ok
-    detection = analyze_uml_image(base64.b64encode(encoded.tobytes()).decode("ascii"))
+    detection = analizar_imagen_uml(base64.b64encode(encoded.tobytes()).decode("ascii"))
 
     assert len(detection.boxes) == 3
     assert detection.signature == "association_class_triangular"
@@ -77,8 +77,8 @@ def test_image_detector_identifies_association_class_geometry(monkeypatch) -> No
     )
 
     monkeypatch.setenv("OLLAMA_VISION_ENABLED", "false")
-    response = LocalAIService().image_to_uml(
-        ImageProcessingRequest(image_base64=base64.b64encode(encoded.tobytes()).decode("ascii"))
+    response = ServicioIALocal().imagen_a_uml(
+        SolicitudProcesamientoImagen(image_base64=base64.b64encode(encoded.tobytes()).decode("ascii"))
     )
     assert response.classes == []
     assert response.relationships == []
@@ -87,10 +87,10 @@ def test_image_detector_identifies_association_class_geometry(monkeypatch) -> No
 
 
 def test_text_generates_single_class_with_requested_attributes() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.text_to_uml(
-        UmlGenerationRequest(
+    response = service.texto_a_uml(
+        SolicitudGeneracionUML(
             prompt="generar una clase con atributos id que es UUID y nombre que es string"
         )
     )
@@ -104,7 +104,7 @@ def test_text_generates_single_class_with_requested_attributes() -> None:
 
 
 def test_text_and_voice_generate_academic_association_class() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
     prompt = (
         "Crea un diagrama UML con Estudiante, Curso e Inscripcion. "
         "Estudiante y Curso tienen una relacion muchos a muchos. "
@@ -112,8 +112,8 @@ def test_text_and_voice_generate_academic_association_class() -> None:
         "La multiplicidad en ambos extremos debe ser *."
     )
 
-    text = service.text_to_uml(UmlGenerationRequest(prompt=prompt))
-    voice = service.voice_to_uml(VoiceProcessingRequest(transcript=prompt))
+    text = service.texto_a_uml(SolicitudGeneracionUML(prompt=prompt))
+    voice = service.voz_a_uml(SolicitudProcesamientoVoz(transcript=prompt))
 
     for response in (text, voice):
         assert [uml_class.name for uml_class in response.classes] == [
@@ -135,20 +135,20 @@ def test_text_and_voice_generate_academic_association_class() -> None:
 
 
 def test_modify_existing_uml_adds_association_class() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.modify_uml(
-        UmlModificationRequest(
+    response = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction=(
                 "entre la clase Estudiante y Curso haz una association class y en la "
                 "resultante sera clase Detalle con atributos nombre string y id UUID"
             ),
             classes=[
-                UmlClass(name="Estudiante", attributes=[UmlAttribute(name="id", data_type="UUID")]),
-                UmlClass(name="Curso", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Estudiante", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Curso", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
             ],
             relationships=[
-                UmlRelationship(source="Estudiante", target="Curso", relationship_type="association")
+                RelacionUMLMotor(source="Estudiante", target="Curso", relationship_type="association")
             ],
         )
     )
@@ -165,14 +165,14 @@ def test_modify_existing_uml_adds_association_class() -> None:
 
 
 def test_modify_existing_uml_adds_attribute_to_named_class() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.modify_uml(
-        UmlModificationRequest(
+    response = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction="agrega atributo fecha Date a la clase Estudiante",
             classes=[
-                UmlClass(name="Estudiante", attributes=[UmlAttribute(name="id", data_type="UUID")]),
-                UmlClass(name="Curso", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Estudiante", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Curso", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
             ],
         )
     )
@@ -186,16 +186,16 @@ def test_modify_existing_uml_adds_attribute_to_named_class() -> None:
 
 
 def test_modify_existing_uml_creates_class_and_one_to_one_relationship_with_table() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.modify_uml(
-        UmlModificationRequest(
+    response = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction=(
                 "crea clase Perfil con los atributos id UUID y biografia String "
                 "que conecte de 1 a 1 con la tabla Usuario"
             ),
             classes=[
-                UmlClass(name="Usuario", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Usuario", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
             ],
         )
     )
@@ -212,17 +212,17 @@ def test_modify_existing_uml_creates_class_and_one_to_one_relationship_with_tabl
 
 
 def test_modify_existing_uml_processes_multiple_operations_in_one_instruction() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.modify_uml(
-        UmlModificationRequest(
+    response = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction=(
                 "crea clase Perfil con los atributos id UUID y biografia String que conecte de 1 a 1 "
                 "con la tabla Usuario, agrega atributo activo Boolean a la clase Usuario y crea clase "
                 "Preferencia con los atributos id UUID y tema String que conecte de 1 a muchos con la tabla Perfil"
             ),
             classes=[
-                UmlClass(name="Usuario", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Usuario", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
             ],
         )
     )
@@ -257,13 +257,13 @@ def test_modify_existing_uml_processes_multiple_operations_in_one_instruction() 
 
 
 def test_modify_existing_uml_understands_voice_field_synonyms() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.modify_uml(
-        UmlModificationRequest(
+    response = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction="ponle el campo telefono String a la clase Cliente",
             classes=[
-                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Cliente", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
             ],
         )
     )
@@ -276,14 +276,14 @@ def test_modify_existing_uml_understands_voice_field_synonyms() -> None:
 
 
 def test_modify_existing_uml_creates_relationship_from_voice_instruction() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.modify_uml(
-        UmlModificationRequest(
+    response = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction="conecta Cliente con Pedido de uno a muchos",
             classes=[
-                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
-                UmlClass(name="Pedido", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Cliente", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Pedido", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
             ],
         )
     )
@@ -295,16 +295,16 @@ def test_modify_existing_uml_creates_relationship_from_voice_instruction() -> No
 
 
 def test_modify_existing_uml_creates_table_with_fields_and_relationship_synonyms() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.modify_uml(
-        UmlModificationRequest(
+    response = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction=(
                 "crea la tabla Factura que tenga id UUID y total Double "
                 "y conectala de uno a muchos con la entidad Cliente"
             ),
             classes=[
-                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Cliente", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
             ],
         )
     )
@@ -321,17 +321,17 @@ def test_modify_existing_uml_creates_table_with_fields_and_relationship_synonyms
 
 
 def test_modify_existing_uml_processes_mixed_voice_batch_instruction() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.modify_uml(
-        UmlModificationRequest(
+    response = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction=(
                 "ponle campo telefono String a Cliente, conecta Cliente con Pedido de uno a muchos "
                 "y crea tabla Pago con campos id UUID y monto Double que conecte de uno a uno con Pedido"
             ),
             classes=[
-                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
-                UmlClass(name="Pedido", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Cliente", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Pedido", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
             ],
         )
     )
@@ -360,17 +360,17 @@ def test_modify_existing_uml_processes_mixed_voice_batch_instruction() -> None:
 
 
 def test_modify_existing_uml_renames_class_and_updates_relationships() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.modify_uml(
-        UmlModificationRequest(
+    response = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction="renombra la clase Cliente a Comprador",
             classes=[
-                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
-                UmlClass(name="Pedido", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Cliente", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Pedido", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
             ],
             relationships=[
-                UmlRelationship(source="Cliente", target="Pedido", relationship_type="association")
+                RelacionUMLMotor(source="Cliente", target="Pedido", relationship_type="association")
             ],
         )
     )
@@ -382,17 +382,17 @@ def test_modify_existing_uml_renames_class_and_updates_relationships() -> None:
 
 
 def test_modify_existing_uml_removes_attribute_from_voice_instruction() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.modify_uml(
-        UmlModificationRequest(
+    response = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction="quita campo telefono de Cliente",
             classes=[
-                UmlClass(
+                ClaseUMLMotor(
                     name="Cliente",
                     attributes=[
-                        UmlAttribute(name="id", data_type="UUID"),
-                        UmlAttribute(name="telefono", data_type="String"),
+                        AtributoUMLMotor(name="id", data_type="UUID"),
+                        AtributoUMLMotor(name="telefono", data_type="String"),
                     ],
                 ),
             ],
@@ -407,15 +407,15 @@ def test_modify_existing_uml_removes_attribute_from_voice_instruction() -> None:
 
 
 def test_modify_existing_uml_uses_selected_class_for_implicit_attribute_edit() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.modify_uml(
-        UmlModificationRequest(
+    response = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction="ponle campo correo String",
             selected_class_name="Cliente",
             classes=[
-                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
-                UmlClass(name="Pedido", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Cliente", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Pedido", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
             ],
         )
     )
@@ -431,21 +431,21 @@ def test_modify_existing_uml_uses_selected_class_for_implicit_attribute_edit() -
 
 
 def test_modify_existing_uml_uses_selected_class_for_implicit_relationship() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.modify_uml(
-        UmlModificationRequest(
+    response = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction="conectala con Pedido de uno a varios",
             selected_class_name="Cliente",
             classes=[
-                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
-                UmlClass(name="Pedido", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Cliente", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Pedido", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
             ],
         )
     )
 
     assert response.relationships == [
-        UmlRelationship(
+        RelacionUMLMotor(
             source="Cliente",
             target="Pedido",
             relationship_type="association",
@@ -457,14 +457,14 @@ def test_modify_existing_uml_uses_selected_class_for_implicit_relationship() -> 
 
 
 def test_modify_existing_uml_matches_spoken_compound_class_names() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.modify_uml(
-        UmlModificationRequest(
+    response = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction="conecta detalle pedido con linea pago de uno a uno",
             classes=[
-                UmlClass(name="DetallePedido", attributes=[UmlAttribute(name="id", data_type="UUID")]),
-                UmlClass(name="LineaPago", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="DetallePedido", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="LineaPago", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
             ],
         )
     )
@@ -476,17 +476,17 @@ def test_modify_existing_uml_matches_spoken_compound_class_names() -> None:
 
 
 def test_modify_existing_uml_updates_existing_relationship_without_duplicate() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.modify_uml(
-        UmlModificationRequest(
+    response = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction="conecta Pedido con Cliente de muchos a uno",
             classes=[
-                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
-                UmlClass(name="Pedido", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Cliente", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Pedido", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
             ],
             relationships=[
-                UmlRelationship(
+                RelacionUMLMotor(
                     source="Cliente",
                     target="Pedido",
                     relationship_type="association",
@@ -505,16 +505,16 @@ def test_modify_existing_uml_updates_existing_relationship_without_duplicate() -
 
 
 def test_modify_existing_uml_discards_relationships_to_missing_classes() -> None:
-    service = LocalAIService()
+    service = ServicioIALocal()
 
-    response = service.modify_uml(
-        UmlModificationRequest(
+    response = service.modificar_uml(
+        SolicitudModificacionUML(
             instruction="ponle campo correo String a Cliente",
             classes=[
-                UmlClass(name="Cliente", attributes=[UmlAttribute(name="id", data_type="UUID")]),
+                ClaseUMLMotor(name="Cliente", attributes=[AtributoUMLMotor(name="id", data_type="UUID")]),
             ],
             relationships=[
-                UmlRelationship(source="Cliente", target="Fantasma", relationship_type="association")
+                RelacionUMLMotor(source="Cliente", target="Fantasma", relationship_type="association")
             ],
         )
     )
@@ -523,17 +523,17 @@ def test_modify_existing_uml_discards_relationships_to_missing_classes() -> None
 
 
 def test_ai_validation_and_software_plan() -> None:
-    service = LocalAIService()
-    uml = service.text_to_uml(UmlGenerationRequest(prompt="Crear sistema con cliente y pedido"))
+    service = ServicioIALocal()
+    uml = service.texto_a_uml(SolicitudGeneracionUML(prompt="Crear sistema con cliente y pedido"))
 
-    validation = service.validate_uml(
-        UmlValidationRequest(classes=uml.classes, relationships=uml.relationships)
+    validation = service.validar_uml(
+        SolicitudValidacionUML(classes=uml.classes, relationships=uml.relationships)
     )
-    spring = service.software_plan(
-        SoftwarePlanRequest(classes=uml.classes, relationships=uml.relationships, target="spring_boot")
+    spring = service.plan_software(
+        SolicitudPlanSoftware(classes=uml.classes, relationships=uml.relationships, target="spring_boot")
     )
-    flutter = service.software_plan(
-        SoftwarePlanRequest(classes=uml.classes, relationships=uml.relationships, target="flutter")
+    flutter = service.plan_software(
+        SolicitudPlanSoftware(classes=uml.classes, relationships=uml.relationships, target="flutter")
     )
 
     assert validation.score > 0
@@ -542,35 +542,35 @@ def test_ai_validation_and_software_plan() -> None:
 
 
 def test_ai_validation_allows_empty_methods_and_rejects_invalid_uml_details() -> None:
-    service = LocalAIService()
-    valid = service.validate_uml(
-        UmlValidationRequest(
+    service = ServicioIALocal()
+    valid = service.validar_uml(
+        SolicitudValidacionUML(
             classes=[
-                UmlClass(
+                ClaseUMLMotor(
                     name="Cliente",
-                    attributes=[UmlAttribute(name="id", data_type="UUID")],
+                    attributes=[AtributoUMLMotor(name="id", data_type="UUID")],
                     methods=[],
                 )
             ]
         )
     )
-    invalid = service.validate_uml(
-        UmlValidationRequest(
+    invalid = service.validar_uml(
+        SolicitudValidacionUML(
             classes=[
-                UmlClass(
+                ClaseUMLMotor(
                     name="Cliente",
                     attributes=[
-                        UmlAttribute(name="correo", data_type="String"),
-                        UmlAttribute(name="CORREO", data_type="String"),
+                        AtributoUMLMotor(name="correo", data_type="String"),
+                        AtributoUMLMotor(name="CORREO", data_type="String"),
                     ],
                     methods=[
-                        UmlMethod(name="guardar", return_type="void"),
-                        UmlMethod(name="GUARDAR", return_type="void"),
+                        MetodoUMLMotor(name="guardar", return_type="void"),
+                        MetodoUMLMotor(name="GUARDAR", return_type="void"),
                     ],
                 )
             ],
             relationships=[
-                UmlRelationship(
+                RelacionUMLMotor(
                     source="Cliente",
                     target="Fantasma",
                     relationship_type="association",

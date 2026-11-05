@@ -17,14 +17,14 @@ VALID_RELATIONSHIP_TYPES = {
 RELATIONSHIP_PATTERN = "^(association|inheritance|aggregation|composition|dependency|realization|implementation)$"
 
 
-class DiagramCreateRequest(BaseModel):
+class SolicitudCreacionDiagrama(BaseModel):
     project_id: UUID
     name: str = Field(min_length=2, max_length=160)
     description: str | None = None
     metadata_json: dict = Field(default_factory=dict)
 
 
-class DiagramResponse(BaseModel):
+class RespuestaDiagrama(BaseModel):
     id: UUID
     project_id: UUID
     created_by_user_id: UUID
@@ -39,7 +39,7 @@ class DiagramResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class UmlClassCreateRequest(BaseModel):
+class SolicitudCreacionClaseUML(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     visibility: str = "public"
     element_type: str = "class"
@@ -51,7 +51,7 @@ class UmlClassCreateRequest(BaseModel):
 
     @field_validator("element_type")
     @classmethod
-    def validate_element_type(cls, v: str) -> str:
+    def validar_tipo_elemento(cls, v: str) -> str:
         if v not in VALID_ELEMENT_TYPES:
             raise ValueError(
                 f"El tipo de elemento debe ser uno de: {', '.join(sorted(VALID_ELEMENT_TYPES))}"
@@ -60,7 +60,7 @@ class UmlClassCreateRequest(BaseModel):
 
     @field_validator("visibility")
     @classmethod
-    def validate_visibility(cls, v: str) -> str:
+    def validar_visibilidad(cls, v: str) -> str:
         if v not in VALID_VISIBILITIES:
             raise ValueError(
                 f"La visibilidad debe ser una de: {', '.join(sorted(VALID_VISIBILITIES))}"
@@ -68,7 +68,7 @@ class UmlClassCreateRequest(BaseModel):
         return v
 
 
-class UmlClassUpdateRequest(BaseModel):
+class SolicitudActualizacionClaseUML(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     visibility: str | None = None
     element_type: str | None = None
@@ -78,7 +78,7 @@ class UmlClassUpdateRequest(BaseModel):
 
     @field_validator("element_type")
     @classmethod
-    def validate_element_type(cls, v: str | None) -> str | None:
+    def validar_tipo_elemento(cls, v: str | None) -> str | None:
         if v is not None and v not in VALID_ELEMENT_TYPES:
             raise ValueError(
                 f"El tipo de elemento debe ser uno de: {', '.join(sorted(VALID_ELEMENT_TYPES))}"
@@ -87,7 +87,7 @@ class UmlClassUpdateRequest(BaseModel):
 
     @field_validator("visibility")
     @classmethod
-    def validate_visibility(cls, v: str | None) -> str | None:
+    def validar_visibilidad(cls, v: str | None) -> str | None:
         if v is not None and v not in VALID_VISIBILITIES:
             raise ValueError(
                 f"La visibilidad debe ser una de: {', '.join(sorted(VALID_VISIBILITIES))}"
@@ -95,7 +95,7 @@ class UmlClassUpdateRequest(BaseModel):
         return v
 
 
-class UmlClassResponse(BaseModel):
+class RespuestaClaseUML(BaseModel):
     id: UUID
     diagram_id: UUID
     name: str
@@ -108,13 +108,13 @@ class UmlClassResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class UmlClassDetailResponse(UmlClassResponse):
-    attributes: list["UmlAttributeResponse"] = Field(default_factory=list)
-    methods: list["UmlMethodResponse"] = Field(default_factory=list)
-    visual: "UmlVisualElementResponse | None" = None
+class RespuestaDetalleClaseUML(RespuestaClaseUML):
+    attributes: list["RespuestaAtributoUML"] = Field(default_factory=list)
+    methods: list["RespuestaMetodoUML"] = Field(default_factory=list)
+    visual: "RespuestaElementoVisualUML | None" = None
 
 
-class UmlAttributeCreateRequest(BaseModel):
+class SolicitudCreacionAtributoUML(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     data_type: str = Field(min_length=1, max_length=120)
     visibility: str = "private"
@@ -126,7 +126,7 @@ class UmlAttributeCreateRequest(BaseModel):
 
     @field_validator("visibility")
     @classmethod
-    def validate_visibility(cls, v: str) -> str:
+    def validar_visibilidad(cls, v: str) -> str:
         if v not in VALID_VISIBILITIES:
             raise ValueError(
                 f"La visibilidad debe ser una de: {', '.join(sorted(VALID_VISIBILITIES))}"
@@ -134,7 +134,7 @@ class UmlAttributeCreateRequest(BaseModel):
         return v
 
 
-class UmlAttributeUpdateRequest(BaseModel):
+class SolicitudActualizacionAtributoUML(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     data_type: str | None = Field(default=None, min_length=1, max_length=120)
     visibility: str | None = None
@@ -146,7 +146,7 @@ class UmlAttributeUpdateRequest(BaseModel):
 
     @field_validator("visibility")
     @classmethod
-    def validate_visibility(cls, v: str | None) -> str | None:
+    def validar_visibilidad(cls, v: str | None) -> str | None:
         if v is not None and v not in VALID_VISIBILITIES:
             raise ValueError(
                 f"La visibilidad debe ser una de: {', '.join(sorted(VALID_VISIBILITIES))}"
@@ -154,7 +154,7 @@ class UmlAttributeUpdateRequest(BaseModel):
         return v
 
 
-class UmlAttributeResponse(BaseModel):
+class RespuestaAtributoUML(BaseModel):
     id: UUID
     class_id: UUID
     name: str
@@ -169,7 +169,7 @@ class UmlAttributeResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class UmlMethodCreateRequest(BaseModel):
+class SolicitudCreacionMetodoUML(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     return_type: str | None = None
     visibility: str = "public"
@@ -178,7 +178,7 @@ class UmlMethodCreateRequest(BaseModel):
 
     @field_validator("visibility")
     @classmethod
-    def validate_visibility(cls, v: str) -> str:
+    def validar_visibilidad(cls, v: str) -> str:
         if v not in VALID_VISIBILITIES:
             raise ValueError(
                 f"La visibilidad debe ser una de: {', '.join(sorted(VALID_VISIBILITIES))}"
@@ -186,7 +186,7 @@ class UmlMethodCreateRequest(BaseModel):
         return v
 
 
-class UmlMethodUpdateRequest(BaseModel):
+class SolicitudActualizacionMetodoUML(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     return_type: str | None = None
     visibility: str | None = None
@@ -195,7 +195,7 @@ class UmlMethodUpdateRequest(BaseModel):
 
     @field_validator("visibility")
     @classmethod
-    def validate_visibility(cls, v: str | None) -> str | None:
+    def validar_visibilidad(cls, v: str | None) -> str | None:
         if v is not None and v not in VALID_VISIBILITIES:
             raise ValueError(
                 f"La visibilidad debe ser una de: {', '.join(sorted(VALID_VISIBILITIES))}"
@@ -203,21 +203,21 @@ class UmlMethodUpdateRequest(BaseModel):
         return v
 
 
-class UmlParameterCreateRequest(BaseModel):
+class SolicitudCreacionParametroUML(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     data_type: str = Field(min_length=1, max_length=120)
     default_value: str | None = None
     order_index: int = 0
 
 
-class UmlParameterUpdateRequest(BaseModel):
+class SolicitudActualizacionParametroUML(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     data_type: str | None = Field(default=None, min_length=1, max_length=120)
     default_value: str | None = None
     order_index: int | None = Field(default=None, ge=0)
 
 
-class UmlParameterResponse(BaseModel):
+class RespuestaParametroUML(BaseModel):
     id: UUID
     method_id: UUID
     name: str
@@ -228,7 +228,7 @@ class UmlParameterResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class UmlMethodResponse(BaseModel):
+class RespuestaMetodoUML(BaseModel):
     id: UUID
     class_id: UUID
     name: str
@@ -236,12 +236,12 @@ class UmlMethodResponse(BaseModel):
     visibility: str
     order_index: int
     metadata_json: dict
-    parameters: list[UmlParameterResponse] = Field(default_factory=list)
+    parameters: list[RespuestaParametroUML] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
 
-class UmlRelationshipCreateRequest(BaseModel):
+class SolicitudCreacionRelacionUML(BaseModel):
     source_class_id: UUID
     target_class_id: UUID
     relationship_type: str = Field(pattern=RELATIONSHIP_PATTERN)
@@ -253,7 +253,7 @@ class UmlRelationshipCreateRequest(BaseModel):
 
     @field_validator("relationship_type")
     @classmethod
-    def validate_relationship_type(cls, v: str) -> str:
+    def validar_tipo_relacion(cls, v: str) -> str:
         if v not in VALID_RELATIONSHIP_TYPES:
             raise ValueError(
                 f"El tipo de relación debe ser uno de: {', '.join(sorted(VALID_RELATIONSHIP_TYPES))}"
@@ -261,7 +261,7 @@ class UmlRelationshipCreateRequest(BaseModel):
         return v
 
 
-class UmlRelationshipUpdateRequest(BaseModel):
+class SolicitudActualizacionRelacionUML(BaseModel):
     relationship_type: str | None = Field(
         default=None,
         pattern=RELATIONSHIP_PATTERN,
@@ -274,7 +274,7 @@ class UmlRelationshipUpdateRequest(BaseModel):
 
     @field_validator("relationship_type")
     @classmethod
-    def validate_relationship_type(cls, v: str | None) -> str | None:
+    def validar_tipo_relacion(cls, v: str | None) -> str | None:
         if v is not None and v not in VALID_RELATIONSHIP_TYPES:
             raise ValueError(
                 f"El tipo de relación debe ser uno de: {', '.join(sorted(VALID_RELATIONSHIP_TYPES))}"
@@ -282,7 +282,7 @@ class UmlRelationshipUpdateRequest(BaseModel):
         return v
 
 
-class UmlRelationshipResponse(BaseModel):
+class RespuestaRelacionUML(BaseModel):
     id: UUID
     diagram_id: UUID
     source_class_id: UUID
@@ -297,14 +297,14 @@ class UmlRelationshipResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class UmlValidationResponse(BaseModel):
+class RespuestaValidacionUML(BaseModel):
     diagram_id: UUID
     errors: list[str]
     warnings: list[str]
     recommendations: list[str]
 
 
-class UmlVisualElementResponse(BaseModel):
+class RespuestaElementoVisualUML(BaseModel):
     id: UUID
     diagram_id: UUID
     element_type: str
@@ -318,7 +318,7 @@ class UmlVisualElementResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class MoveElementRequest(BaseModel):
+class SolicitudMoverElemento(BaseModel):
     element_type: str = Field(pattern="^(class|relationship)$")
     element_id: UUID
     position_x: float
@@ -328,20 +328,20 @@ class MoveElementRequest(BaseModel):
     style: dict = Field(default_factory=dict)
 
 
-class DiagramModelResponse(BaseModel):
-    diagram: DiagramResponse
-    classes: list[UmlClassDetailResponse]
-    relationships: list[UmlRelationshipResponse]
+class RespuestaModeloDiagrama(BaseModel):
+    diagram: RespuestaDiagrama
+    classes: list[RespuestaDetalleClaseUML]
+    relationships: list[RespuestaRelacionUML]
 
 
-class TextToUmlRequest(BaseModel):
+class SolicitudTextoAUML(BaseModel):
     project_id: UUID
     name: str = Field(min_length=2, max_length=160)
     prompt: str = Field(min_length=5)
     source_type: str = Field(default="text", pattern="^(text|voice|image)$")
 
 
-class XmiImportRequest(BaseModel):
+class SolicitudImportacionXMI(BaseModel):
     project_id: UUID
     name: str = Field(min_length=2, max_length=160)
     content: str = Field(min_length=10)
@@ -349,11 +349,11 @@ class XmiImportRequest(BaseModel):
     file_name: str = "modelo-importado.xml"
 
 
-class XmiExportResponse(BaseModel):
+class RespuestaExportacionXMI(BaseModel):
     diagram_id: UUID
     file_name: str
     content: str
 
 
-UmlClassDetailResponse.model_rebuild()
-UmlMethodResponse.model_rebuild()
+RespuestaDetalleClaseUML.model_rebuild()
+RespuestaMetodoUML.model_rebuild()

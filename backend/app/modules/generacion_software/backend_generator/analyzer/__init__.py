@@ -1,3 +1,7 @@
-from app.modules.generacion_software.backend_generator.analyzer.model_analyzer import analyze_model
+from app.modules.generacion_software.backend_generator.analyzer.analizador_modelo import (
+    analizar_modelo,
+)
 
-__all__ = ["analyze_model"]
+__all__ = [
+    "analizar_modelo",
+]

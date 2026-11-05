@@ -7,43 +7,43 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy import UniqueConstraint
 
-from app.modules.acceso_usuarios.models import Role, User, UserRole
-from app.modules.acceso_usuarios.schemas.user import AdminUserUpdateRequest
-from app.modules.acceso_usuarios.services.user_service import UserService
-from app.modules.modelado_uml.models import UmlDiagram
-from app.modules.modelado_uml.schemas.uml import DiagramCreateRequest
-from app.modules.modelado_uml.services.uml_service import UmlService
-from app.modules.proyectos_colaboracion.schemas.project import ProjectCreateRequest
-from app.modules.proyectos_colaboracion.services.project_service import ProjectService
+from app.modules.acceso_usuarios.models import Rol, RolUsuario, Usuario
+from app.modules.acceso_usuarios.schemas.usuario import SolicitudActualizacionUsuarioAdmin
+from app.modules.acceso_usuarios.services.servicio_usuarios import ServicioUsuarios
+from app.modules.modelado_uml.models import DiagramaUML
+from app.modules.modelado_uml.schemas.uml import SolicitudCreacionDiagrama
+from app.modules.modelado_uml.services.servicio_uml import ServicioUML
+from app.modules.proyectos_colaboracion.schemas.proyecto import SolicitudCreacionProyecto
+from app.modules.proyectos_colaboracion.services.servicio_proyectos import ServicioProyectos
 
 
 def test_global_role_contract_rejects_project_organizer() -> None:
     with pytest.raises(ValidationError):
-        AdminUserUpdateRequest(role_name="ORGANIZADOR")
+        SolicitudActualizacionUsuarioAdmin(role_name="ORGANIZADOR")
 
-    assert AdminUserUpdateRequest(role_name="ADMINISTRADOR").role_name == "ADMINISTRADOR"
-    assert AdminUserUpdateRequest(role_name="EDITOR").role_name == "EDITOR"
+    assert SolicitudActualizacionUsuarioAdmin(role_name="ADMINISTRADOR").role_name == "ADMINISTRADOR"
+    assert SolicitudActualizacionUsuarioAdmin(role_name="EDITOR").role_name == "EDITOR"
 
 
 def test_user_role_table_allows_only_one_assignment_per_user() -> None:
     unique_constraints = {
         constraint.name: tuple(column.name for column in constraint.columns)
-        for constraint in UserRole.__table__.constraints
+        for constraint in RolUsuario.__table__.constraints
         if isinstance(constraint, UniqueConstraint)
     }
 
-    assert unique_constraints["uq_user_roles_user"] == ("user_id",)
-    assert "uq_user_roles_user_role" not in unique_constraints
+    assert unique_constraints["uq_roles_usuario_usuario_id"] == ("usuario_id",)
+    assert "uq_roles_usuario_usuario_id_rol_id" not in unique_constraints
 
 
 def test_role_update_reuses_the_single_global_assignment() -> None:
     user_id = uuid4()
-    editor = Role(id=uuid4(), name="EDITOR", description=None, is_system=True)
-    administrator = Role(
+    editor = Rol(id=uuid4(), name="EDITOR", description=None, is_system=True)
+    administrator = Rol(
         id=uuid4(), name="ADMINISTRADOR", description=None, is_system=True
     )
-    assignment = UserRole(user_id=user_id, role_id=editor.id, role=editor)
-    user = User(
+    assignment = RolUsuario(user_id=user_id, role_id=editor.id, role=editor)
+    user = Usuario(
         id=user_id,
         full_name="Usuario",
         email="user@example.com",
@@ -52,18 +52,18 @@ def test_role_update_reuses_the_single_global_assignment() -> None:
         roles=[assignment],
     )
     db = Mock()
-    service = UserService(db)
-    service.users = SimpleNamespace(get_by_id=lambda _: user)
-    service.roles = SimpleNamespace(get_by_name=lambda _: administrator)
+    service = ServicioUsuarios(db)
+    service.users = SimpleNamespace(obtener_por_id=lambda _: user)
+    service.roles = SimpleNamespace(obtener_por_nombre=lambda _: administrator)
     service.audit = Mock()
 
-    updated = service.update_user(
+    updated = service.actualizar_usuario(
         user_id,
-        AdminUserUpdateRequest(role_name="ADMINISTRADOR"),
+        SolicitudActualizacionUsuarioAdmin(role_name="ADMINISTRADOR"),
         actor_id=uuid4(),
     )
 
-    assert updated.role_names == ["ADMINISTRADOR"]
+    assert updated.nombres_roles == ["ADMINISTRADOR"]
     assert len(updated.roles) == 1
     assert updated.roles[0].role_id == administrator.id
 
@@ -73,7 +73,8 @@ def test_project_creator_becomes_organizer_only_in_project_membership() -> None:
     project_id = uuid4()
     memberships = []
     db = Mock()
-    service = ProjectService(db)
+    db.info = {}
+    service = ServicioProyectos(db)
 
     def add_project(project):
         project.id = project_id
@@ -88,8 +89,8 @@ def test_project_creator_becomes_organizer_only_in_project_membership() -> None:
     service.members = SimpleNamespace(add=add_membership)
     service.audit = Mock()
 
-    project = service.create_project(
-        ProjectCreateRequest(name="Proyecto de prueba"), owner_id=owner_id
+    project = service.crear_proyecto(
+        SolicitudCreacionProyecto(name="Proyecto de prueba"), owner_id=owner_id
     )
 
     assert project.owner_id == owner_id
@@ -100,7 +101,7 @@ def test_project_creator_becomes_organizer_only_in_project_membership() -> None:
     created_diagrams = [
         call.args[0]
         for call in db.add.call_args_list
-        if call.args and isinstance(call.args[0], UmlDiagram)
+        if call.args and isinstance(call.args[0], DiagramaUML)
     ]
     assert len(created_diagrams) == 1
     assert created_diagrams[0].project_id == project_id
@@ -109,7 +110,7 @@ def test_project_creator_becomes_organizer_only_in_project_membership() -> None:
 
 def test_project_rejects_a_second_diagram() -> None:
     project_id = uuid4()
-    existing = UmlDiagram(
+    existing = DiagramaUML(
         id=uuid4(),
         project_id=project_id,
         created_by_user_id=uuid4(),
@@ -117,13 +118,14 @@ def test_project_rejects_a_second_diagram() -> None:
         diagram_type="class",
         metadata_json={"project_diagram": True},
     )
-    service = UmlService(Mock())
-    service.members = SimpleNamespace(get_membership=lambda *_: SimpleNamespace())
-    service.uml = SimpleNamespace(list_diagrams_by_project=lambda _: [existing])
+    service = ServicioUML(Mock())
+    service.db.scalar.return_value = SimpleNamespace(project_role="EDITOR")
+    service.members = SimpleNamespace(obtener_participacion=lambda *_: SimpleNamespace(project_role="EDITOR"))
+    service.uml = SimpleNamespace(listar_diagramas_por_proyecto=lambda _: [existing])
 
     with pytest.raises(HTTPException) as error:
-        service.create_diagram(
-            DiagramCreateRequest(project_id=project_id, name="Segundo diagrama"),
+        service.crear_diagrama(
+            SolicitudCreacionDiagrama(project_id=project_id, name="Segundo diagrama"),
             user_id=uuid4(),
         )
 

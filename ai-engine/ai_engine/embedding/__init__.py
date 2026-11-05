@@ -1,3 +1,3 @@
-from ai_engine.embedding.local_vector_store import KnowledgeItem, LocalVectorStore
+from ai_engine.embedding.almacen_vectores_local import AlmacenVectoresLocal, ElementoConocimiento
 
-__all__ = ["KnowledgeItem", "LocalVectorStore"]
+__all__ = ["AlmacenVectoresLocal", "ElementoConocimiento"]

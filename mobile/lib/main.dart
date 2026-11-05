@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import 'app/app.dart';
-import 'core/auth/session_store.dart';
-import 'core/cache/private_cache.dart';
-import 'core/network/api_client.dart';
-import 'features/app_controller.dart';
-import 'features/mobile_repository.dart';
+import 'app/aplicacion.dart';
+import 'core/auth/almacen_sesion.dart';
+import 'core/cache/cache_privada.dart';
+import 'core/network/cliente_api.dart';
+import 'features/controlador_aplicacion.dart';
+import 'features/repositorio_movil.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,13 +13,18 @@ Future<void> main() async {
     'API_BASE_URL',
     defaultValue: 'http://10.0.2.2:8081/api/v1',
   );
-  final sessionStore = SessionStore();
-  final api = ApiClient(baseUrl: baseUrl, sessionStore: sessionStore);
-  final controller = AppController(
-    repository: MobileRepository(api),
+  final sessionStore = AlmacenSesion();
+  final api = ClienteApi(baseUrl: baseUrl, sessionStore: sessionStore);
+  final controller = ControladorAplicacion(
+    repository: RepositorioMovil(api),
     sessionStore: sessionStore,
-    cache: PrivateCache(),
+    cache: CachePrivada(),
   );
   await controller.restoreSession();
-  runApp(CaseMobileApp(controller: controller));
+  runApp(
+    AplicacionCaseMovil(
+      controller: controller,
+      modoInicial: await cargarModoTemaMovil(),
+    ),
+  );
 }

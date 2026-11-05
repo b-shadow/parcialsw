@@ -5,23 +5,29 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app.core.config.settings import settings
-from app.core.nosql.client import MongoHealth
-from app.core.nosql.commands.consolidate import ConsolidationGate
-from app.core.nosql.commands.coordinated_backup import _decode, _encode
-from app.core.nosql.contracts import MongoCollection
-from app.core.nosql.reconciliation import ReconciliationService, canonical_sha256
-from app.main import app
-from app.modules.modelado_uml.engine.internal_model import UmlDiagramModel
-from app.modules.modelado_uml.models import UmlDiagram
-from app.modules.modelado_uml.repositories.mongo_uml_repository import MongoUmlRepository
-from app.modules.modelado_uml.services.active_diagram_store import (
+from app.core.config.configuracion import settings
+from app.core.nosql.cliente import EstadoMongo
+from app.core.nosql.commands.consolidar import ControlConsolidacion
+from app.core.nosql.commands.respaldo_coordinado import _decode, _encode
+from app.core.nosql.conciliacion import ServicioConciliacion, canonical_sha256
+from app.core.nosql.contratos import ColeccionMongo
+from app.core.nosql.errores import ErrorMongoNoDisponible
+from app.main import app, crear_aplicacion
+from app.modules.generacion_software.services.servicio_generacion import ServicioGeneracion
+from app.modules.modelado_uml.engine.modelo_interno import ModeloDiagramaUML
+from app.modules.modelado_uml.models import ClaseUML, DiagramaUML, ElementoVisualUML
+from app.modules.modelado_uml.repositories.repositorio_mongo_uml import RepositorioMongoUML
+from app.modules.modelado_uml.services.almacen_diagrama_activo import (
     SYNC_PROJECTS_KEY,
-    ActiveUmlDocumentStore,
-    mark_uml_project_for_sync,
+    AlmacenDocumentosUMLActivo,
+    marcar_proyecto_uml_para_sincronizar,
 )
+from app.modules.proyectos_colaboracion.schemas.proyecto import SolicitudCreacionProyecto
+from app.modules.proyectos_colaboracion.services.servicio_proyectos import ServicioProyectos
 
 
 class AsyncCursor:
@@ -69,7 +75,7 @@ class FakeDatabase(dict):
 
 
 def _uml_document(diagram_id, project_id, *, revision=3):
-    content = UmlDiagramModel(
+    content = ModeloDiagramaUML(
         id=str(diagram_id),
         project_id=str(project_id),
         name="Consolidado",
@@ -89,9 +95,9 @@ def _uml_document(diagram_id, project_id, *, revision=3):
 def test_phase14_strict_uml_read_never_builds_sql_projection(monkeypatch) -> None:
     diagram_id, project_id = uuid4(), uuid4()
     document = _uml_document(diagram_id, project_id)
-    store = ActiveUmlDocumentStore(
+    store = AlmacenDocumentosUMLActivo(
         database={
-            MongoCollection.UML_DIAGRAMS.value: SimpleNamespace(find_one=lambda _query: document)
+            ColeccionMongo.UML_DIAGRAMS.value: SimpleNamespace(find_one=lambda _query: document)
         }
     )
     db = MagicMock()
@@ -102,9 +108,9 @@ def test_phase14_strict_uml_read_never_builds_sql_projection(monkeypatch) -> Non
     monkeypatch.setattr(settings, "uml_diagrams_compare_reads", False)
 
     with patch(
-        "app.modules.modelado_uml.services.active_diagram_store.build_sql_diagram_model"
+        "app.modules.modelado_uml.services.almacen_diagrama_activo.construir_modelo_diagrama_sql"
     ) as sql_projection:
-        model = store.model_for(db, diagram)
+        model = store.modelo_para(db, diagram)
 
     assert model.name == "Consolidado"
     sql_projection.assert_not_called()
@@ -114,13 +120,13 @@ def test_phase14_operational_audit_detects_revision_lag_and_persists(monkeypatch
     project_id, diagram_id = uuid4(), uuid4()
     database = FakeDatabase(
         {
-            MongoCollection.UML_DIAGRAMS.value: FakeCollection(
+            ColeccionMongo.UML_DIAGRAMS.value: FakeCollection(
                 [_uml_document(diagram_id, project_id, revision=2)]
             ),
-            MongoCollection.UML_DIAGRAM_VERSIONS.value: FakeCollection(),
-            MongoCollection.AI_MESSAGES.value: FakeCollection(),
-            MongoCollection.AI_CONTEXT_SNAPSHOTS.value: FakeCollection(),
-            MongoCollection.OPERATIONAL_AUDITS.value: FakeCollection(),
+            ColeccionMongo.UML_DIAGRAM_VERSIONS.value: FakeCollection(),
+            ColeccionMongo.AI_MESSAGES.value: FakeCollection(),
+            ColeccionMongo.AI_CONTEXT_SNAPSHOTS.value: FakeCollection(),
+            ColeccionMongo.OPERATIONAL_AUDITS.value: FakeCollection(),
         }
     )
     db = MagicMock()
@@ -133,12 +139,47 @@ def test_phase14_operational_audit_detects_revision_lag_and_persists(monkeypatch
     db.scalars.side_effect = [[], []]
     monkeypatch.setattr(settings, "nosql_alert_max_revision_lag", 0)
 
-    report = asyncio.run(ReconciliationService(db, database).audit_operational())
+    report = asyncio.run(ServicioConciliacion(db, database).audit_operational())
 
     assert report["status"] == "degraded"
     assert any(item["code"] == "REVISION_LAG" for item in report["findings"])
     assert report["metrics"]["max_revision_lag"] == 1
-    database[MongoCollection.OPERATIONAL_AUDITS.value].insert_one.assert_awaited_once()
+    database[ColeccionMongo.OPERATIONAL_AUDITS.value].insert_one.assert_awaited_once()
+
+
+def test_operational_audit_detects_message_gap_with_matching_count() -> None:
+    conversation_id, project_id = uuid4(), uuid4()
+    database = FakeDatabase(
+        {
+            ColeccionMongo.UML_DIAGRAMS.value: FakeCollection(),
+            ColeccionMongo.UML_DIAGRAM_VERSIONS.value: FakeCollection(),
+            ColeccionMongo.AI_MESSAGES.value: FakeCollection(
+                [
+                    {
+                        "_id": str(uuid4()),
+                        "conversation_id": str(conversation_id),
+                        "project_id": str(project_id),
+                        "sequence_number": sequence,
+                    }
+                    for sequence in (1, 3)
+                ]
+            ),
+            ColeccionMongo.AI_CONTEXT_SNAPSHOTS.value: FakeCollection(),
+            ColeccionMongo.OPERATIONAL_AUDITS.value: FakeCollection(),
+        }
+    )
+    db = MagicMock()
+    db.execute.side_effect = [
+        SimpleNamespace(tuples=lambda: [(project_id, 0)]),
+        SimpleNamespace(tuples=list),
+        SimpleNamespace(tuples=lambda: [(conversation_id, 2)]),
+        SimpleNamespace(tuples=list),
+    ]
+    db.scalars.side_effect = [[], []]
+
+    report = asyncio.run(ServicioConciliacion(db, database).audit_operational())
+
+    assert any(item["code"] == "MISSING_CONVERSATION_MESSAGES" for item in report["findings"])
 
 
 def test_phase14_backup_encoding_roundtrip_preserves_database_types() -> None:
@@ -162,7 +203,7 @@ def test_phase14_consolidated_mode_keeps_canonical_publication_when_dual_write_i
     monkeypatch.setattr(settings, "uml_diagrams_dual_write_enabled", False)
     monkeypatch.setattr(settings, "nosql_consolidated_mode", True)
 
-    mark_uml_project_for_sync(db, project_id)
+    marcar_proyecto_uml_para_sincronizar(db, project_id)
 
     assert db.info[SYNC_PROJECTS_KEY] == {project_id}
 
@@ -171,7 +212,7 @@ def test_phase14_document_repository_roundtrips_embedded_uml_content() -> None:
     project_id, diagram_id, class_id, attribute_id, method_id, parameter_id = (
         uuid4() for _ in range(6)
     )
-    diagram = UmlDiagram(
+    diagram = DiagramaUML(
         id=diagram_id,
         project_id=project_id,
         created_by_user_id=uuid4(),
@@ -181,7 +222,7 @@ def test_phase14_document_repository_roundtrips_embedded_uml_content() -> None:
         current_version=1,
         metadata_json={},
     )
-    source = UmlDiagramModel.model_validate({
+    source = ModeloDiagramaUML.model_validate({
         "id": str(diagram_id),
         "project_id": str(project_id),
         "name": "Ventas",
@@ -206,25 +247,112 @@ def test_phase14_document_repository_roundtrips_embedded_uml_content() -> None:
             "visual": {"x": 120, "y": 80},
         }],
     })
-    repository = MongoUmlRepository.__new__(MongoUmlRepository)
+    repository = RepositorioMongoUML.__new__(RepositorioMongoUML)
     repository.cache = {}
-    repository._inflate(source, diagram)
+    repository._reconstruir(source, diagram)
 
     restored = repository.model(diagram)
 
     assert restored.id == source.id
     assert restored.classes[0].name == "Cliente"
     assert restored.classes[0].visual.x == 120
-    assert repository.get_attribute(attribute_id).name == "correo"
-    assert repository.get_method(method_id).parameters[0].id == parameter_id
+    assert repository.obtener_atributo(attribute_id).name == "correo"
+    assert repository.obtener_metodo(method_id).parameters[0].id == parameter_id
 
 
 def test_phase14_sql_foreign_keys_do_not_target_mongodb_messages() -> None:
-    from app.modules.asistente_proyecto.models import AiAction, AiRecommendation
+    from app.modules.asistente_proyecto.models import AccionIA, RecomendacionIA
 
-    for model in (AiAction, AiRecommendation):
-        foreign_keys = model.__table__.c.source_message_id.foreign_keys
+    for model in (AccionIA, RecomendacionIA):
+        foreign_keys = model.__table__.c.mensaje_origen_id.foreign_keys
         assert not foreign_keys
+
+
+def test_generation_uses_mongodb_uml_repository() -> None:
+    service = ServicioGeneracion(MagicMock())
+    assert isinstance(service.uml, RepositorioMongoUML)
+
+
+def test_missing_mongodb_diagram_is_not_treated_as_empty() -> None:
+    diagram_id = uuid4()
+    repository = RepositorioMongoUML.__new__(RepositorioMongoUML)
+    repository.cache = {}
+    repository.documents = MagicMock()
+    repository.documents.get.return_value = None
+    repository.obtener_diagrama = MagicMock(return_value=SimpleNamespace(id=diagram_id))
+
+    with pytest.raises(HTTPException) as exc:
+        repository._estado(diagram_id)
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail["code"] == "UML_DOCUMENT_MISSING"
+
+
+def test_unavailable_mongodb_diagram_returns_service_unavailable() -> None:
+    diagram_id = uuid4()
+    repository = RepositorioMongoUML.__new__(RepositorioMongoUML)
+    repository.cache = {}
+    repository.documents = MagicMock()
+    repository.documents.get.side_effect = ErrorMongoNoDisponible("offline")
+    repository.obtener_diagrama = MagicMock(return_value=SimpleNamespace(id=diagram_id))
+
+    with pytest.raises(HTTPException) as exc:
+        repository._estado(diagram_id)
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail["code"] == "UML_DOCUMENT_UNAVAILABLE"
+
+
+def test_new_class_with_unset_visual_style_can_be_saved_to_mongodb() -> None:
+    uml_class = ClaseUML(
+        id=uuid4(), diagram_id=uuid4(), name="Cliente",
+        visibility="public", element_type="class", metadata_json={},
+    )
+    uml_class.attributes = []
+    uml_class.methods = []
+    visual = ElementoVisualUML(
+        id=uuid4(), diagram_id=uml_class.diagram_id,
+        element_type="class", element_id=uml_class.id,
+        position_x=100, position_y=200,
+    )
+
+    model = RepositorioMongoUML._modelo_clase(uml_class, visual)
+
+    assert model.visual.style == {}
+
+
+def test_new_project_initializes_its_diagram_in_mongo_cache() -> None:
+    db = MagicMock()
+    db.info = {}
+    db.add.side_effect = lambda item: setattr(item, "id", uuid4()) if item.id is None else None
+    project = SimpleNamespace(id=uuid4(), name="Proyecto de prueba", description="UML")
+    service = ServicioProyectos(db)
+    service.projects.add = MagicMock(return_value=project)
+    service.members.add = MagicMock(return_value=SimpleNamespace(id=uuid4()))
+    service.audit.record = MagicMock()
+
+    service.crear_proyecto(SolicitudCreacionProyecto(name=project.name), uuid4())
+
+    cache = db.info["mongo_uml_repository"]
+    assert len(cache) == 1
+    assert next(iter(cache.values()))["classes"] == {}
+
+
+def test_unhandled_api_error_keeps_cors_header() -> None:
+    application = crear_aplicacion()
+
+    @application.get("/test-unhandled-error")
+    def fail():
+        raise RuntimeError("test failure")
+
+    response = TestClient(application, raise_server_exceptions=False).get(
+        "/test-unhandled-error",
+        headers={"Origin": "http://127.0.0.1:5173"},
+    )
+
+    assert response.status_code == 500
+    assert response.headers["Access-Control-Allow-Origin"] == "http://127.0.0.1:5173"
+    assert response.json()["detail"]["code"] == "INTERNAL_SERVER_ERROR"
 
 
 def test_phase14_gate_refuses_incomplete_migrations_and_degraded_audit(monkeypatch) -> None:
@@ -232,8 +360,8 @@ def test_phase14_gate_refuses_incomplete_migrations_and_degraded_audit(monkeypat
     audits = FakeCollection()
     database = FakeDatabase(
         {
-            MongoCollection.MIGRATION_CHECKPOINTS.value: migrations,
-            MongoCollection.OPERATIONAL_AUDITS.value: audits,
+            ColeccionMongo.MIGRATION_CHECKPOINTS.value: migrations,
+            ColeccionMongo.OPERATIONAL_AUDITS.value: audits,
         }
     )
     session = MagicMock()
@@ -247,15 +375,15 @@ def test_phase14_gate_refuses_incomplete_migrations_and_degraded_audit(monkeypat
 
     with (
         patch(
-            "app.core.nosql.commands.consolidate.SessionLocal",
+            "app.core.nosql.commands.consolidar.SessionLocal",
             return_value=session_context,
         ),
         patch(
-            "app.core.nosql.commands.consolidate.ReconciliationService.audit_operational",
+            "app.core.nosql.commands.consolidar.ServicioConciliacion.audit_operational",
             AsyncMock(return_value={"status": "degraded", "findings": []}),
         ),
     ):
-        report = asyncio.run(ConsolidationGate(database).evaluate())
+        report = asyncio.run(ControlConsolidacion(database).evaluate())
 
     assert report["status"] == "blocked"
     assert set(report["blockers"]) == {
@@ -277,10 +405,10 @@ def test_phase14_readiness_requires_fresh_audit_and_consolidation(monkeypatch) -
         )
     )
     database = {
-        MongoCollection.MIGRATION_CHECKPOINTS.value: checkpoints,
-        MongoCollection.OPERATIONAL_AUDITS.value: audits,
+        ColeccionMongo.MIGRATION_CHECKPOINTS.value: checkpoints,
+        ColeccionMongo.OPERATIONAL_AUDITS.value: audits,
     }
-    health = MongoHealth(status="available", required=True, database="case_test")
+    health = EstadoMongo(status="available", required=True, database="case_test")
     monkeypatch.setattr(settings, "phase14_consolidation_required", True)
     monkeypatch.setattr(settings, "nosql_reconciliation_required", True)
 

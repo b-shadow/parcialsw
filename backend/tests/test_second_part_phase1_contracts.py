@@ -5,19 +5,21 @@ import pytest
 from pydantic import ValidationError
 
 from app.main import app
-from app.modules.asistente_proyecto.schemas.assistant import AiProjectSettingsUpdate
-from app.modules.asistente_proyecto.schemas.websocket import (
-    WebSocketActorV2,
-    WebSocketEventV2,
+from app.modules.asistente_proyecto.schemas.esquemas_asistente import (
+    ActualizacionConfiguracionIAProyecto,
 )
-from app.modules.modelado_uml.engine.internal_model import UmlMethodModel
-from app.modules.modelado_uml.schemas.method_specification import (
-    UmlMethodSpecificationCreate,
+from app.modules.asistente_proyecto.schemas.eventos_websocket import (
+    ActorWebSocketV2,
+    EventoWebSocketV2,
 )
-from app.modules.proyectos_colaboracion.schemas.snapshot import (
-    ProjectSnapshotV2,
-    SnapshotProject,
-    parse_project_snapshot,
+from app.modules.modelado_uml.engine.modelo_interno import ModeloMetodoUML
+from app.modules.modelado_uml.schemas.especificacion_metodo import (
+    CreacionEspecificacionMetodoUML,
+)
+from app.modules.proyectos_colaboracion.schemas.instantanea import (
+    InstantaneaProyecto,
+    InstantaneaProyectoV2,
+    analizar_instantanea_proyecto,
 )
 
 
@@ -45,7 +47,7 @@ def test_phase1_second_part_openapi_contracts_are_registered() -> None:
 
 
 def test_method_specification_normalizes_rules_and_allows_incomplete_drafts() -> None:
-    specification = UmlMethodSpecificationCreate(
+    specification = CreacionEspecificacionMetodoUML(
         exposure="user_action",
         preconditions=["El estudiante debe existir"],
         backend_contract={"http_method": "POST", "path": "/inscripciones"},
@@ -57,11 +59,11 @@ def test_method_specification_normalizes_rules_and_allows_incomplete_drafts() ->
     )
     assert specification.preconditions[0].code == "el_estudiante_debe_existir"
 
-    draft = UmlMethodSpecificationCreate(exposure="user_action")
+    draft = CreacionEspecificacionMetodoUML(exposure="user_action")
     assert draft.backend_contract is None
     assert draft.frontend_contract is None
     with pytest.raises(ValidationError):
-        UmlMethodSpecificationCreate(
+        CreacionEspecificacionMetodoUML(
             exposure="api",
             backend_contract={"http_method": "POST", "path": "sin-barra"},
         )
@@ -69,24 +71,24 @@ def test_method_specification_normalizes_rules_and_allows_incomplete_drafts() ->
 
 def test_ai_settings_reject_nested_secrets() -> None:
     with pytest.raises(ValidationError):
-        AiProjectSettingsUpdate(settings_json={"runtime": {"api_token": "not-allowed"}})
+        ActualizacionConfiguracionIAProyecto(settings_json={"runtime": {"api_token": "not-allowed"}})
 
 
 def test_snapshot_v1_is_adapted_and_future_versions_are_rejected() -> None:
-    project = SnapshotProject(id=uuid4(), name="Ventas")
-    adapted = parse_project_snapshot({"diagrams": []}, project)
+    project = InstantaneaProyecto(id=uuid4(), name="Ventas")
+    adapted = analizar_instantanea_proyecto({"diagrams": []}, project)
     assert adapted.schema_version == 2
     assert adapted.project.id == project.id
     assert adapted.flutter_theme is None
 
     with pytest.raises(ValueError, match="no soportada"):
-        parse_project_snapshot({"schema_version": 99}, project)
+        analizar_instantanea_proyecto({"schema_version": 99}, project)
 
 
 def test_snapshot_removes_sensitive_generation_settings() -> None:
-    snapshot = ProjectSnapshotV2(
+    snapshot = InstantaneaProyectoV2(
         captured_at=datetime.now(UTC),
-        project=SnapshotProject(id=uuid4(), name="Ventas"),
+        project=InstantaneaProyecto(id=uuid4(), name="Ventas"),
         generation_settings={
             "target": "flutter",
             "runtime": {"api_token": "secret-value", "port": 8080},
@@ -99,14 +101,14 @@ def test_snapshot_removes_sensitive_generation_settings() -> None:
 
 
 def test_websocket_v2_is_typed_and_serializable() -> None:
-    event = WebSocketEventV2(
+    event = EventoWebSocketV2(
         type="AI_MESSAGE_CREATED",
         event_id=uuid4(),
         project_id=uuid4(),
         sequence_number=1,
         correlation_id=uuid4(),
         occurred_at=datetime.now(UTC),
-        actor=WebSocketActorV2(display_name="Editor UML"),
+        actor=ActorWebSocketV2(display_name="Editor UML"),
         payload={"message_id": str(uuid4())},
     )
     serialized = event.model_dump(mode="json")
@@ -115,9 +117,9 @@ def test_websocket_v2_is_typed_and_serializable() -> None:
 
 
 def test_internal_method_model_keeps_optional_specification_compatibility() -> None:
-    legacy = UmlMethodModel(name="calcular", return_type="double")
+    legacy = ModeloMetodoUML(name="calcular", return_type="double")
     assert legacy.specification is None
-    enriched = UmlMethodModel(
+    enriched = ModeloMetodoUML(
         name="inscribir",
         specification={"operation_kind": "create", "exposure": "user_action"},
     )

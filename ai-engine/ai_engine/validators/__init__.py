@@ -1,3 +1,5 @@
-from ai_engine.validators.uml_quality import validate_uml_quality
+from ai_engine.validators.calidad_uml import validar_calidad_uml
 
-__all__ = ["validate_uml_quality"]
+__all__ = [
+    "validar_calidad_uml",
+]

@@ -5,12 +5,12 @@ import cv2
 import httpx
 import numpy as np
 
-from ai_engine.inference.vision_uml_reader import VisionUmlRead, VisionUmlReader
-from ai_engine.preprocessing.image_uml_detector import (
-    DetectedBox,
-    DetectedUmlClass,
-    DetectedUmlRelationship,
-    ImageUmlDetection,
+from ai_engine.inference.lector_vision_uml import LectorUMLVision, LecturaUMLVision
+from ai_engine.preprocessing.detector_imagen_uml import (
+    CajaDetectada,
+    ClaseUMLDetectada,
+    DeteccionUMLImagen,
+    RelacionUMLDetectada,
 )
 
 
@@ -23,19 +23,19 @@ def _image_payload() -> str:
     return base64.b64encode(encoded.tobytes()).decode("ascii")
 
 
-def _detection() -> ImageUmlDetection:
+def _detection() -> DeteccionUMLImagen:
     boxes = [
-        DetectedBox(40, 50, 210, 210, "Clase1"),
-        DetectedBox(390, 50, 210, 210, "Clase2"),
+        CajaDetectada(40, 50, 210, 210, "Clase1"),
+        CajaDetectada(390, 50, 210, 210, "Clase2"),
     ]
-    return ImageUmlDetection(
+    return DeteccionUMLImagen(
         boxes=boxes,
         classes=[
-            DetectedUmlClass(name="Clase1", box=boxes[0]),
-            DetectedUmlClass(name="Clase2", box=boxes[1]),
+            ClaseUMLDetectada(name="Clase1", box=boxes[0]),
+            ClaseUMLDetectada(name="Clase2", box=boxes[1]),
         ],
         relationships=[
-            DetectedUmlRelationship(
+            RelacionUMLDetectada(
                 source="Clase1",
                 target="Clase2",
                 source_cardinality="1",
@@ -90,9 +90,9 @@ def test_vision_reader_sends_numbered_contact_sheet_for_detected_boxes() -> None
     client = httpx.Client(
         transport=httpx.MockTransport(handler), base_url="http://127.0.0.1:11434"
     )
-    reader = VisionUmlReader(client=client)
+    reader = LectorUMLVision(client=client)
 
-    result = reader.read(_image_payload(), _detection())
+    result = reader.leer(_image_payload(), _detection())
 
     assert result is not None
     assert [item.name for item in result.classes] == ["Venta", "Producto"]
@@ -107,8 +107,8 @@ def test_vision_reader_sends_numbered_contact_sheet_for_detected_boxes() -> None
 
 
 def test_vision_reader_rejects_missing_or_invented_boxes() -> None:
-    reader = VisionUmlReader(enabled=False)
-    visual = VisionUmlRead.model_validate(
+    reader = LectorUMLVision(enabled=False)
+    visual = LecturaUMLVision.model_validate(
         {
             "classes": [
                 {"visual_index": 1, "name": "Venta"},
@@ -118,13 +118,13 @@ def test_vision_reader_rejects_missing_or_invented_boxes() -> None:
         }
     )
 
-    assert reader._validated_response(visual, _detection()) is None
-    reader.close()
+    assert reader._respuesta_validada(visual, _detection()) is None
+    reader.cerrar()
 
 
 def test_vision_reader_rejects_generic_or_duplicate_class_names() -> None:
-    reader = VisionUmlReader(enabled=False)
-    generic = VisionUmlRead.model_validate(
+    reader = LectorUMLVision(enabled=False)
+    generic = LecturaUMLVision.model_validate(
         {
             "classes": [
                 {"visual_index": 1, "name": "Clase1"},
@@ -132,7 +132,7 @@ def test_vision_reader_rejects_generic_or_duplicate_class_names() -> None:
             ]
         }
     )
-    duplicate = VisionUmlRead.model_validate(
+    duplicate = LecturaUMLVision.model_validate(
         {
             "classes": [
                 {"visual_index": 1, "name": "Venta"},
@@ -141,9 +141,9 @@ def test_vision_reader_rejects_generic_or_duplicate_class_names() -> None:
         }
     )
 
-    assert reader._validated_response(generic, _detection()) is None
-    assert reader._validated_response(duplicate, _detection()) is None
-    reader.close()
+    assert reader._respuesta_validada(generic, _detection()) is None
+    assert reader._respuesta_validada(duplicate, _detection()) is None
+    reader.cerrar()
 
 
 def test_vision_reader_returns_none_when_model_is_not_installed() -> None:
@@ -155,16 +155,16 @@ def test_vision_reader_returns_none_when_model_is_not_installed() -> None:
         ),
         base_url="http://127.0.0.1:11434",
     )
-    reader = VisionUmlReader(client=client)
+    reader = LectorUMLVision(client=client)
 
-    assert reader.read(_image_payload(), _detection()) is None
+    assert reader.leer(_image_payload(), _detection()) is None
 
 
 def test_short_handwritten_id_confusions_are_normalized_without_class_templates() -> None:
-    reader = VisionUmlReader(enabled=False)
+    reader = LectorUMLVision(enabled=False)
 
     assert reader._identifier("ID") == "id"
     assert reader._identifier("1d") == "id"
     assert reader._identifier("18") == "id"
     assert reader._identifier("precio") == "precio"
-    reader.close()
+    reader.cerrar()

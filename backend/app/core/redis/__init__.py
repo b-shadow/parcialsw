@@ -1,15 +1,15 @@
-from app.core.redis.client import (
-    get_async_redis,
-    get_redis,
-    redis_key,
+from app.core.redis.cliente import (
+    clave_redis,
+    establecer_cliente_prueba,
+    obtener_redis,
+    obtener_redis_asincrono,
     redis_status,
-    set_test_client,
 )
 
 __all__ = [
-    "get_async_redis",
-    "get_redis",
-    "redis_key",
+    "clave_redis",
+    "establecer_cliente_prueba",
+    "obtener_redis",
+    "obtener_redis_asincrono",
     "redis_status",
-    "set_test_client",
 ]

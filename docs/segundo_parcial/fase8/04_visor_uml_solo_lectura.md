@@ -2,14 +2,14 @@
 
 ## Renderizado
 
-`UmlReadonlyCanvas` combina:
+`LienzoUMLLectura` combina:
 
 - `InteractiveViewer` para pan y pinch-to-zoom.
 - `TransformationController` para acercar, alejar y centrar.
 - `CustomPainter` para relaciones, cardinalidades y terminaciones UML.
-- `UmlClassCard` para nombre, estereotipo, atributos y metodos.
+- `TarjetaClaseUML` para nombre, estereotipo o tipo de elemento, atributos y metodos con parametros.
 
-El lienzo calcula un area estable a partir de posiciones/tamanos persistidos. Los nodos no cambian de posicion durante gestos o al abrir detalles.
+El lienzo calcula un area estable a partir de posiciones/tamanos persistidos. Los nodos no cambian de posicion durante gestos o al abrir detalles. Las lineas parten y terminan en los bordes de las clases; cardinalidades y etiquetas se dibujan por separado. La paleta del visor se ajusta al tema claro u oscuro de la aplicacion.
 
 ## Interaccion
 

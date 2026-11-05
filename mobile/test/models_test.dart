@@ -1,10 +1,10 @@
-import 'package:case_inteligente_mobile/core/models/account_models.dart';
-import 'package:case_inteligente_mobile/core/models/uml_models.dart';
+import 'package:case_inteligente_mobile/core/models/modelos_cuenta.dart';
+import 'package:case_inteligente_mobile/core/models/modelos_uml.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('ProjectSummary conserva los datos necesarios para cache privado', () {
-    final project = ProjectSummary.fromJson({
+  test('ResumenProyecto conserva los datos necesarios para cache privado', () {
+    final project = ResumenProyecto.fromJson({
       'id': 'project-1',
       'name': 'Ventas',
       'project_role': 'ORGANIZADOR',
@@ -15,13 +15,13 @@ void main() {
       'updated_at': '2026-10-17T12:00:00Z',
     });
     expect(project.unreadCount, 4);
-    expect(ProjectSummary.fromJson(project.toJson()).name, 'Ventas');
+    expect(ResumenProyecto.fromJson(project.toJson()).name, 'Ventas');
   });
 
   test(
-    'DiagramDetail interpreta posicion visual y fuerza contrato explicito',
+    'DetalleDiagrama interpreta posicion visual y fuerza contrato explicito',
     () {
-      final diagram = DiagramDetail.fromJson({
+      final diagram = DetalleDiagrama.fromJson({
         'diagram': {'id': 'd1', 'name': 'Modelo'},
         'logical_version': 7,
         'can_edit': false,
@@ -41,4 +41,43 @@ void main() {
       expect(diagram.classes.single.width, 240);
     },
   );
+
+  test('el visor conserva parametros y coordenadas del modelo UML', () {
+    final diagrama = DetalleDiagrama.fromJson({
+      'diagram': {'id': 'd2', 'name': 'Cursos'},
+      'logical_version': 1,
+      'can_edit': false,
+      'classes': [
+        {
+          'id': 'c1',
+          'name': 'Curso',
+          'element_type': 'interface',
+          'attributes': [],
+          'methods': [
+            {
+              'name': 'inscribir',
+              'return_type': 'void',
+              'visibility': 'public',
+              'parameters': [
+                {'name': 'estudiante', 'data_type': 'UUID'},
+              ],
+            },
+          ],
+          'visual': {'x': 340, 'y': 175, 'width': 230, 'height': 150},
+        },
+      ],
+      'relationships': [],
+    });
+    final clase = diagrama.classes.single;
+    expect(clase.x, 340);
+    expect(clase.y, 175);
+    expect(clase.elementType, 'interface');
+    expect(clase.methods.single.firma, 'inscribir(estudiante: UUID): void');
+    expect(
+      DetalleDiagrama.fromJson(
+        diagrama.toJson(),
+      ).classes.single.methods.single.parameters.single.name,
+      'estudiante',
+    );
+  });
 }

@@ -7,17 +7,17 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.config.settings import settings
-from app.core.nosql.client import MongoHealth
-from app.core.nosql.contracts import MongoCollection, UmlDiagramDocument
-from app.core.nosql.outbox import NoSqlOutboxDispatcher
-from app.core.nosql.reconciliation import canonical_sha256
-from app.core.nosql.repositories import UmlDiagramRepository
+from app.core.config.configuracion import settings
+from app.core.nosql.bandeja_salida import DistribuidorBandejaSalidaNoSQL
+from app.core.nosql.cliente import EstadoMongo
+from app.core.nosql.conciliacion import canonical_sha256
+from app.core.nosql.contratos import ColeccionMongo, DocumentoDiagramaUML
+from app.core.nosql.repositorios import RepositorioDiagramasUML
 from app.main import app
-from app.modules.modelado_uml.engine.internal_model import UmlDiagramModel
-from app.modules.modelado_uml.services.active_diagram_store import (
-    ActiveUmlDocumentStore,
-    canonical_uml_content,
+from app.modules.modelado_uml.engine.modelo_interno import ModeloDiagramaUML
+from app.modules.modelado_uml.services.almacen_diagrama_activo import (
+    AlmacenDocumentosUMLActivo,
+    contenido_uml_canonico,
 )
 
 
@@ -85,8 +85,8 @@ def _content(diagram_id=None, project_id=None):
 
 
 def _document(*, revision=4, content=None):
-    raw = canonical_uml_content(content or _content())
-    return UmlDiagramDocument(
+    raw = contenido_uml_canonico(content or _content())
+    return DocumentoDiagramaUML(
         _id=raw["id"],
         project_id=raw["project_id"],
         revision=revision,
@@ -97,7 +97,7 @@ def _document(*, revision=4, content=None):
 
 def test_phase13_canonical_document_preserves_complete_uml_and_stable_hash() -> None:
     document = _document()
-    reparsed = UmlDiagramModel.model_validate(document.content)
+    reparsed = ModeloDiagramaUML.model_validate(document.content)
 
     assert [item.name for item in reparsed.classes] == ["Curso", "Estudiante"]
     method = reparsed.classes[1].methods[0]
@@ -105,15 +105,15 @@ def test_phase13_canonical_document_preserves_complete_uml_and_stable_hash() -> 
     assert method.specification["preconditions"] == ["El curso existe"]
     assert reparsed.classes[1].visual.x == 80
     assert reparsed.relationships[0].target_cardinality == "1"
-    assert document.content_hash == canonical_sha256(canonical_uml_content(reparsed))
+    assert document.content_hash == canonical_sha256(contenido_uml_canonico(reparsed))
 
 
 def test_phase13_repository_requires_exact_revision_and_valid_references() -> None:
     document = _document(revision=5)
     collection = SimpleNamespace(find_one_and_replace=AsyncMock(return_value=document.to_mongo()))
-    repository = UmlDiagramRepository({MongoCollection.UML_DIAGRAMS.value: collection})
+    repository = RepositorioDiagramasUML({ColeccionMongo.UML_DIAGRAMS.value: collection})
 
-    stored = asyncio.run(repository.replace_if_revision(document, expected_revision=4))
+    stored = asyncio.run(repository.reemplazar_si_revision(document, expected_revision=4))
 
     assert stored is not None and stored.revision == 5
     assert collection.find_one_and_replace.await_args.args[0] == {
@@ -121,25 +121,25 @@ def test_phase13_repository_requires_exact_revision_and_valid_references() -> No
         "revision": 4,
     }
     with pytest.raises(ValueError, match="increment expected_revision"):
-        asyncio.run(repository.replace_if_revision(document, expected_revision=3))
+        asyncio.run(repository.reemplazar_si_revision(document, expected_revision=3))
 
     invalid_content = _content()
     invalid_content["relationships"][0]["target_class_id"] = str(uuid4())
     invalid = _document(revision=5, content=invalid_content)
     with pytest.raises(ValueError, match="destino inexistente"):
-        asyncio.run(repository.replace_if_revision(invalid, expected_revision=4))
+        asyncio.run(repository.reemplazar_si_revision(invalid, expected_revision=4))
 
 
 def test_phase13_store_reads_mongodb_and_uses_sql_for_pending_outbox(monkeypatch) -> None:
     document = _document(revision=8)
     diagram = SimpleNamespace(id=document.id, project_id=document.project_id)
-    sql_model = UmlDiagramModel(
+    sql_model = ModeloDiagramaUML(
         id=str(document.id),
         project_id=str(document.project_id),
         name="SQL pendiente",
     )
     collection = SimpleNamespace(find_one=lambda _query: document.to_mongo())
-    store = ActiveUmlDocumentStore(database={MongoCollection.UML_DIAGRAMS.value: collection})
+    store = AlmacenDocumentosUMLActivo(database={ColeccionMongo.UML_DIAGRAMS.value: collection})
     db = MagicMock()
     db.scalar.return_value = 8
     monkeypatch.setattr(settings, "uml_diagrams_mongodb_read_enabled", True)
@@ -147,14 +147,14 @@ def test_phase13_store_reads_mongodb_and_uses_sql_for_pending_outbox(monkeypatch
     monkeypatch.setattr(settings, "uml_diagrams_compare_reads", False)
 
     with patch(
-        "app.modules.modelado_uml.services.active_diagram_store.build_sql_diagram_model",
+        "app.modules.modelado_uml.services.almacen_diagrama_activo.construir_modelo_diagrama_sql",
         return_value=sql_model,
     ):
-        selected = store.model_for(db, diagram)
+        selected = store.modelo_para(db, diagram)
         assert selected.name == "Academico"
 
         db.scalar.return_value = 9
-        selected = store.model_for(db, diagram)
+        selected = store.modelo_para(db, diagram)
         assert selected.name == "SQL pendiente"
 
 
@@ -171,7 +171,7 @@ def test_phase13_outbox_never_overwrites_newer_revision() -> None:
         id=uuid4(),
         idempotency_key="uml-revision-6",
         payload={
-            "collection": MongoCollection.UML_DIAGRAMS.value,
+            "collection": ColeccionMongo.UML_DIAGRAMS.value,
             "operation": "upsert",
             "document_id": str(incoming.id),
             "document": incoming.to_mongo(),
@@ -179,11 +179,11 @@ def test_phase13_outbox_never_overwrites_newer_revision() -> None:
     )
 
     asyncio.run(
-        NoSqlOutboxDispatcher(
+        DistribuidorBandejaSalidaNoSQL(
             MagicMock(),
             {
-                MongoCollection.UML_DIAGRAMS.value: target,
-                MongoCollection.PROCESSED_EVENTS.value: receipts,
+                ColeccionMongo.UML_DIAGRAMS.value: target,
+                ColeccionMongo.PROCESSED_EVENTS.value: receipts,
             },
         )._apply(event)
     )
@@ -215,7 +215,7 @@ def test_phase13_outbox_patches_changed_class_by_id() -> None:
         id=uuid4(),
         idempotency_key="uml-partial-revision-6",
         payload={
-            "collection": MongoCollection.UML_DIAGRAMS.value,
+            "collection": ColeccionMongo.UML_DIAGRAMS.value,
             "operation": "upsert",
             "document_id": str(incoming.id),
             "document": incoming.to_mongo(),
@@ -223,11 +223,11 @@ def test_phase13_outbox_patches_changed_class_by_id() -> None:
     )
 
     asyncio.run(
-        NoSqlOutboxDispatcher(
+        DistribuidorBandejaSalidaNoSQL(
             MagicMock(),
             {
-                MongoCollection.UML_DIAGRAMS.value: target,
-                MongoCollection.PROCESSED_EVENTS.value: receipts,
+                ColeccionMongo.UML_DIAGRAMS.value: target,
+                ColeccionMongo.PROCESSED_EVENTS.value: receipts,
             },
         )._apply(event)
     )
@@ -236,13 +236,13 @@ def test_phase13_outbox_patches_changed_class_by_id() -> None:
     update_filter, operation = target.update_one.await_args.args
     assert update_filter == {"_id": str(incoming.id), "revision": 5}
     assert operation["$set"]["revision"] == 6
-    assert any(path.startswith("content.classes.$[") for path in operation["$set"])
+    assert any(path.startswith("contenido.clases.$[") for path in operation["$set"])
     assert target.update_one.await_args.kwargs["array_filters"]
 
 
 def test_phase13_readiness_requires_completed_active_diagram_migration(monkeypatch) -> None:
     collection = SimpleNamespace(find_one=AsyncMock(return_value={"status": "completed"}))
-    health = MongoHealth(status="available", required=True, database="case_test")
+    health = EstadoMongo(status="available", required=True, database="case_test")
     monkeypatch.setattr(settings, "uml_diagrams_migration_required", True)
 
     with (
@@ -251,7 +251,7 @@ def test_phase13_readiness_requires_completed_active_diagram_migration(monkeypat
         patch.object(
             app.state.mongo_manager,
             "_database",
-            {MongoCollection.MIGRATION_CHECKPOINTS.value: collection},
+            {ColeccionMongo.MIGRATION_CHECKPOINTS.value: collection},
         ),
     ):
         response = TestClient(app).get("/ready")

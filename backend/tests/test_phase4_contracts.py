@@ -4,8 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app.core.security.jwt import create_access_token, decode_access_token
-from app.core.security.password import hash_password, verify_password
+from app.core.security.contrasena import hash_password, verify_password
+from app.core.security.jwt import crear_token_acceso, decode_access_token
 from app.main import app
 
 
@@ -15,7 +15,7 @@ def test_security_password_and_jwt_contracts() -> None:
     assert verify_password("Password123", password_hash)
 
     user_id = uuid4()
-    token = create_access_token(user_id)
+    token = crear_token_acceso(user_id)
     assert decode_access_token(token) == user_id
 
 

@@ -1,6 +1,6 @@
-from app.modules.generacion_software.backend_generator.services.spring_boot_generator_service import (
-    SpringBootGenerationResult,
-    SpringBootGeneratorService,
+from app.modules.generacion_software.backend_generator.services.servicio_generador_spring_boot import (
+    ResultadoGeneracionSpringBoot,
+    ServicioGeneradorSpringBoot,
 )
 
-__all__ = ["SpringBootGenerationResult", "SpringBootGeneratorService"]
+__all__ = ["ResultadoGeneracionSpringBoot", "ServicioGeneradorSpringBoot"]

@@ -6,15 +6,20 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
 
-from app.core.config.settings import settings
-from app.core.database.session import SessionLocal
+from app.core.api.nombres_contratos import traducir_json
+from app.core.config.configuracion import settings
+from app.core.database.sesion import SessionLocal
 from app.core.security.jwt import decode_access_token
-from app.modules.acceso_usuarios.repositories.user_repository import UserRepository
-from app.modules.asistente_proyecto.repositories.assistant_repository import AssistantRepository
-from app.modules.proyectos_colaboracion.repositories.member_repository import MemberRepository
-from app.modules.proyectos_colaboracion.repositories.project_repository import ProjectRepository
-from app.modules.proyectos_colaboracion.services.project_service import ProjectService
-from app.websocket.connection_manager import manager
+from app.modules.acceso_usuarios.repositories.repositorio_usuarios import RepositorioUsuarios
+from app.modules.asistente_proyecto.repositories.repositorio_asistente import RepositorioAsistente
+from app.modules.proyectos_colaboracion.repositories.repositorio_integrantes import (
+    RepositorioIntegrantes,
+)
+from app.modules.proyectos_colaboracion.repositories.repositorio_proyectos import (
+    RepositorioProyectos,
+)
+from app.modules.proyectos_colaboracion.services.servicio_proyectos import ServicioProyectos
+from app.websocket.gestor_conexiones import manager
 
 router = APIRouter(tags=["websocket"])
 
@@ -85,15 +90,15 @@ async def project_collaboration(websocket: WebSocket, project_id: str) -> None:
         return
 
     with SessionLocal() as db:
-        user = UserRepository(db).get_by_id(user_id)
-        membership = MemberRepository(db).get_membership(project_uuid, user_id)
+        user = RepositorioUsuarios(db).obtener_por_id(user_id)
+        membership = RepositorioIntegrantes(db).obtener_participacion(project_uuid, user_id)
         if user is None or not user.is_active or membership is None:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Sin acceso al proyecto")
             return
         user_name = user.full_name
         project_role = membership.project_role
-        current_project_sequence = ProjectRepository(db).current_event_sequence(project_uuid)
-        conversation = AssistantRepository(db).get_conversation(project_uuid)
+        current_project_sequence = RepositorioProyectos(db).secuencia_evento_actual(project_uuid)
+        conversation = RepositorioAsistente(db).obtener_conversacion(project_uuid)
         current_conversation_sequence = conversation.last_message_sequence if conversation else 0
 
     user_was_present = any(
@@ -166,6 +171,8 @@ async def project_collaboration(websocket: WebSocket, project_id: str) -> None:
         while True:
             try:
                 event = await websocket.receive_json()
+                if websocket.query_params.get("contrato") == "es":
+                    event = traducir_json(event, al_espanol=False)
             except (TypeError, ValueError):
                 await manager.send(
                     project_id,
@@ -191,8 +198,8 @@ async def project_collaboration(websocket: WebSocket, project_id: str) -> None:
                     await websocket.close(code=1008, reason="Sesion expirada")
                     return
                 with SessionLocal() as db:
-                    current_user = UserRepository(db).get_by_id(current_user_id)
-                    current_membership = MemberRepository(db).get_membership(
+                    current_user = RepositorioUsuarios(db).obtener_por_id(current_user_id)
+                    current_membership = RepositorioIntegrantes(db).obtener_participacion(
                         project_uuid, current_user_id
                     )
                     if (
@@ -216,8 +223,8 @@ async def project_collaboration(websocket: WebSocket, project_id: str) -> None:
                 last_project_sequence = event.get("last_project_sequence")
                 last_conversation_sequence = event.get("last_conversation_sequence")
                 with SessionLocal() as db:
-                    project_sequence = ProjectRepository(db).current_event_sequence(project_uuid)
-                    current_conversation = AssistantRepository(db).get_conversation(project_uuid)
+                    project_sequence = RepositorioProyectos(db).secuencia_evento_actual(project_uuid)
+                    current_conversation = RepositorioAsistente(db).obtener_conversacion(project_uuid)
                     conversation_sequence = (
                         current_conversation.last_message_sequence if current_conversation else 0
                     )
@@ -291,7 +298,7 @@ async def project_collaboration(websocket: WebSocket, project_id: str) -> None:
             element_type, element_id = _element_data(payload)
             try:
                 with SessionLocal() as db:
-                    stored_event, was_created = ProjectService(db).record_collaboration_event(
+                    stored_event, was_created = ServicioProyectos(db).registrar_evento_colaboracion(
                         project_id=project_uuid,
                         diagram_id=diagram_id,
                         user_id=user_id,

@@ -62,5 +62,21 @@ for (const viewport of [{ name: "mobile", width: 390, height: 844 }, { name: "ta
     await expect(editor).toHaveScreenshot(`phase6-${viewport.name}.png`, {
       animations: "disabled", maxDiffPixelRatio: 0.01,
     });
+    if (viewport.name === "desktop") {
+      const preview = editor.getByTestId("flutter-preview");
+      await editor.getByLabel("Modo predeterminado").selectOption("light");
+      await expect(preview).toHaveCSS("background-color", "rgb(248, 250, 252)");
+      await editor.getByLabel("Modo predeterminado").selectOption("dark");
+      await expect(preview).toHaveCSS("background-color", "rgb(2, 6, 23)");
+      await editor.getByLabel("Escala tipografica").selectOption("large");
+      await expect(preview).toHaveAttribute("style", /font-size: 1\.92em/);
+      await editor.getByRole("button", { name: "Inscribir estudiante" }).click();
+      await expect(editor.getByRole("dialog", { name: "Diálogo de ejemplo" })).toBeVisible();
+      await editor.getByRole("button", { name: "Cerrar diálogo" }).click();
+      await editor.getByLabel("Modulo").selectOption("curso");
+      await expect(editor.getByLabel("Pantalla")).toHaveValue("curso-list");
+      await editor.getByLabel("Estado").selectOption("error");
+      await expect(editor.getByRole("status")).toContainText("No se pudo cargar");
+    }
   });
 }

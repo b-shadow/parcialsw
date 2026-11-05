@@ -39,7 +39,7 @@ Ejecutar capacidades inteligentes sin depender de APIs externas en el producto f
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m ai_engine.inference.health
+.\.venv\Scripts\python.exe -m ai_engine.inference.estado
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m pytest -q
 ```

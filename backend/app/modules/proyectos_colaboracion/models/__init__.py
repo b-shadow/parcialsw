@@ -1,20 +1,18 @@
-from app.modules.proyectos_colaboracion.models.collaboration_event import CollaborationEvent
-from app.modules.proyectos_colaboracion.models.project import Project
-from app.modules.proyectos_colaboracion.models.project_invitation import ProjectInvitation
-from app.modules.proyectos_colaboracion.models.project_member import ProjectMember
-from app.modules.proyectos_colaboracion.models.project_permission import ProjectPermission
-from app.modules.proyectos_colaboracion.models.project_restore_operation import (
-    ProjectRestoreOperation,
+from app.modules.proyectos_colaboracion.models.evento_colaboracion import EventoColaboracion
+from app.modules.proyectos_colaboracion.models.integrante_proyecto import IntegranteProyecto
+from app.modules.proyectos_colaboracion.models.invitacion_proyecto import InvitacionProyecto
+from app.modules.proyectos_colaboracion.models.proyecto import Proyecto
+from app.modules.proyectos_colaboracion.models.restauracion_proyecto import (
+    RestauracionProyecto,
 )
-from app.modules.proyectos_colaboracion.models.project_version import ProjectVersion
+from app.modules.proyectos_colaboracion.models.version_proyecto import VersionProyecto
 
 __all__ = [
-    "CollaborationEvent",
-    "Project",
-    "ProjectInvitation",
-    "ProjectMember",
-    "ProjectPermission",
-    "ProjectRestoreOperation",
-    "ProjectVersion",
+    'EventoColaboracion',
+    'IntegranteProyecto',
+    'InvitacionProyecto',
+    'Proyecto',
+    'RestauracionProyecto',
+    'VersionProyecto',
 ]
 

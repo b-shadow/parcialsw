@@ -3,11 +3,11 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 from app.main import app
-from app.modules.asistente_proyecto.schemas.assistant import AiMessagePage, AiReference
-from app.modules.asistente_proyecto.services.conversation_memory_service import (
-    ConversationMemoryService,
+from app.modules.asistente_proyecto.schemas.esquemas_asistente import PaginaMensajesIA, ReferenciaIA
+from app.modules.asistente_proyecto.services.servicio_memoria_conversacion import (
+    ServicioMemoriaConversacion,
 )
-from app.websocket.connection_manager import ConnectionManager
+from app.websocket.gestor_conexiones import GestorConexiones
 
 
 class FakeWebSocket:
@@ -36,7 +36,7 @@ def test_phase3_routes_are_registered() -> None:
 
 
 def test_message_page_exposes_bidirectional_cursor_state() -> None:
-    page = AiMessagePage(
+    page = PaginaMensajesIA(
         items=[],
         previous_cursor=10,
         next_cursor=20,
@@ -52,7 +52,7 @@ def test_message_page_exposes_bidirectional_cursor_state() -> None:
 
 def test_references_cover_project_diagram_attribute_and_message() -> None:
     for reference_type in ("project", "diagram", "uml_attribute", "message"):
-        reference = AiReference(type=reference_type, id=uuid4(), label="Elemento")
+        reference = ReferenciaIA(type=reference_type, id=uuid4(), label="Elemento")
         assert reference.type == reference_type
 
 
@@ -81,7 +81,7 @@ def test_memory_summary_is_structured_bounded_and_keeps_pending_actions() -> Non
     ]
     actions = [SimpleNamespace(action_type="create_relationship", id=uuid4())]
 
-    summary = ConversationMemoryService._deterministic_summary(
+    summary = ServicioMemoriaConversacion._resumen_determinista(
         previous, messages, actions, 42
     )
 
@@ -94,7 +94,7 @@ def test_memory_summary_is_structured_bounded_and_keeps_pending_actions() -> Non
 
 def test_presence_aggregates_tabs_and_disconnects_cleanly() -> None:
     async def scenario() -> None:
-        manager = ConnectionManager()
+        manager = GestorConexiones()
         first = FakeWebSocket()
         second = FakeWebSocket()
         await manager.connect(
@@ -120,7 +120,7 @@ def test_presence_aggregates_tabs_and_disconnects_cleanly() -> None:
 
 def test_connection_manager_limits_tabs_per_user() -> None:
     async def scenario() -> None:
-        manager = ConnectionManager()
+        manager = GestorConexiones()
         manager.MAX_CONNECTIONS_PER_USER = 1
         first = FakeWebSocket()
         rejected = FakeWebSocket()

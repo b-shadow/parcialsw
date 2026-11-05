@@ -1,5 +1,7 @@
-from app.modules.generacion_software.backend_generator.uml_parser.parser import (
-    parse_intermediate_model,
+from app.modules.generacion_software.backend_generator.uml_parser.analizador import (
+    analizar_modelo_intermedio,
 )
 
-__all__ = ["parse_intermediate_model"]
+__all__ = [
+    "analizar_modelo_intermedio",
+]

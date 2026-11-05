@@ -1,9 +1,9 @@
-__all__ = ["LocalAIService"]
+__all__ = ["ServicioIALocal"]
 
 
 def __getattr__(name: str):
-    if name == "LocalAIService":
-        from ai_engine.services.local_ai_service import LocalAIService
+    if name == "ServicioIALocal":
+        from ai_engine.services.servicio_ia_local import ServicioIALocal
 
-        return LocalAIService
+        return ServicioIALocal
     raise AttributeError(name)
