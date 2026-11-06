@@ -12,6 +12,7 @@ locals {
     [local.frontend_origin],
     var.frontend_allowed_origins,
   )))
+  ollama_endpoint = var.enable_aws_ollama ? "http://${aws_instance.ollama[0].private_ip}:11434" : var.ollama_base_url
 }
 
 resource "aws_vpc" "main" {
@@ -150,25 +151,34 @@ resource "aws_db_subnet_group" "main" {
 }
 
 resource "aws_db_instance" "postgres" {
-  identifier              = "${local.name}-postgres"
-  engine                  = "postgres"
-  engine_version          = "16"
-  instance_class          = "db.t4g.micro"
-  allocated_storage       = 20
-  db_name                 = var.database_name
-  username                = var.database_username
-  password                = var.database_password
-  db_subnet_group_name    = aws_db_subnet_group.main.name
-  vpc_security_group_ids  = [aws_security_group.rds.id]
-  storage_encrypted       = true
-  backup_retention_period = var.rds_backup_retention_period
-  skip_final_snapshot     = true
-  deletion_protection     = false
+  identifier                  = "${local.name}-postgres"
+  engine                      = "postgres"
+  engine_version              = "16"
+  instance_class              = "db.t4g.micro"
+  allocated_storage           = 20
+  db_name                     = var.database_name
+  username                    = var.database_username
+  manage_master_user_password = true
+  db_subnet_group_name        = aws_db_subnet_group.main.name
+  vpc_security_group_ids      = [aws_security_group.rds.id]
+  storage_encrypted           = true
+  backup_retention_period     = var.rds_backup_retention_period
+  skip_final_snapshot         = false
+  final_snapshot_identifier   = "${local.name}-postgres-final"
+  deletion_protection         = true
 }
 
 resource "aws_s3_bucket" "artifacts" {
   bucket        = var.artifacts_bucket_name
-  force_destroy = true
+  force_destroy = false
+}
+
+resource "aws_s3_bucket_public_access_block" "artifacts" {
+  bucket                  = aws_s3_bucket.artifacts.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
 resource "aws_s3_bucket_versioning" "artifacts" {
@@ -176,6 +186,26 @@ resource "aws_s3_bucket_versioning" "artifacts" {
   versioning_configuration {
     status = "Enabled"
   }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "artifact_backups" {
+  bucket = aws_s3_bucket.artifacts.id
+
+  rule {
+    id     = "retener-respaldos-coordinados"
+    status = "Enabled"
+    filter {
+      prefix = "backups/"
+    }
+    expiration {
+      days = var.backup_archive_retention_days
+    }
+    noncurrent_version_expiration {
+      noncurrent_days = var.backup_archive_retention_days
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.artifacts]
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "artifacts" {
@@ -189,7 +219,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "artifacts" {
 
 resource "aws_s3_bucket" "frontend" {
   bucket        = var.frontend_bucket_name
-  force_destroy = true
+  force_destroy = false
 }
 
 resource "aws_s3_bucket_ownership_controls" "frontend" {
@@ -241,6 +271,16 @@ resource "aws_iam_role_policy" "backend_runtime" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      {
+        Effect = "Allow"
+        Action = ["secretsmanager:GetSecretValue"]
+        Resource = compact([
+          aws_db_instance.postgres.master_user_secret[0].secret_arn,
+          var.jwt_secret_arn,
+          var.mongodb_uri_secret_arn,
+          var.redis_url_secret_arn,
+        ])
+      },
       {
         Effect = "Allow"
         Action = [
@@ -328,7 +368,7 @@ resource "aws_lb_target_group" "backend" {
   vpc_id      = aws_vpc.main.id
 
   health_check {
-    path                = "/health"
+    path                = "/ready"
     matcher             = "200"
     interval            = 30
     timeout             = 5
@@ -367,7 +407,7 @@ resource "aws_lb_listener" "https" {
 locals {
   backend_user_data = <<-EOF
 #!/bin/bash
-set -euxo pipefail
+set -euo pipefail
 
 dnf update -y
 dnf install -y docker awscli amazon-cloudwatch-agent
@@ -376,15 +416,63 @@ usermod -aG docker ec2-user
 
 mkdir -p /opt/case-inteligente /var/log/case-inteligente
 
-cat >/opt/case-inteligente/backend.env <<'ENVVARS'
-APP_ENV=production
-DATABASE_URL=postgresql+psycopg://${var.database_username}:${var.database_password}@${aws_db_instance.postgres.address}:5432/${var.database_name}
-JWT_SECRET_KEY=${var.jwt_secret_key}
-CORS_ORIGINS=${local.backend_cors_origins}
-ALLOWED_HOSTS=*
-AWS_REGION=${var.aws_region}
-S3_ARTIFACTS_BUCKET=${aws_s3_bucket.artifacts.bucket}
-ENVVARS
+python3 - <<'PY'
+import json
+import os
+import subprocess
+from pathlib import Path
+from urllib.parse import quote
+
+def secret(arn):
+    result = subprocess.run(
+        ["aws", "secretsmanager", "get-secret-value", "--region", "${var.aws_region}",
+         "--secret-id", arn, "--query", "SecretString", "--output", "text"],
+        check=True, capture_output=True, text=True,
+    )
+    value = result.stdout.strip()
+    if not value or "\n" in value:
+        raise RuntimeError("El secreto debe ser un valor de una linea")
+    return value
+
+database_credentials = json.loads(secret("${aws_db_instance.postgres.master_user_secret[0].secret_arn}"))
+database_url = (
+    "postgresql+psycopg://"
+    + quote(database_credentials["username"], safe="")
+    + ":" + quote(database_credentials["password"], safe="")
+    + "@${aws_db_instance.postgres.address}:5432/${var.database_name}"
+)
+values = {
+    "APP_ENV": "production",
+    "RUN_MIGRATIONS": "true",
+    "DATABASE_URL": database_url,
+    "MONGODB_URI": secret("${var.mongodb_uri_secret_arn}"),
+    "MONGODB_DATABASE": "${var.mongodb_database}",
+    "MONGODB_ENABLED": "true",
+    "MONGODB_REQUIRED": "true",
+    "NOSQL_CONSOLIDATED_MODE": "true",
+    "JWT_SECRET_KEY": secret("${var.jwt_secret_arn}"),
+    "CORS_ORIGINS": "${local.backend_cors_origins}",
+    "ALLOWED_HOSTS": ",".join(dict.fromkeys([
+        "${var.api_domain}", "localhost", "127.0.0.1",
+        *subprocess.check_output(["hostname", "-I"], text=True).split(),
+    ])),
+    "OLLAMA_BASE_URL": "${local.ollama_endpoint}",
+    "OLLAMA_AWS_BASE_URL": "${local.ollama_endpoint}",
+    "OLLAMA_DEFAULT_SOURCE": "aws",
+    "AWS_REGION": "${var.aws_region}",
+    "S3_ARTIFACTS_BUCKET": "${aws_s3_bucket.artifacts.bucket}",
+}
+redis_secret_arn = "${var.redis_url_secret_arn != null ? var.redis_url_secret_arn : ""}"
+if redis_secret_arn:
+    values["REDIS_URL"] = secret(redis_secret_arn)
+    values["REDIS_ENABLED"] = "true"
+else:
+    values["REDIS_ENABLED"] = "false"
+
+path = Path("/opt/case-inteligente/backend.env")
+path.write_text("".join(f"{key}={value}\n" for key, value in values.items()), encoding="utf-8")
+os.chmod(path, 0o600)
+PY
 
 aws ecr get-login-password --region ${var.aws_region} | docker login --username AWS --password-stdin ${split("/", var.backend_image)[0]}
 docker pull ${var.backend_image}
@@ -393,9 +481,72 @@ docker run -d \
   --name case-inteligente-backend \
   --restart unless-stopped \
   --env-file /opt/case-inteligente/backend.env \
+  --log-driver awslogs \
+  --log-opt awslogs-region=${var.aws_region} \
+  --log-opt awslogs-group=${aws_cloudwatch_log_group.backend.name} \
+  --log-opt awslogs-stream=backend \
   -p 8000:8000 \
   -v case_generated_artifacts:/storage/generated \
+  -v case_coordinated_backups:/storage/backups \
   ${var.backend_image}
+
+docker rm -f case-inteligente-outbox case-inteligente-reconciliation || true
+docker run -d \
+  --name case-inteligente-outbox \
+  --restart unless-stopped \
+  --env-file /opt/case-inteligente/backend.env \
+  -e RUN_MIGRATIONS=false \
+  --log-driver awslogs \
+  --log-opt awslogs-region=${var.aws_region} \
+  --log-opt awslogs-group=${aws_cloudwatch_log_group.backend.name} \
+  --log-opt awslogs-stream=outbox \
+  ${var.backend_image} python -m app.core.nosql.commands.distribuir_bandeja_salida --watch
+
+docker run -d \
+  --name case-inteligente-reconciliation \
+  --restart unless-stopped \
+  --env-file /opt/case-inteligente/backend.env \
+  -e RUN_MIGRATIONS=false \
+  --log-driver awslogs \
+  --log-opt awslogs-region=${var.aws_region} \
+  --log-opt awslogs-group=${aws_cloudwatch_log_group.backend.name} \
+  --log-opt awslogs-stream=reconciliation \
+  ${var.backend_image} python -m app.core.nosql.commands.conciliar --operational --watch --interval-seconds 300
+
+cat >/opt/case-inteligente/backup.sh <<'BACKUP'
+#!/bin/bash
+set -euo pipefail
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+ARCHIVE="/storage/backups/case-$STAMP.zip"
+docker exec case-inteligente-backend python -m app.core.nosql.commands.respaldo_coordinado create "$ARCHIVE"
+BACKUP_DIR=$(docker volume inspect --format '{{.Mountpoint}}' case_coordinated_backups)
+GENERATED_DIR=$(docker volume inspect --format '{{.Mountpoint}}' case_generated_artifacts)
+aws s3 cp "$BACKUP_DIR/case-$STAMP.zip" "s3://${aws_s3_bucket.artifacts.bucket}/backups/case-$STAMP.zip" --region ${var.aws_region}
+aws s3 sync "$GENERATED_DIR" "s3://${aws_s3_bucket.artifacts.bucket}/generated/" --region ${var.aws_region}
+rm -- "$BACKUP_DIR/case-$STAMP.zip"
+BACKUP
+chmod 700 /opt/case-inteligente/backup.sh
+
+cat >/etc/systemd/system/case-inteligente-backup.service <<'SERVICE'
+[Unit]
+Description=Coordinated CASE database and generated-artifact backup
+After=docker.service
+[Service]
+Type=oneshot
+ExecStart=/opt/case-inteligente/backup.sh
+SERVICE
+
+cat >/etc/systemd/system/case-inteligente-backup.timer <<'TIMER'
+[Unit]
+Description=Daily CASE backup
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+[Install]
+WantedBy=timers.target
+TIMER
+systemctl daemon-reload
+systemctl enable --now case-inteligente-backup.timer
 
 cat >/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'CWCONFIG'
 {
@@ -466,4 +617,64 @@ resource "aws_route53_record" "api" {
     zone_id                = aws_lb.api.zone_id
     evaluate_target_health = true
   }
+}
+
+resource "aws_sns_topic" "operations" {
+  name = "${local.name}-operations"
+}
+
+resource "aws_sns_topic_subscription" "email" {
+  count     = var.alarm_email == null ? 0 : 1
+  topic_arn = aws_sns_topic.operations.arn
+  protocol  = "email"
+  endpoint  = var.alarm_email
+}
+
+resource "aws_cloudwatch_metric_alarm" "backend_unhealthy" {
+  alarm_name          = "${local.name}-backend-unhealthy"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "HealthyHostCount"
+  namespace           = "AWS/ApplicationELB"
+  period              = 60
+  statistic           = "Minimum"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+  dimensions = {
+    LoadBalancer = aws_lb.api.arn_suffix
+    TargetGroup  = aws_lb_target_group.backend.arn_suffix
+  }
+  alarm_actions = [aws_sns_topic.operations.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "ec2_status" {
+  alarm_name          = "${local.name}-ec2-status"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "StatusCheckFailed"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+  dimensions = {
+    InstanceId = aws_instance.backend.id
+  }
+  alarm_actions = [aws_sns_topic.operations.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "rds_storage" {
+  alarm_name          = "${local.name}-rds-storage-low"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "FreeStorageSpace"
+  namespace           = "AWS/RDS"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 2147483648
+  treat_missing_data  = "missing"
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.postgres.id
+  }
+  alarm_actions = [aws_sns_topic.operations.arn]
 }

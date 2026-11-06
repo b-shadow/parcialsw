@@ -1,9 +1,14 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
+from app.core.config.configuracion import settings
+from app.core.database.sesion import obtener_sesion_bd
 from app.core.security.dependencias import obtener_usuario_actual
 from app.modules.acceso_usuarios.models import Usuario
+from app.modules.asistente_proyecto.services.fabrica_proveedores import obtener_url_ollama
+from app.modules.asistente_proyecto.services.servicio_asistente import ServicioContratoAsistente
 from app.modules.generacion_software.schemas.ai import (
     RespuestaElementoConocimientoIA,
     RespuestaEvaluacionIA,
@@ -61,17 +66,24 @@ def voz_a_uml(
 @router.post("/uml/image", response_model=RespuestaUMLIA)
 def imagen_a_uml(
     payload: SolicitudImagenIA,
-    _: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
 ) -> RespuestaUMLIA:
-    return ServicioIA().imagen_a_uml(payload)
+    origen = settings.ollama_default_source
+    if payload.project_id is not None:
+        configuracion = ServicioContratoAsistente(db).obtener_configuracion(payload.project_id, current_user.id)
+        origen = configuracion.settings_json.get("origen_ollama", origen)
+    url = obtener_url_ollama(origen)
+    return ServicioIA().imagen_a_uml(payload, ollama_base_url=url, vision_enabled=bool(url))
 
 
 @router.post("/analyze-image", response_model=RespuestaUMLIA)
 def alias_analizar_imagen(
     payload: SolicitudImagenIA,
-    _: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
 ) -> RespuestaUMLIA:
-    return ServicioIA().imagen_a_uml(payload)
+    return imagen_a_uml(payload, current_user, db)
 
 
 @router.post("/uml/validate", response_model=RespuestaValidacionIA)

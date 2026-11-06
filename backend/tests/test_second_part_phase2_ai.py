@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import Mock
 from uuid import uuid4
@@ -14,14 +15,19 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy import UniqueConstraint
 
+from app.core.config.configuracion import settings as app_settings
 from app.main import app
 from app.modules.asistente_proyecto.models import ConversacionIA
+from app.modules.asistente_proyecto.repositories.repositorio_asistente import RepositorioAsistente
 from app.modules.asistente_proyecto.schemas.esquemas_asistente import (
     CreacionConversacionIA,
     EstadoProveedorIA,
     SolicitudInteraccionIA,
 )
-from app.modules.asistente_proyecto.services.fabrica_proveedores import resolver_modelo_ollama
+from app.modules.asistente_proyecto.services.fabrica_proveedores import (
+    obtener_url_ollama,
+    resolver_modelo_ollama,
+)
 from app.modules.asistente_proyecto.services.servicio_aplicacion_ia_proyecto import (
     ServicioAplicacionIAProyecto,
 )
@@ -86,6 +92,70 @@ def test_ollama_configuration_rejects_ssrf_destinations() -> None:
     assert validar_url_base_ollama("http://localhost:11434")
     with pytest.raises(ValueError):
         validar_url_base_ollama("http://169.254.169.254/latest/meta-data")
+
+
+def test_ollama_source_is_shared_per_project_and_isolated_between_projects() -> None:
+    project_local_id, project_aws_id, owner_id = uuid4(), uuid4(), uuid4()
+    now = datetime.now(UTC)
+    projects = {
+        project_local_id: SimpleNamespace(id=project_local_id, owner_id=owner_id, created_at=now, updated_at=now, settings={"ai": {"settings_json": {"origen_ollama": "local"}}}),
+        project_aws_id: SimpleNamespace(id=project_aws_id, owner_id=owner_id, created_at=now, updated_at=now, settings={"ai": {"settings_json": {"origen_ollama": "aws"}}}),
+    }
+    repository = RepositorioAsistente(SimpleNamespace(get=lambda _model, project_id: projects[project_id]))
+    assert repository.obtener_configuracion(project_local_id).settings_json["origen_ollama"] == "local"
+    assert repository.obtener_configuracion(project_aws_id).settings_json["origen_ollama"] == "aws"
+
+
+def test_ollama_source_uses_only_server_configured_endpoints(monkeypatch) -> None:
+    monkeypatch.setattr(app_settings, "app_env", "production")
+    monkeypatch.setattr(app_settings, "ollama_local_base_url", None)
+    monkeypatch.setattr(app_settings, "ollama_aws_base_url", "http://10.20.11.10:11434")
+    assert obtener_url_ollama("local") is None
+    assert obtener_url_ollama("aws") == "http://10.20.11.10:11434"
+    with pytest.raises(ValueError):
+        obtener_url_ollama("http://attacker.example:11434")
+
+
+def test_ollama_source_rejects_unknown_project_setting() -> None:
+    from app.modules.asistente_proyecto.schemas.esquemas_asistente import (
+        ActualizacionConfiguracionIAProyecto,
+    )
+
+    with pytest.raises(ValidationError):
+        ActualizacionConfiguracionIAProyecto(settings_json={"origen_ollama": "otra_maquina"})
+
+
+def test_existing_project_image_uses_the_project_ollama_source(monkeypatch) -> None:
+    from app.modules.generacion_software.routers import ai as routes
+    from app.modules.generacion_software.schemas.ai import SolicitudImagenIA
+
+    project_id, user_id = uuid4(), uuid4()
+    captured = {}
+
+    class FakeContracts:
+        def __init__(self, db):
+            assert db == "database"
+
+        def obtener_configuracion(self, requested_project_id, requested_user_id):
+            assert (requested_project_id, requested_user_id) == (project_id, user_id)
+            return SimpleNamespace(settings_json={"origen_ollama": "aws"})
+
+    class FakeService:
+        def imagen_a_uml(self, payload, **kwargs):
+            captured.update(kwargs)
+            return "resultado"
+
+    monkeypatch.setattr(routes, "ServicioContratoAsistente", FakeContracts)
+    monkeypatch.setattr(routes, "ServicioIA", FakeService)
+    monkeypatch.setattr(routes, "obtener_url_ollama", lambda source: "http://10.20.11.10:11434" if source == "aws" else None)
+
+    result = routes.imagen_a_uml(
+        SolicitudImagenIA(project_id=project_id, description="diagrama"),
+        SimpleNamespace(id=user_id),
+        "database",
+    )
+    assert result == "resultado"
+    assert captured == {"ollama_base_url": "http://10.20.11.10:11434", "vision_enabled": True}
 
 
 def test_missing_configured_model_uses_an_installed_local_qwen_model() -> None:

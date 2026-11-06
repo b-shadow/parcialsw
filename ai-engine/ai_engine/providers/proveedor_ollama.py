@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import time
+from ipaddress import ip_address, ip_network
 from urllib.parse import urlparse
 
 import httpx
@@ -22,21 +24,50 @@ from ai_engine.providers.errores import (
     ErrorTiempoEsperaProveedor,
 )
 
-ALLOWED_OLLAMA_HOSTS = {"127.0.0.1", "localhost", "::1"}
+ALLOWED_OLLAMA_HOSTS = {"127.0.0.1", "localhost", "::1", "host.docker.internal"}
+REDES_PRIVADAS_OLLAMA = tuple(
+    ip_network(red) for red in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7")
+)
+
+
+def _host_ollama_permitido(host: str | None) -> bool:
+    if not host:
+        return False
+    try:
+        direccion = ip_address(host)
+    except ValueError:
+        direccion = None
+    if direccion is not None and (direccion.is_link_local or direccion.is_multicast or direccion.is_unspecified):
+        return False
+    hosts_configurados = {
+        item.strip().lower()
+        for item in os.getenv("OLLAMA_ALLOWED_HOSTS", "").split(",")
+        if item.strip()
+    }
+    if host.lower() in ALLOWED_OLLAMA_HOSTS | hosts_configurados:
+        return True
+    if direccion is None:
+        return False
+    return any(direccion in red for red in REDES_PRIVADAS_OLLAMA)
 
 
 def validar_url_base_ollama(value: str) -> str:
     parsed = urlparse(value.rstrip("/"))
+    try:
+        puerto_valido = parsed.port is not None
+    except ValueError:
+        puerto_valido = False
     if (
         parsed.scheme != "http"
-        or parsed.hostname not in ALLOWED_OLLAMA_HOSTS
+        or not _host_ollama_permitido(parsed.hostname)
+        or not puerto_valido
         or parsed.username
         or parsed.password
         or parsed.query
         or parsed.fragment
         or parsed.path not in {"", "/"}
     ):
-        raise ValueError("OLLAMA_BASE_URL debe ser una URL HTTP local sin credenciales ni ruta")
+        raise ValueError("OLLAMA_BASE_URL debe apuntar a un host Ollama autorizado sin credenciales ni ruta")
     return value.rstrip("/")
 
 

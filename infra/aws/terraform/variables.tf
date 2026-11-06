@@ -74,22 +74,75 @@ variable "database_username" {
   default = "case_user"
 }
 
-variable "database_password" {
+variable "jwt_secret_arn" {
   type        = string
-  sensitive   = true
-  description = "Password fuerte para RDS PostgreSQL."
+  description = "ARN de Secrets Manager con el secreto JWT como texto."
 }
 
-variable "jwt_secret_key" {
+variable "mongodb_uri_secret_arn" {
   type        = string
-  sensitive   = true
-  description = "Secreto JWT de produccion."
+  description = "ARN de Secrets Manager con una URI MongoDB administrada, TLS y acceso restringido a esta VPC."
+}
+
+variable "mongodb_database" {
+  type    = string
+  default = "case_inteligente_nosql"
+}
+
+variable "ollama_base_url" {
+  type        = string
+  default     = null
+  description = "URL privada del servicio Ollama; debe ser alcanzable desde la EC2."
+
+  validation {
+    condition     = var.enable_aws_ollama || (var.ollama_base_url != null && length(trimspace(var.ollama_base_url)) > 0)
+    error_message = "Configure ollama_base_url o active enable_aws_ollama."
+  }
+}
+
+variable "enable_aws_ollama" {
+  type        = bool
+  default     = false
+  description = "Crea una EC2 GPU para Ollama. Desactivado por defecto por su costo."
+}
+
+variable "ollama_instance_type" {
+  type        = string
+  default     = "g6.xlarge"
+  description = "Tipo de instancia GPU para Ollama; confirmar disponibilidad y cuota regional."
+}
+
+variable "redis_url_secret_arn" {
+  type        = string
+  default     = null
+  description = "ARN opcional de Secrets Manager con URL Redis privada. Sin este valor, Redis queda desactivado."
 }
 
 variable "rds_backup_retention_period" {
   type        = number
-  default     = 0
-  description = "Dias de retencion de backups RDS. Use 0 en cuentas free tier restringidas."
+  default     = 7
+  description = "Dias de retencion de backups RDS; en produccion nunca debe ser cero."
+
+  validation {
+    condition     = var.rds_backup_retention_period >= 1 && var.rds_backup_retention_period <= 35
+    error_message = "La retencion RDS debe estar entre 1 y 35 dias."
+  }
+}
+
+variable "backup_archive_retention_days" {
+  type    = number
+  default = 30
+
+  validation {
+    condition     = var.backup_archive_retention_days >= 7
+    error_message = "Los respaldos coordinados deben conservarse al menos 7 dias."
+  }
+}
+
+variable "alarm_email" {
+  type        = string
+  default     = null
+  description = "Correo opcional para alarmas de EC2, ALB y RDS; requiere confirmar la suscripcion SNS."
 }
 
 variable "ec2_instance_type" {

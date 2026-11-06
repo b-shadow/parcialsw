@@ -10,15 +10,28 @@ from app.core.config.configuracion import settings
 logger = logging.getLogger(__name__)
 
 
-@lru_cache(maxsize=1)
-def obtener_proveedor_ollama() -> ProveedorOllama:
+@lru_cache(maxsize=2)
+def obtener_proveedor_ollama(origen: str = "local") -> ProveedorOllama | None:
+    url = obtener_url_ollama(origen)
+    if not url:
+        return None
     return ProveedorOllama(
-        base_url=settings.ollama_base_url,
+        base_url=url,
         connect_timeout=settings.ollama_connect_timeout_seconds,
         read_timeout=settings.ollama_read_timeout_seconds,
         keep_alive=settings.ollama_keep_alive,
         max_retries=settings.ai_max_retries,
     )
+
+
+def obtener_url_ollama(origen: str) -> str | None:
+    if origen == "aws":
+        return settings.ollama_aws_base_url
+    if origen == "local":
+        return settings.ollama_local_base_url or (
+            settings.ollama_base_url if settings.app_env != "production" else None
+        )
+    raise ValueError("Origen Ollama desconocido")
 
 
 @lru_cache(maxsize=1)
@@ -60,7 +73,7 @@ async def resolver_modelo_ollama(provider: ProveedorOllama, requested_model: str
 
 
 async def seleccionar_proveedor(
-    preferred: str, requested_model: str = ""
+    preferred: str, requested_model: str = "", origen_ollama: str = "local"
 ) -> tuple[ProveedorIA | None, str]:
     """Select the AI provider and resolve the model name.
 
@@ -75,7 +88,9 @@ async def seleccionar_proveedor(
         return provider, model
 
     if preferred == "ollama":
-        provider = obtener_proveedor_ollama()
+        provider = obtener_proveedor_ollama(origen_ollama)
+        if provider is None:
+            return None, requested_model or settings.ollama_default_model
         model = await resolver_modelo_ollama(
             provider, requested_model or settings.ollama_default_model
         )

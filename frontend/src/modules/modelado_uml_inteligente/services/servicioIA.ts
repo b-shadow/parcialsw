@@ -46,7 +46,7 @@ export const servicioIA = {
     });
     return response.data;
   },
-  async imageToUml(payload: string | { description?: string; image_base64?: string; file_name?: string }) {
+  async imageToUml(payload: string | { description?: string; image_base64?: string; file_name?: string; project_id?: string }) {
     const response = await clienteApi.post<RespuestaUMLIA>("/ai/uml/image", {
       ...(typeof payload === "string" ? { description: payload } : payload),
       language: "es"

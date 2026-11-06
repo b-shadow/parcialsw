@@ -31,8 +31,13 @@ class ServicioIALocal:
     def voz_a_uml(self, request: SolicitudProcesamientoVoz) -> RespuestaGeneracionUML:
         return engine.generar_uml_desde_voz(request)
 
-    def imagen_a_uml(self, request: SolicitudProcesamientoImagen) -> RespuestaGeneracionUML:
-        return engine.generar_uml_desde_imagen(request)
+    def imagen_a_uml(
+        self, request: SolicitudProcesamientoImagen,
+        *, ollama_base_url: str | None = None, vision_enabled: bool | None = None,
+    ) -> RespuestaGeneracionUML:
+        return engine.generar_uml_desde_imagen(
+            request, ollama_base_url=ollama_base_url, vision_enabled=vision_enabled
+        )
 
     def validar_uml(self, request: SolicitudValidacionUML) -> RespuestaValidacionUMLMotor:
         return engine.validar_uml(request)

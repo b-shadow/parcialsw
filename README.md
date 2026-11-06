@@ -4,6 +4,7 @@ Plataforma CASE inteligente y colaborativa para modelado UML, validacion asistid
 
 ## Configuracion y publicacion
 
+La preparacion de infraestructura, requisitos externos y comprobaciones de staging estan en [infra/aws/README.md](infra/aws/README.md). La configuracion AWS aun requiere MongoDB, Ollama, secretos y pruebas reales en staging antes de la publicacion.
 
 ## Componentes
 

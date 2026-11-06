@@ -1,4 +1,5 @@
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -47,6 +48,7 @@ class SolicitudVozIA(BaseModel):
 
 
 class SolicitudImagenIA(BaseModel):
+    project_id: UUID | None = None
     description: str | None = None
     image_base64: str | None = None
     file_name: str | None = None

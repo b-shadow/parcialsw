@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -61,6 +63,9 @@ class ConfiguracionAplicacion(BaseSettings):
     vapid_private_key: str | None = None
     vapid_subject: str = "mailto:admin@example.com"
     ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_local_base_url: str | None = None
+    ollama_aws_base_url: str | None = None
+    ollama_default_source: Literal["local", "aws"] = "local"
     ollama_default_model: str = "qwen2.5-coder:7b"
     ollama_small_model: str = "qwen2.5-coder:1.5b"
     ollama_vision_model: str = "qwen3-vl:2b-instruct"

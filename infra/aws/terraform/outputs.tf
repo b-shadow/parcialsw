@@ -33,3 +33,11 @@ output "backend_ec2_public_ip" {
 output "backend_target_group_arn" {
   value = aws_lb_target_group.backend.arn
 }
+
+output "ollama_private_url" {
+  value = local.ollama_endpoint
+}
+
+output "ollama_ec2_instance_id" {
+  value = var.enable_aws_ollama ? aws_instance.ollama[0].id : null
+}

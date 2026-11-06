@@ -38,6 +38,14 @@ class RepositorioAsistente:
             "require_confirmation", "max_context_messages", "summary_trigger_messages",
             "settings_json",
         }
+        ai_settings = {key: value for key, value in data.items() if key in fields}
+        extra = ai_settings.get("settings_json")
+        if not isinstance(extra, dict):
+            extra = {}
+        ai_settings["settings_json"] = {
+            **extra,
+            "origen_ollama": extra.get("origen_ollama", settings.ollama_default_source),
+        }
         return ConfiguracionIAProyecto(
             id=UUID(str(data["id"])) if data.get("id") else uuid5(project_id, "ai-settings"),
             project_id=project_id,
@@ -45,7 +53,7 @@ class RepositorioAsistente:
             updated_by_user_id=UUID(str(data.get("updated_by_user_id", project.owner_id))),
             created_at=datetime.fromisoformat(data.get("created_at", project.created_at.isoformat())),
             updated_at=datetime.fromisoformat(data.get("updated_at", project.updated_at.isoformat())),
-            **{key: value for key, value in data.items() if key in fields},
+            **ai_settings,
         )
 
     def obtener_conversacion(

@@ -62,11 +62,17 @@ def _request() -> SolicitudProveedor:
     )
 
 
-def test_ollama_url_is_strictly_local() -> None:
+def test_ollama_url_accepts_private_aws_and_explicit_hosts(monkeypatch) -> None:
     assert validar_url_base_ollama("http://127.0.0.1:11434")
+    assert validar_url_base_ollama("http://10.20.11.10:11434")
+    assert validar_url_base_ollama("http://host.docker.internal:11434")
+    monkeypatch.setenv("OLLAMA_ALLOWED_HOSTS", "ollama.internal.example")
+    assert validar_url_base_ollama("http://ollama.internal.example:11434")
     for unsafe in (
         "https://127.0.0.1:11434",
         "http://example.com:11434",
+        "http://169.254.169.254:11434",
+        "http://10.20.11.10:11434/api",
         "http://user:pass@localhost:11434",
         "http://localhost:11434/api",
     ):

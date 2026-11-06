@@ -96,7 +96,8 @@ class ServicioAplicacionIAProyecto:
                 latency_ms=0,
             )
         provider, selected_model = await seleccionar_proveedor(
-            project_settings.preferred_provider, project_settings.model_name
+            project_settings.preferred_provider, project_settings.model_name,
+            (getattr(project_settings, "settings_json", None) or {}).get("origen_ollama", app_settings.ollama_default_source),
         )
         if provider is None:
             return EstadoProveedorIA(
@@ -106,8 +107,8 @@ class ServicioAplicacionIAProyecto:
                 selected_model=selected_model,
                 selected_model_available=False,
                 latency_ms=0,
-                error_code="missing_api_key" if project_settings.preferred_provider == "gemini" else None,
-                error_message="Falta GEMINI_API_KEY" if project_settings.preferred_provider == "gemini" else None,
+                error_code="missing_api_key" if project_settings.preferred_provider == "gemini" else "ollama_source_unavailable",
+                error_message="Falta GEMINI_API_KEY" if project_settings.preferred_provider == "gemini" else "El origen Ollama del proyecto no esta configurado en este servidor",
             )
         health = await provider.health(selected_model)
         return EstadoProveedorIA(
@@ -200,7 +201,8 @@ class ServicioAplicacionIAProyecto:
             conversation_sequence=user_message.sequence_number,
         )
         preferred_provider, selected_model = await seleccionar_proveedor(
-            project_settings.preferred_provider, project_settings.model_name
+            project_settings.preferred_provider, project_settings.model_name,
+            (getattr(project_settings, "settings_json", None) or {}).get("origen_ollama", app_settings.ollama_default_source),
         )
         fallback_enabled = (
             project_settings.fallback_enabled and app_settings.ai_rule_fallback_enabled

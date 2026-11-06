@@ -28,6 +28,7 @@ from app.modules.asistente_proyecto.services.almacen_documentos_conversacion imp
     encolar_documento_mensaje,
     hash_contenido_mensaje,
 )
+from app.modules.asistente_proyecto.services.fabrica_proveedores import obtener_url_ollama
 from app.modules.proyectos_colaboracion.models import Proyecto
 from app.modules.proyectos_colaboracion.repositories.repositorio_integrantes import (
     RepositorioIntegrantes,
@@ -75,8 +76,15 @@ class ServicioContratoAsistente:
         asegurar_permiso_proyecto(self.db, project_id, user_id, "ai.settings")
         _project, _member = self._proyecto_y_miembro(project_id, user_id)
         locked_project = GuardiaMutacionesProyecto(self.db).acquire(project_id)
-        values = payload.model_dump()
         old = (locked_project.settings or {}).get("ai", {})
+        values = payload.model_dump()
+        old_extra = old.get("settings_json") if isinstance(old, dict) else None
+        if isinstance(old_extra, dict) and "origen_ollama" not in values["settings_json"]:
+            values["settings_json"]["origen_ollama"] = old_extra.get("origen_ollama", settings.ollama_default_source)
+        if values["preferred_provider"] == "ollama":
+            origen = values["settings_json"].get("origen_ollama", settings.ollama_default_source)
+            if not obtener_url_ollama(origen):
+                raise HTTPException(status_code=422, detail="El origen Ollama seleccionado no esta configurado")
         changed = any(old.get(key) != value for key, value in values.items())
         if changed:
             now = datetime.now(UTC).isoformat()

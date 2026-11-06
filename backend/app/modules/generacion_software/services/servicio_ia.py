@@ -35,8 +35,12 @@ class ServicioIA:
     def voz_a_uml(self, payload: SolicitudVozIA):
         return self.local_ai.voz_a_uml(SolicitudProcesamientoVoz(**payload.model_dump()))
 
-    def imagen_a_uml(self, payload: SolicitudImagenIA):
-        return self.local_ai.imagen_a_uml(SolicitudProcesamientoImagen(**payload.model_dump()))
+    def imagen_a_uml(self, payload: SolicitudImagenIA, *, ollama_base_url: str | None = None, vision_enabled: bool | None = None):
+        return self.local_ai.imagen_a_uml(
+            SolicitudProcesamientoImagen(**payload.model_dump(exclude={"project_id"})),
+            ollama_base_url=ollama_base_url,
+            vision_enabled=vision_enabled,
+        )
 
     def validar_uml(self, payload: SolicitudValidacionIA):
         return self.local_ai.validar_uml(SolicitudValidacionUML(**payload.model_dump()))

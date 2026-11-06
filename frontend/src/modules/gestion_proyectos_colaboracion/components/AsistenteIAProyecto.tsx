@@ -84,6 +84,7 @@ export function AsistenteIAProyecto({
 
   // Proveedor de IA y salud
   const [currentProvider, setCurrentProvider] = useState<ProveedorIA>("ollama");
+  const [currentSource, setCurrentSource] = useState<"local" | "aws">("local");
   const [providerHealth, setProviderHealth] = useState<EstadoProveedorIA | null>(null);
   const [providerSettingsOpen, setProviderSettingsOpen] = useState(false);
   const [voiceMessageIds, setVoiceMessageIds] = useState<Set<string>>(() => new Set());
@@ -177,20 +178,27 @@ export function AsistenteIAProyecto({
 
   // Carga inicial de ajustes de IA y salud del proveedor
   useEffect(() => {
-    servicioFase1
-      .aiSettings(projectId)
-      .then((settings) => {
-        if (settings?.preferred_provider) {
-          setCurrentProvider(settings.preferred_provider);
-        }
-      })
-      .catch(() => {});
-
-    servicioFase1
-      .aiProviderHealth(projectId)
-      .then((h) => setProviderHealth(h))
-      .catch(() => setProviderHealth(null));
-  }, [projectId]);
+    if (!open) return;
+    let active = true;
+    const refresh = () => {
+      servicioFase1.aiSettings(projectId).then((settings) => {
+        if (!active) return;
+        setCurrentProvider(settings.preferred_provider);
+        setCurrentSource(settings.settings_json.origen_ollama === "aws" ? "aws" : "local");
+      }).catch(() => {});
+      servicioFase1.aiProviderHealth(projectId).then((health) => {
+        if (active) setProviderHealth(health);
+      }).catch(() => {
+        if (active) setProviderHealth(null);
+      });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 30_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [projectId, open]);
 
   useEffect(() => {
     setLoading(true);
@@ -476,8 +484,8 @@ export function AsistenteIAProyecto({
     if (currentProvider === "rule_engine") return "Motor de reglas";
     return providerHealth?.selected_model
       ? `Ollama · ${providerHealth.selected_model.split(":")[0]}`
-      : "Ollama · local";
-  }, [currentProvider, providerHealth]);
+      : `Ollama · ${currentSource === "aws" ? "AWS" : "local"}`;
+  }, [currentProvider, currentSource, providerHealth]);
 
   const canEditAiSettings = can("ai.settings");
   const canConfirmActions = can("ai.confirm_actions");
@@ -557,6 +565,8 @@ export function AsistenteIAProyecto({
                   <ConfiguracionProveedorIA
                     projectId={projectId}
                     current={currentProvider}
+                    currentSource={currentSource}
+                    onSourceChange={setCurrentSource}
                     onChange={(p) => {
                       setCurrentProvider(p);
                       servicioFase1

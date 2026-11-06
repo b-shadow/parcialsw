@@ -11,6 +11,21 @@ permissions:
   contents: read
 
 jobs:
+  terraform-quality:
+    name: AWS Terraform syntax and validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+      - name: Terraform format
+        run: terraform -chdir=infra/aws/terraform fmt -check
+      - name: Terraform init without remote state
+        run: terraform -chdir=infra/aws/terraform init -backend=false -input=false
+      - name: Terraform validate
+        run: terraform -chdir=infra/aws/terraform validate -no-color
+
   python-quality:
     name: AI and backend quality
     runs-on: ubuntu-latest
@@ -282,6 +297,7 @@ jobs:
           POSTGRES_PASSWORD: ci-only-postgres-password
           MONGO_ROOT_PASSWORD: ci-only-mongodb-password
           JWT_SECRET_KEY: ci-only-jwt-secret
+          OLLAMA_BASE_URL: http://ollama.invalid:11434
           CORS_ORIGINS: http://localhost:8080
           ALLOWED_HOSTS: localhost,127.0.0.1
         run: docker compose -f docker-compose.prod.yml config --quiet
@@ -290,3 +306,11 @@ jobs:
           docker build -f backend/Dockerfile -t case-inteligente-backend:${{ github.sha }} .
           docker build -f frontend/Dockerfile -t case-inteligente-frontend:${{ github.sha }} .
           docker build -f ai-engine/Dockerfile -t case-inteligente-ai-engine:${{ github.sha }} .
+      - name: Verify production command modules
+        run: >-
+          docker run --rm --entrypoint python case-inteligente-backend:${{ github.sha }}
+          -c "import importlib; [importlib.import_module(name) for name in
+          ('app.core.nosql.commands.distribuir_bandeja_salida',
+          'app.core.nosql.commands.conciliar',
+          'app.core.nosql.commands.consolidar',
+          'app.core.nosql.commands.respaldo_coordinado')]"

@@ -876,6 +876,7 @@ export function PaginaEditorUML() {
     }
     const aiResult =
       await servicioIA.imageToUml({
+        project_id: projectId,
         description: promptOverride?.trim() || undefined,
         image_base64: file ? await fileToBase64(file) : undefined,
         file_name: file?.name

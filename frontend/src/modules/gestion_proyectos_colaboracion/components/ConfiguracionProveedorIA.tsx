@@ -9,7 +9,9 @@ import { cn } from "../../../shared/utils/cn";
 export interface PropiedadesConfiguracionProveedorIA {
   projectId: string;
   current: ProveedorIA;
+  currentSource: "local" | "aws";
   onChange(p: ProveedorIA): void;
+  onSourceChange(source: "local" | "aws"): void;
   isOpen?: boolean;
   onClose?: () => void;
 }
@@ -26,11 +28,11 @@ interface ProviderOption {
 const PROVIDERS: ProviderOption[] = [
   {
     id: "ollama",
-    title: "Ollama local",
-    subtitle: "Sin internet · modelos locales (Qwen)",
-    badge: "Local",
+    title: "Ollama del proyecto",
+    subtitle: "Motor configurado para el proyecto",
+    badge: "Proyecto",
     badgeColor: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-    dataProv: "Ollama · qwen2.5-coder:1.5b",
+    dataProv: "Ollama · modelo del proyecto",
   },
   {
     id: "gemini",
@@ -53,7 +55,9 @@ const PROVIDERS: ProviderOption[] = [
 export function ConfiguracionProveedorIA({
   projectId,
   current,
+  currentSource,
   onChange,
+  onSourceChange,
   isOpen: controlledIsOpen,
   onClose: controlledOnClose,
 }: PropiedadesConfiguracionProveedorIA) {
@@ -84,9 +88,12 @@ export function ConfiguracionProveedorIA({
   useEffect(() => {
     if (open) {
       setLoading(true);
-      servicioFase1
-        .aiProviderHealth(projectId)
-        .then((data) => setHealth(data))
+      Promise.all([servicioFase1.aiSettings(projectId), servicioFase1.aiProviderHealth(projectId)])
+        .then(([settings, data]) => {
+          onChange(settings.preferred_provider);
+          onSourceChange(settings.settings_json.origen_ollama === "aws" ? "aws" : "local");
+          setHealth(data);
+        })
         .catch(() => setHealth(null))
         .finally(() => setLoading(false));
     }
@@ -113,25 +120,31 @@ export function ConfiguracionProveedorIA({
     };
   }, [open]);
 
-  const selectProvider = async (providerId: ProveedorIA) => {
+  const saveSelection = async (providerId: ProveedorIA, source: "local" | "aws") => {
     try {
+      const settings = await servicioFase1.aiSettings(projectId);
       await servicioFase1.updateAiSettings(projectId, {
-        enabled: true,
+        enabled: settings.enabled,
         preferred_provider: providerId,
-        fallback_enabled: true,
-        require_confirmation: true,
-        model_name: providerId === "gemini" ? "gemini-2.5-flash" : "qwen2.5-coder:7b",
-        max_context_messages: 40,
-        summary_trigger_messages: 30,
-        settings_json: {},
+        fallback_enabled: settings.fallback_enabled,
+        require_confirmation: settings.require_confirmation,
+        model_name: providerId === settings.preferred_provider
+          ? settings.model_name
+          : providerId === "gemini" ? "gemini-2.5-flash" : "qwen2.5-coder:7b",
+        max_context_messages: settings.max_context_messages,
+        summary_trigger_messages: settings.summary_trigger_messages,
+        settings_json: { ...settings.settings_json, origen_ollama: source },
       });
-      toast.success("Proveedor actualizado", `El proyecto ahora usa ${providerId}`);
+      toast.success("IA del proyecto actualizada", providerId === "ollama" ? `Ollama ${source === "aws" ? "en AWS" : "local"}` : providerId);
       onChange(providerId);
+      onSourceChange(source);
       handleClose();
     } catch {
       toast.error("Error al actualizar proveedor", "No se pudieron guardar los ajustes de la IA");
     }
   };
+
+  const selectProvider = (providerId: ProveedorIA) => saveSelection(providerId, currentSource);
 
   return (
     <div className="relative inline-block" ref={popoverRef}>
@@ -229,6 +242,28 @@ export function ConfiguracionProveedorIA({
               );
             })}
           </div>
+
+          {current === "ollama" && (
+            <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+              <p className="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-200">Origen compartido del proyecto</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(["local", "aws"] as const).map((source) => (
+                  <button
+                    key={source}
+                    type="button"
+                    aria-pressed={currentSource === source}
+                    onClick={() => void saveSelection("ollama", source)}
+                    className={cn(
+                      "rounded-md border px-2 py-1.5 text-xs",
+                      currentSource === source ? "border-teal-500 bg-teal-50 text-teal-800 dark:bg-teal-950 dark:text-teal-200" : "border-slate-200 dark:border-slate-700"
+                    )}
+                  >
+                    {source === "local" ? "Local" : "AWS"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="mt-2.5 pt-2 border-t border-slate-100 text-right dark:border-slate-800">
             <span className="text-[10px] text-slate-400">AiProviderSettings · V1.8</span>

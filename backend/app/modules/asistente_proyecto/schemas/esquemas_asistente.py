@@ -72,6 +72,8 @@ class ActualizacionConfiguracionIAProyecto(BaseModel):
     @classmethod
     def validar_configuracion_json(cls, value: dict) -> dict:
         rechazar_claves_sensibles(value)
+        if value.get("origen_ollama", "local") not in {"local", "aws"}:
+            raise ValueError("origen_ollama debe ser local o aws")
         return value
 
 

@@ -143,7 +143,10 @@ class MotorIALocal:
         transcript = normalizar_transcripcion(request.transcript, request.audio_base64)
         return self._construir_respuesta(transcript, "voice", True)
 
-    def generar_uml_desde_imagen(self, request: SolicitudProcesamientoImagen) -> RespuestaGeneracionUML:
+    def generar_uml_desde_imagen(
+        self, request: SolicitudProcesamientoImagen,
+        *, ollama_base_url: str | None = None, vision_enabled: bool | None = None,
+    ) -> RespuestaGeneracionUML:
         if request.image_base64:
             detection = analizar_imagen_uml(request.image_base64)
             unresolved = any(item.name.startswith("Clase") for item in detection.classes)
@@ -157,7 +160,7 @@ class MotorIALocal:
             # reader handles distant handwriting while OpenCV remains the geometry guard.
             from ai_engine.inference.lector_vision_uml import LectorUMLVision
 
-            vision_reader = LectorUMLVision()
+            vision_reader = LectorUMLVision(base_url=ollama_base_url, enabled=vision_enabled)
             try:
                 vision_response = vision_reader.leer(request.image_base64, detection)
             finally:
