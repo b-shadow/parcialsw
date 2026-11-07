@@ -6,7 +6,7 @@ import type { EventoSocketProyectoAnalizado } from "../../../core/websocket/sock
 import { PanelRegistroCambios } from "./PanelRegistroCambios";
 
 type CapturedSocketOptions = {
-  onEvent: (event: EventoSocketProyectoAnalizado | Record<string, unknown>) => void;
+  alRecibirEvento: (event: EventoSocketProyectoAnalizado | Record<string, unknown>) => void;
 };
 
 let capturedSocketOptions: CapturedSocketOptions | null = null;
@@ -16,21 +16,21 @@ vi.mock("../../../core/websocket/socketProyecto", () => ({
     constructor(options: CapturedSocketOptions) {
       capturedSocketOptions = options;
     }
-    connect() {}
-    close() {}
+    conectar() {}
+    cerrar() {}
   },
 }));
 
 const mockList = vi.fn();
 vi.mock("../services/servicioRegistroCambios", () => ({
   servicioRegistroCambios: {
-    list: (projectId: string, params?: unknown) => mockList(projectId, params),
+    listar: (projectId: string, params?: unknown) => mockList(projectId, params),
   },
 }));
 
 vi.mock("../services/servicioProyectos", () => ({
   servicioProyectos: {
-    members: vi.fn().mockResolvedValue([
+    listarIntegrantes: vi.fn().mockResolvedValue([
       { id: "m-1", user_id: "user-1", full_name: "Ana Dev", email: "ana@example.com" },
       { id: "m-2", user_id: "user-2", full_name: "Beto Dev", email: "beto@example.com" },
     ]),
@@ -145,7 +145,7 @@ describe("ChangeLogPanel", () => {
     };
 
     act(() => {
-      capturedSocketOptions?.onEvent({
+      capturedSocketOptions?.alRecibirEvento({
         type: "CHANGE_LOGGED",
         payload: { entry: newEntry },
       });
@@ -155,7 +155,7 @@ describe("ChangeLogPanel", () => {
 
     // Re-dispatching same ID should not duplicate it
     act(() => {
-      capturedSocketOptions?.onEvent({
+      capturedSocketOptions?.alRecibirEvento({
         type: "CHANGE_LOGGED",
         payload: { entry: newEntry },
       });

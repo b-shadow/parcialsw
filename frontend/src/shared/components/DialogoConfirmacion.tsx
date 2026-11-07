@@ -13,19 +13,19 @@ export type OpcionesConfirmacion = {
 type ConfirmStore = {
   options: OpcionesConfirmacion | null;
   resolve: ((value: boolean) => void) | null;
-  open: (opts: OpcionesConfirmacion) => Promise<boolean>;
-  close: (result: boolean) => void;
+  abrir: (opts: OpcionesConfirmacion) => Promise<boolean>;
+  cerrar: (result: boolean) => void;
 };
 
 export const useAlmacenConfirmacion = create<ConfirmStore>((set, get) => ({
   options: null,
   resolve: null,
-  open: (opts) => {
+  abrir: (opts) => {
     return new Promise<boolean>((resolve) => {
       set({ options: opts, resolve });
     });
   },
-  close: (result) => {
+  cerrar: (result) => {
     const { resolve } = get();
     if (resolve) resolve(result);
     set({ options: null, resolve: null });
@@ -33,27 +33,27 @@ export const useAlmacenConfirmacion = create<ConfirmStore>((set, get) => ({
 }));
 
 export function useConfirmacion(): (opts: OpcionesConfirmacion) => Promise<boolean> {
-  return useAlmacenConfirmacion.getState().open;
+  return useAlmacenConfirmacion.getState().abrir;
 }
 
 export function ContenedorDialogoConfirmacion() {
   const options = useAlmacenConfirmacion((state) => state.options);
-  const close = useAlmacenConfirmacion((state) => state.close);
+  const cerrar = useAlmacenConfirmacion((state) => state.cerrar);
   const cancelBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!options) return;
     cancelBtnRef.current?.focus();
 
-    function handleKeyDown(e: KeyboardEvent) {
+    function manejarTeclaPresionada(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        close(false);
+        cerrar(false);
       }
     }
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [options, close]);
+    window.addEventListener("keydown", manejarTeclaPresionada);
+    return () => window.removeEventListener("keydown", manejarTeclaPresionada);
+  }, [options, cerrar]);
 
   if (!options) return null;
 
@@ -62,7 +62,7 @@ export function ContenedorDialogoConfirmacion() {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
-      onClick={() => close(false)}
+      onClick={() => cerrar(false)}
     >
       <div
         role="dialog"
@@ -103,14 +103,14 @@ export function ContenedorDialogoConfirmacion() {
           <button
             ref={cancelBtnRef}
             type="button"
-            onClick={() => close(false)}
+            onClick={() => cerrar(false)}
             className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
             Cancelar
           </button>
           <button
             type="button"
-            onClick={() => close(true)}
+            onClick={() => cerrar(true)}
             className={cn(
               "rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors",
               isDanger

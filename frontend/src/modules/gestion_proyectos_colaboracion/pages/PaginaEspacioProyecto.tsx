@@ -26,7 +26,7 @@ export function PaginaEspacioProyecto() {
 
   const activeTab = searchParams.get("tab") === "changelog" ? "changelog" : "chats";
 
-  const handleTabChange = (tab: "chats" | "changelog") => {
+  const manejarCambioPestana = (tab: "chats" | "changelog") => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       if (tab === "changelog") {
@@ -41,16 +41,16 @@ export function PaginaEspacioProyecto() {
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
-    async function loadWorkspace() {
+    async function cargarEspacioTrabajo() {
       try {
         const [project, diagrams, chats] = await Promise.all([
-          servicioProyectos.get(projectId),
-          servicioUML.listDiagrams(projectId),
-          servicioFase1.conversations(projectId),
+          servicioProyectos.obtener(projectId),
+          servicioUML.listarDiagramas(projectId),
+          servicioFase1.listarConversaciones(projectId),
         ]);
         let diagram = diagrams[0];
         if (!diagram) {
-          diagram = await servicioUML.createDiagram({
+          diagram = await servicioUML.crearDiagrama({
             project_id: projectId,
             name: project.name,
             description: project.description ?? undefined,
@@ -67,51 +67,51 @@ export function PaginaEspacioProyecto() {
         if (!cancelled) setLoading(false);
       }
     }
-    void loadWorkspace();
+    void cargarEspacioTrabajo();
     return () => {
       cancelled = true;
     };
   }, [projectId]);
 
   useEffect(() => {
-    function closeMenu(event: MouseEvent) {
+    function cerrarMenu(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuId(null);
       }
     }
-    document.addEventListener("mousedown", closeMenu);
-    return () => document.removeEventListener("mousedown", closeMenu);
+    document.addEventListener("mousedown", cerrarMenu);
+    return () => document.removeEventListener("mousedown", cerrarMenu);
   }, []);
 
-  function openConversation(conversationId: string) {
+  function abrirConversacion(conversationId: string) {
     if (!diagramId || editingId) return;
     navigate(`/proyectos/${projectId}/uml/${diagramId}?panel=assistant&chat=${conversationId}`);
   }
 
-  async function createConversation() {
+  async function crearConversacion() {
     if (creating || !diagramId) return;
     setCreating(true);
     setError("");
     try {
-      const conversation = await servicioFase1.createConversation(projectId);
-      openConversation(conversation.id);
+      const conversation = await servicioFase1.crearConversacion(projectId);
+      abrirConversacion(conversation.id);
     } catch {
       setError("No se pudo iniciar el nuevo chat.");
       setCreating(false);
     }
   }
 
-  function beginRename(conversation: ConversacionIA) {
+  function iniciarCambioNombre(conversation: ConversacionIA) {
     setMenuId(null);
     setEditingId(conversation.id);
     setEditingTitle(conversation.title);
   }
 
-  async function saveRename(conversationId: string) {
+  async function guardarCambioNombre(conversationId: string) {
     const title = editingTitle.trim();
     if (!title) return;
     try {
-      const updated = await servicioFase1.updateConversation(projectId, conversationId, title);
+      const updated = await servicioFase1.actualizarConversacion(projectId, conversationId, title);
       setConversations((items) =>
         items.map((item) => (item.id === updated.id ? updated : item))
       );
@@ -160,7 +160,7 @@ export function PaginaEspacioProyecto() {
             <button
               className="inline-flex h-11 items-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-60"
               disabled={creating}
-              onClick={() => void createConversation()}
+              onClick={() => void crearConversacion()}
               type="button"
             >
               {creating ? <LoaderCircle className="animate-spin" size={18} /> : <Plus size={18} />}
@@ -174,7 +174,7 @@ export function PaginaEspacioProyecto() {
           <button
             role="tab"
             aria-selected={activeTab === "chats"}
-            onClick={() => handleTabChange("chats")}
+            onClick={() => manejarCambioPestana("chats")}
             className={cn(
               "flex items-center gap-2 border-b-2 pb-3 text-sm font-semibold transition",
               activeTab === "chats"
@@ -187,7 +187,7 @@ export function PaginaEspacioProyecto() {
           <button
             role="tab"
             aria-selected={activeTab === "changelog"}
-            onClick={() => handleTabChange("changelog")}
+            onClick={() => manejarCambioPestana("changelog")}
             className={cn(
               "flex items-center gap-2 border-b-2 pb-3 text-sm font-semibold transition",
               activeTab === "changelog"
@@ -214,16 +214,16 @@ export function PaginaEspacioProyecto() {
                   autoFocus
                   className="h-10 min-w-0 flex-1 rounded-md border border-teal-500 bg-white px-3 text-sm outline-none dark:bg-slate-900"
                   maxLength={160}
-                  onBlur={() => void saveRename(conversation.id)}
+                  onBlur={() => void guardarCambioNombre(conversation.id)}
                   onChange={(event) => setEditingTitle(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter") void saveRename(conversation.id);
+                    if (event.key === "Enter") void guardarCambioNombre(conversation.id);
                     if (event.key === "Escape") setEditingId(null);
                   }}
                   value={editingTitle}
                 />
               ) : (
-                <button className="min-w-0 flex-1 py-3 text-left" onClick={() => openConversation(conversation.id)} type="button">
+                <button className="min-w-0 flex-1 py-3 text-left" onClick={() => abrirConversacion(conversation.id)} type="button">
                   <span className="block truncate text-sm font-semibold text-slate-900 dark:text-white">{conversation.title}</span>
                   <span className="mt-1 block text-xs text-slate-500">{new Date(conversation.updated_at).toLocaleString()}</span>
                 </button>
@@ -241,7 +241,7 @@ export function PaginaEspacioProyecto() {
                 </button>
                 {menuId === conversation.id && (
                   <div className="absolute right-4 top-12 z-20 min-w-40 border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                    <button className="flex h-9 w-full items-center gap-2 rounded-sm px-3 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => beginRename(conversation)} type="button">
+                    <button className="flex h-9 w-full items-center gap-2 rounded-sm px-3 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => iniciarCambioNombre(conversation)} type="button">
                       <Pencil size={15} />
                       Editar nombre
                     </button>

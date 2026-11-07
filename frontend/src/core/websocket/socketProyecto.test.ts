@@ -41,13 +41,13 @@ describe("projectSocket", () => {
     expect(event?.type).toBe("UML_EVENT");
   });
   afterEach(() => {
-    useAlmacenAutenticacion.getState().setToken(null);
+    useAlmacenAutenticacion.getState().establecerToken(null);
     vi.unstubAllGlobals();
   });
 
   it("autentica la conexion y serializa eventos UML", () => {
     vi.stubGlobal("WebSocket", MockWebSocket);
-    useAlmacenAutenticacion.getState().setToken("token.seguro_123");
+    useAlmacenAutenticacion.getState().establecerToken("token.seguro_123");
 
     const socket = crearSocketProyecto("project-1") as unknown as MockWebSocket;
     enviarEventoProyecto(socket as unknown as WebSocket, {
@@ -72,13 +72,13 @@ describe("projectSocket", () => {
     const statuses: string[] = [];
     const client = new ClienteSocketProyecto({
       projectId: "project-1",
-      getProjectSequence: () => 21,
-      getConversationSequence: () => 9,
-      onEvent: () => undefined,
-      onStatus: (status) => statuses.push(status)
+      obtenerSecuenciaProyecto: () => 21,
+      obtenerSecuenciaConversacion: () => 9,
+      alRecibirEvento: () => undefined,
+      alCambiarEstado: (status) => statuses.push(status)
     });
 
-    client.connect();
+    client.conectar();
     const socket = (client as unknown as { socket: MockWebSocket }).socket;
     socket.onopen?.();
 
@@ -88,23 +88,23 @@ describe("projectSocket", () => {
       ultima_secuencia_conversacion: 9
     });
     expect(statuses).toEqual(["connecting", "connected"]);
-    client.close();
+    client.cerrar();
   });
 
   it("espera la apertura antes de cerrar una conexion en progreso", () => {
     vi.stubGlobal("WebSocket", MockWebSocket);
     const client = new ClienteSocketProyecto({
       projectId: "project-1",
-      getProjectSequence: () => 0,
-      getConversationSequence: () => 0,
-      onEvent: () => undefined,
-      onStatus: () => undefined
+      obtenerSecuenciaProyecto: () => 0,
+      obtenerSecuenciaConversacion: () => 0,
+      alRecibirEvento: () => undefined,
+      alCambiarEstado: () => undefined
     });
-    client.connect();
+    client.conectar();
     const socket = (client as unknown as { socket: MockWebSocket }).socket;
     socket.readyState = MockWebSocket.CONNECTING;
 
-    client.close();
+    client.cerrar();
     expect(socket.readyState).toBe(MockWebSocket.CONNECTING);
     socket.readyState = MockWebSocket.OPEN;
     socket.onopen?.();

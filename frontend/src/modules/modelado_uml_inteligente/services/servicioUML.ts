@@ -16,7 +16,7 @@ import type {
 } from "../types/uml";
 import type { RespuestaUMLIA } from "./servicioIA";
 
-function normalizeRelationshipType(type: string) {
+function normalizarTipoRelacion(type: string) {
   const normalized = type.toLowerCase();
   if (normalized === "generalization") {
     return "inheritance";
@@ -27,7 +27,7 @@ function normalizeRelationshipType(type: string) {
   return "association";
 }
 
-function positionForClass(index: number, total: number, className: string, associationClassNames: Set<string>) {
+function posicionParaClase(index: number, total: number, className: string, associationClassNames: Set<string>) {
   if (associationClassNames.has(className.toLowerCase())) {
     return { position_x: 360, position_y: 350 };
   }
@@ -47,21 +47,21 @@ function positionForClass(index: number, total: number, className: string, assoc
 }
 
 export const servicioUML = {
-  async createDiagram(payload: { project_id: string; name: string; description?: string }) {
+  async crearDiagrama(payload: { project_id: string; name: string; description?: string }) {
     const response = await clienteApi.post<DiagramaUML>("/uml/diagrams", {
       ...payload,
       metadata_json: {}
     });
     return response.data;
   },
-  async listDiagrams(projectId: string) {
+  async listarDiagramas(projectId: string) {
     const response = await clienteApi.get<DiagramaUML[]>(`/uml/projects/${projectId}/diagrams`);
     return response.data;
   },
-  async deleteDiagram(diagramId: string) {
+  async eliminarDiagrama(diagramId: string) {
     await clienteApi.delete(`/uml/diagrams/${diagramId}`);
   },
-  async createClass(
+  async crearClase(
     diagramId: string,
     payload: { name: string; position_x: number; position_y: number; description?: string; stereotype?: string | null }
   ) {
@@ -77,81 +77,81 @@ export const servicioUML = {
     });
     return response.data;
   },
-  async listClasses(diagramId: string) {
+  async listarClases(diagramId: string) {
     const response = await clienteApi.get<ClaseUML[]>(`/uml/diagrams/${diagramId}/classes`);
     return response.data;
   },
-  async getDiagramModel(diagramId: string) {
+  async obtenerModeloDiagrama(diagramId: string) {
     const response = await clienteApi.get<ModeloDiagrama>(`/uml/diagrams/${diagramId}/model`);
     return response.data;
   },
-  async updateClass(classId: string, payload: Partial<Pick<ClaseUML, "name" | "visibility" | "description" | "stereotype">>) {
+  async actualizarClase(classId: string, payload: Partial<Pick<ClaseUML, "name" | "visibility" | "description" | "stereotype">>) {
     const response = await clienteApi.patch<DetalleClaseUML>(`/uml/classes/${classId}`, payload);
     return response.data;
   },
-  async deleteClass(classId: string) {
+  async eliminarClase(classId: string) {
     await clienteApi.delete(`/uml/classes/${classId}`);
   },
-  async moveElement(diagramId: string, payload: { element_type: "class" | "relationship"; element_id: string; position_x: number; position_y: number }) {
+  async moverElemento(diagramId: string, payload: { element_type: "class" | "relationship"; element_id: string; position_x: number; position_y: number }) {
     const response = await clienteApi.patch<ElementoVisualUML>(`/uml/diagrams/${diagramId}/visual-elements`, payload);
     return response.data;
   },
-  async addAttribute(classId: string, payload: { name: string; data_type: string; visibility?: string | null; is_required?: boolean; order_index?: number }) {
+  async agregarAtributo(classId: string, payload: { name: string; data_type: string; visibility?: string | null; is_required?: boolean; order_index?: number }) {
     const response = await clienteApi.post<AtributoUML>(`/uml/classes/${classId}/attributes`, payload);
     return response.data;
   },
-  async updateAttribute(attributeId: string, payload: Partial<Pick<AtributoUML, "name" | "data_type" | "visibility" | "initial_value" | "multiplicity" | "is_required" | "order_index" | "constraints">>) {
+  async actualizarAtributo(attributeId: string, payload: Partial<Pick<AtributoUML, "name" | "data_type" | "visibility" | "initial_value" | "multiplicity" | "is_required" | "order_index" | "constraints">>) {
     const response = await clienteApi.patch<AtributoUML>(`/uml/attributes/${attributeId}`, payload);
     return response.data;
   },
-  async deleteAttribute(attributeId: string) {
+  async eliminarAtributo(attributeId: string) {
     await clienteApi.delete(`/uml/attributes/${attributeId}`);
   },
-  async addMethod(classId: string, payload: { name: string; return_type?: string; visibility?: string | null; order_index?: number }) {
+  async agregarMetodo(classId: string, payload: { name: string; return_type?: string; visibility?: string | null; order_index?: number }) {
     const response = await clienteApi.post<MetodoUML>(`/uml/classes/${classId}/methods`, payload);
     return response.data;
   },
-  async updateMethod(methodId: string, payload: Partial<Pick<MetodoUML, "name" | "return_type" | "visibility" | "order_index" | "metadata_json">>) {
+  async actualizarMetodo(methodId: string, payload: Partial<Pick<MetodoUML, "name" | "return_type" | "visibility" | "order_index" | "metadata_json">>) {
     const response = await clienteApi.patch<MetodoUML>(`/uml/methods/${methodId}`, payload);
     return response.data;
   },
-  async deleteMethod(methodId: string) {
+  async eliminarMetodo(methodId: string) {
     await clienteApi.delete(`/uml/methods/${methodId}`);
   },
-  async addParameter(methodId: string, payload: { name: string; data_type: string; default_value?: string | null; order_index?: number }) {
+  async agregarParametro(methodId: string, payload: { name: string; data_type: string; default_value?: string | null; order_index?: number }) {
     return (await clienteApi.post<MetodoUML["parameters"][number]>(`/uml/methods/${methodId}/parameters`, payload)).data;
   },
-  async updateParameter(parameterId: string, payload: Partial<MetodoUML["parameters"][number]>) {
+  async actualizarParametro(parameterId: string, payload: Partial<MetodoUML["parameters"][number]>) {
     return (await clienteApi.patch<MetodoUML["parameters"][number]>(`/uml/parameters/${parameterId}`, payload)).data;
   },
-  async deleteParameter(parameterId: string) {
+  async eliminarParametro(parameterId: string) {
     await clienteApi.delete(`/uml/parameters/${parameterId}`);
   },
-  async methodSpecification(methodId: string) {
+  async especificacionMetodo(methodId: string) {
     return (await clienteApi.get<EnvolturaEspecificacionMetodo>(`/uml/methods/${methodId}/specification`)).data;
   },
-  async saveMethodSpecification(methodId: string, payload: Omit<EspecificacionMetodo, "id" | "method_id" | "revision" | "created_at" | "updated_at">, revision: number | null) {
+  async guardarEspecificacionMetodo(methodId: string, payload: Omit<EspecificacionMetodo, "id" | "method_id" | "revision" | "created_at" | "updated_at">, revision: number | null) {
     const headers = revision === null
       ? { "If-None-Match": "*" }
       : { "If-Match": `"revision-${revision}"` };
     return (await clienteApi.put<EspecificacionMetodo>(`/uml/methods/${methodId}/specification`, payload, { headers })).data;
   },
-  async deleteMethodSpecification(methodId: string, revision: number) {
+  async eliminarEspecificacionMetodo(methodId: string, revision: number) {
     await clienteApi.delete(`/uml/methods/${methodId}/specification`, {
       headers: { "If-Match": `"revision-${revision}"` }
     });
   },
-  async validateMethodSpecification(methodId: string, strict = false) {
+  async validarEspecificacionMetodo(methodId: string, strict = false) {
     return (await clienteApi.post<PreparacionMetodo>(`/uml/methods/${methodId}/specification/validate`, undefined, { params: { strict } })).data;
   },
-  async refineMethodSpecification(methodId: string, instruction: string, baseRevision: number) {
+  async refinarEspecificacionMetodo(methodId: string, instruction: string, baseRevision: number) {
     return (await clienteApi.post<PropuestaEspecificacionMetodo>(`/uml/methods/${methodId}/specification/refine`, {
       instruction,
       base_revision: baseRevision,
       client_message_id: crypto.randomUUID()
     })).data;
   },
-  async createRelationship(
+  async crearRelacion(
     diagramId: string,
     payload: {
       source_class_id: string;
@@ -170,7 +170,7 @@ export const servicioUML = {
     });
     return response.data;
   },
-  async updateRelationship(
+  async actualizarRelacion(
     relationshipId: string,
     payload: Partial<
       Pick<RelacionUML, "relationship_type" | "label" | "source_cardinality" | "target_cardinality" | "direction" | "metadata_json">
@@ -179,18 +179,18 @@ export const servicioUML = {
     const response = await clienteApi.patch<RelacionUML>(`/uml/relationships/${relationshipId}`, payload);
     return response.data;
   },
-  async deleteRelationship(relationshipId: string) {
+  async eliminarRelacion(relationshipId: string) {
     await clienteApi.delete(`/uml/relationships/${relationshipId}`);
   },
-  async validate(diagramId: string) {
+  async validar(diagramId: string) {
     const response = await clienteApi.post<ValidacionUML>(`/uml/diagrams/${diagramId}/validate`);
     return response.data;
   },
-  async generate(payload: { project_id: string; name: string; prompt: string; source_type: "text" | "voice" | "image" }) {
+  async generar(payload: { project_id: string; name: string; prompt: string; source_type: "text" | "voice" | "image" }) {
     const response = await clienteApi.post<DiagramaUML>("/uml/generate", payload);
     return response.data;
   },
-  async createDiagramFromAiResult(payload: {
+  async crearDiagramaDesdeResultadoIA(payload: {
     project_id: string;
     name: string;
     description?: string;
@@ -203,21 +203,21 @@ export const servicioUML = {
         .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
         .map((value) => value.toLowerCase())
     );
-    const diagram = await this.createDiagram({
+    const diagram = await this.crearDiagrama({
       project_id: payload.project_id,
       name: payload.name,
       description: payload.description
     });
     const classByName = new Map<string, ClaseUML>();
     for (const [index, aiClass] of payload.result.classes.entries()) {
-      const createdClass = await this.createClass(diagram.id, {
+      const createdClass = await this.crearClase(diagram.id, {
         name: aiClass.name,
         stereotype: aiClass.stereotype,
-        ...positionForClass(index, payload.result.classes.length, aiClass.name, associationClassNames)
+        ...posicionParaClase(index, payload.result.classes.length, aiClass.name, associationClassNames)
       });
       classByName.set(aiClass.name.toLowerCase(), createdClass);
       for (const [attributeIndex, attribute] of (aiClass.attributes ?? []).entries()) {
-        await this.addAttribute(createdClass.id, {
+        await this.agregarAtributo(createdClass.id, {
           name: attribute.name,
           data_type: attribute.data_type || "String",
           visibility: attribute.visibility ?? "private",
@@ -226,7 +226,7 @@ export const servicioUML = {
         });
       }
       for (const [methodIndex, method] of (aiClass.methods ?? []).entries()) {
-        await this.addMethod(createdClass.id, {
+        await this.agregarMetodo(createdClass.id, {
           name: method.name,
           return_type: method.return_type || "void",
           visibility: method.visibility ?? "public",
@@ -249,10 +249,10 @@ export const servicioUML = {
         }
         delete metadata.association_class_name;
       }
-      await this.createRelationship(diagram.id, {
+      await this.crearRelacion(diagram.id, {
         source_class_id: source.id,
         target_class_id: target.id,
-        relationship_type: normalizeRelationshipType(relationship.relationship_type),
+        relationship_type: normalizarTipoRelacion(relationship.relationship_type),
         label: relationship.label ?? undefined,
         source_cardinality: relationship.source_cardinality ?? null,
         target_cardinality: relationship.target_cardinality ?? null,
@@ -261,7 +261,7 @@ export const servicioUML = {
     }
     return diagram;
   },
-  async applyAiModificationToDiagram(payload: {
+  async aplicarModificacionIAAlDiagrama(payload: {
     diagramId: string;
     classes: DetalleClaseUML[];
     relationships: RelacionUML[];
@@ -280,10 +280,10 @@ export const servicioUML = {
     for (const [index, aiClass] of payload.result.classes.entries()) {
       let targetClass = classByName.get(aiClass.name.toLowerCase());
       if (!targetClass) {
-        targetClass = await this.createClass(payload.diagramId, {
+        targetClass = await this.crearClase(payload.diagramId, {
           name: aiClass.name,
           stereotype: aiClass.stereotype,
-          ...positionForClass(payload.classes.length + index, payload.classes.length + payload.result.classes.length, aiClass.name, associationClassNames)
+          ...posicionParaClase(payload.classes.length + index, payload.classes.length + payload.result.classes.length, aiClass.name, associationClassNames)
         });
         classByName.set(aiClass.name.toLowerCase(), targetClass);
       }
@@ -294,7 +294,7 @@ export const servicioUML = {
         if (existingAttributes.has(attribute.name.toLowerCase())) {
           continue;
         }
-        await this.addAttribute(targetClass.id, {
+        await this.agregarAtributo(targetClass.id, {
           name: attribute.name,
           data_type: attribute.data_type || "String",
           visibility: attribute.visibility ?? "private",
@@ -310,7 +310,7 @@ export const servicioUML = {
         if (existingMethods.has(method.name.toLowerCase())) {
           continue;
         }
-        await this.addMethod(targetClass.id, {
+        await this.agregarMetodo(targetClass.id, {
           name: method.name,
           return_type: method.return_type || "void",
           visibility: method.visibility ?? "public",
@@ -339,12 +339,12 @@ export const servicioUML = {
       const existingRelationship = payload.relationships.find((item) => {
         const sameDirection = item.source_class_id === source.id && item.target_class_id === target.id;
         const reverseDirection = item.source_class_id === target.id && item.target_class_id === source.id;
-        return (sameDirection || reverseDirection) && normalizeRelationshipType(item.relationship_type) === normalizeRelationshipType(relationship.relationship_type);
+        return (sameDirection || reverseDirection) && normalizarTipoRelacion(item.relationship_type) === normalizarTipoRelacion(relationship.relationship_type);
       });
 
       if (existingRelationship) {
-        await this.updateRelationship(existingRelationship.id, {
-          relationship_type: normalizeRelationshipType(relationship.relationship_type),
+        await this.actualizarRelacion(existingRelationship.id, {
+          relationship_type: normalizarTipoRelacion(relationship.relationship_type),
           label: relationship.label ?? existingRelationship.label,
           source_cardinality: relationship.source_cardinality ?? existingRelationship.source_cardinality,
           target_cardinality: relationship.target_cardinality ?? existingRelationship.target_cardinality,
@@ -353,10 +353,10 @@ export const servicioUML = {
         continue;
       }
 
-      await this.createRelationship(payload.diagramId, {
+      await this.crearRelacion(payload.diagramId, {
         source_class_id: source.id,
         target_class_id: target.id,
-        relationship_type: normalizeRelationshipType(relationship.relationship_type),
+        relationship_type: normalizarTipoRelacion(relationship.relationship_type),
         label: relationship.label ?? undefined,
         source_cardinality: relationship.source_cardinality ?? null,
         target_cardinality: relationship.target_cardinality ?? null,
@@ -364,15 +364,15 @@ export const servicioUML = {
       });
     }
   },
-  async importXmi(payload: { project_id: string; name: string; content: string; file_name: string }) {
+  async importarXmi(payload: { project_id: string; name: string; content: string; file_name: string }) {
     const response = await clienteApi.post<DiagramaUML>("/uml/xmi/import", payload);
     return response.data;
   },
-  async importXmiIntoDiagram(diagramId: string, payload: { project_id: string; name: string; content: string; file_name: string }) {
+  async importarXmiAlDiagrama(diagramId: string, payload: { project_id: string; name: string; content: string; file_name: string }) {
     const response = await clienteApi.post<DiagramaUML>(`/uml/diagrams/${diagramId}/xmi/import`, payload);
     return response.data;
   },
-  async exportXmi(diagramId: string) {
+  async exportarXmi(diagramId: string) {
     const response = await clienteApi.get<{ diagram_id: string; file_name: string; content: string }>(`/uml/diagrams/${diagramId}/xmi`);
     return response.data;
   }

@@ -30,24 +30,24 @@ export function DisposicionAplicacion() {
   const location = useLocation();
   const isDark = useAlmacenTema((state) => state.mode === "dark");
   const user = useAlmacenAutenticacion((state) => state.user);
-  const setUser = useAlmacenAutenticacion((state) => state.setUser);
+  const establecerUsuario = useAlmacenAutenticacion((state) => state.establecerUsuario);
   const logout = useAlmacenAutenticacion((state) => state.logout);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 1024);
   const isAdmin = user?.role_names?.includes("ADMINISTRADOR") ?? false;
 
   useEffect(() => {
     if (!user) {
-      servicioAutenticacion.me().then(setUser).catch(() => undefined);
+      servicioAutenticacion.obtenerSesion().then(establecerUsuario).catch(() => undefined);
     }
-  }, [setUser, user]);
+  }, [establecerUsuario, user]);
 
   useEffect(() => {
     if (!sidebarOpen) return;
-    function closeWithEscape(event: KeyboardEvent) {
+    function cerrarConEscape(event: KeyboardEvent) {
       if (event.key === "Escape") setSidebarOpen(false);
     }
-    window.addEventListener("keydown", closeWithEscape);
-    return () => window.removeEventListener("keydown", closeWithEscape);
+    window.addEventListener("keydown", cerrarConEscape);
+    return () => window.removeEventListener("keydown", cerrarConEscape);
   }, [sidebarOpen]);
 
   const isCreateProjectRoute = location.pathname === "/proyectos/nuevo";

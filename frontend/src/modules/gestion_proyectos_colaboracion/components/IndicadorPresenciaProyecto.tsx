@@ -9,7 +9,7 @@ function initials(name: string) {
   return parts.slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
 
-function roleLabel(role: string) {
+function etiquetaRol(role: string) {
   if (role === "ORGANIZADOR") return "Organizador";
   if (role === "EDITOR") return "Editor";
   return role;
@@ -24,17 +24,17 @@ export function IndicadorPresenciaProyecto() {
 
   useEffect(() => {
     if (!open) return;
-    function closeOutside(event: MouseEvent) {
+    function cerrarAlPulsarFuera(event: MouseEvent) {
       if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
     }
-    function closeWithEscape(event: KeyboardEvent) {
+    function cerrarConEscape(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
     }
-    document.addEventListener("mousedown", closeOutside);
-    window.addEventListener("keydown", closeWithEscape);
+    document.addEventListener("mousedown", cerrarAlPulsarFuera);
+    window.addEventListener("keydown", cerrarConEscape);
     return () => {
-      document.removeEventListener("mousedown", closeOutside);
-      window.removeEventListener("keydown", closeWithEscape);
+      document.removeEventListener("mousedown", cerrarAlPulsarFuera);
+      window.removeEventListener("keydown", cerrarConEscape);
     };
   }, [open]);
 
@@ -83,7 +83,7 @@ export function IndicadorPresenciaProyecto() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{member.display_name}</p>
-                  <p className="truncate text-xs text-slate-500 dark:text-slate-400">{roleLabel(member.project_role)}</p>
+                  <p className="truncate text-xs text-slate-500 dark:text-slate-400">{etiquetaRol(member.project_role)}</p>
                 </div>
                 {member.connection_count > 1 && (
                   <span className="text-xs text-slate-400" title="Sesiones abiertas">{member.connection_count} sesiones</span>

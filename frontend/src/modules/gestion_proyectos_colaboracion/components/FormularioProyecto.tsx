@@ -14,7 +14,7 @@ export function FormularioProyecto({ onCreate }: ProjectFormProps) {
   const [description, setDescription] = useState("Modelo colaborativo inicial");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(event: FormEvent) {
+  async function manejarEnvio(event: FormEvent) {
     event.preventDefault();
     if (name.trim().length < 2) {
       return;
@@ -30,7 +30,7 @@ export function FormularioProyecto({ onCreate }: ProjectFormProps) {
   }
 
   return (
-    <form className="grid gap-3" onSubmit={handleSubmit}>
+    <form className="grid gap-3" onSubmit={manejarEnvio}>
       <Entrada label="Nombre del proyecto" value={name} onChange={(event) => setName(event.target.value)} />
       <AreaTexto
         label="Descripcion"

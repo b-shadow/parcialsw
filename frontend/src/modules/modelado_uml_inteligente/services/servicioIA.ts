@@ -31,7 +31,7 @@ type AiValidationResponse = {
 };
 
 export const servicioIA = {
-  async textToUml(prompt: string) {
+  async textoAUml(prompt: string) {
     const response = await clienteApi.post<RespuestaUMLIA>("/ai/uml/text", {
       prompt,
       language: "es",
@@ -39,25 +39,25 @@ export const servicioIA = {
     });
     return response.data;
   },
-  async voiceToUml(payload: string | { transcript?: string; audio_base64?: string }) {
+  async vozAUml(payload: string | { transcript?: string; audio_base64?: string }) {
     const response = await clienteApi.post<RespuestaUMLIA>("/ai/uml/voice", {
       ...(typeof payload === "string" ? { transcript: payload } : payload),
       language: "es"
     });
     return response.data;
   },
-  async imageToUml(payload: string | { description?: string; image_base64?: string; file_name?: string; project_id?: string }) {
+  async imagenAUml(payload: string | { description?: string; image_base64?: string; file_name?: string; project_id?: string }) {
     const response = await clienteApi.post<RespuestaUMLIA>("/ai/uml/image", {
       ...(typeof payload === "string" ? { description: payload } : payload),
       language: "es"
     });
     return response.data;
   },
-  async validateModel(payload: Pick<RespuestaUMLIA, "classes" | "relationships">) {
+  async validarModelo(payload: Pick<RespuestaUMLIA, "classes" | "relationships">) {
     const response = await clienteApi.post<AiValidationResponse>("/ai/validate-model", payload);
     return response.data;
   },
-  async modifyUml(payload: {
+  async modificarUml(payload: {
     instruction: string;
     classes: RespuestaUMLIA["classes"];
     relationships: RespuestaUMLIA["relationships"];
@@ -66,14 +66,14 @@ export const servicioIA = {
     const response = await clienteApi.post<RespuestaUMLIA & { changes: string[] }>("/ai/uml/modify", payload);
     return response.data;
   },
-  async knowledgeSearch(query: string) {
+  async buscarConocimiento(query: string) {
     const response = await clienteApi.post<Array<{ topic: string; content: string; tags: string[] }>>("/ai/knowledge/search", {
       query,
       limit: 3
     });
     return response.data;
   },
-  async evaluation() {
+  async evaluar() {
     const response = await clienteApi.get<{
       dataset_size: number;
       class_precision: number;

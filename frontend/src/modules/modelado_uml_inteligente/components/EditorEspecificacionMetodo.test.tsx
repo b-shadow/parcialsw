@@ -7,27 +7,27 @@ import type { DetalleClaseUML, MetodoUML } from "../types/uml";
 import { EditorEspecificacionMetodo } from "./EditorEspecificacionMetodo";
 
 vi.mock("../../../core/api/servicioFase1", () => ({
-  servicioFase1: { confirmAiAction: vi.fn(), rejectAiAction: vi.fn() }
+  servicioFase1: { confirmarAccionIA: vi.fn(), rechazarAccionIA: vi.fn() }
 }));
 
 vi.mock("../../../core/websocket/socketProyecto", () => ({
   ClienteSocketProyecto: class {
-    connect() {}
-    setActiveDiagram() {}
-    close() {}
+    conectar() {}
+    establecerDiagramaActivo() {}
+    cerrar() {}
   }
 }));
 
 vi.mock("../services/servicioUML", () => ({
   servicioUML: {
-    methodSpecification: vi.fn(),
-    saveMethodSpecification: vi.fn(),
-    validateMethodSpecification: vi.fn(),
-    refineMethodSpecification: vi.fn(),
-    updateMethod: vi.fn(),
-    addParameter: vi.fn(),
-    updateParameter: vi.fn(),
-    deleteParameter: vi.fn()
+    especificacionMetodo: vi.fn(),
+    guardarEspecificacionMetodo: vi.fn(),
+    validarEspecificacionMetodo: vi.fn(),
+    refinarEspecificacionMetodo: vi.fn(),
+    actualizarMetodo: vi.fn(),
+    agregarParametro: vi.fn(),
+    actualizarParametro: vi.fn(),
+    eliminarParametro: vi.fn()
   }
 }));
 
@@ -84,16 +84,16 @@ describe("MethodSpecificationEditor phase 4", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(servicioUML.methodSpecification).mockResolvedValue({
+    vi.mocked(servicioUML.especificacionMetodo).mockResolvedValue({
       specification: null,
       readiness
     });
-    vi.mocked(servicioFase1.rejectAiAction).mockResolvedValue({} as never);
+    vi.mocked(servicioFase1.rechazarAccionIA).mockResolvedValue({} as never);
   });
 
   it("exposes the five editing views on the selected method", async () => {
     mount();
-    await waitFor(() => expect(servicioUML.methodSpecification).toHaveBeenCalledWith("method-1"));
+    await waitFor(() => expect(servicioUML.especificacionMetodo).toHaveBeenCalledWith("method-1"));
 
     for (const label of ["Firma", "Comportamiento", "Backend", "Flutter", "Validacion"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
@@ -104,7 +104,7 @@ describe("MethodSpecificationEditor phase 4", () => {
   });
 
   it("records rejection instead of only hiding the AI proposal", async () => {
-    vi.mocked(servicioUML.refineMethodSpecification).mockResolvedValue({
+    vi.mocked(servicioUML.refinarEspecificacionMetodo).mockResolvedValue({
       action_id: "action-1",
       method_id: "method-1",
       base_revision: 0,
@@ -127,12 +127,12 @@ describe("MethodSpecificationEditor phase 4", () => {
     fireEvent.click(screen.getByRole("button", { name: "Rechazar" }));
 
     await waitFor(() =>
-      expect(servicioFase1.rejectAiAction).toHaveBeenCalledWith("project-1", "action-1")
+      expect(servicioFase1.rechazarAccionIA).toHaveBeenCalledWith("project-1", "action-1")
     );
   });
 
   it("incorporates selected proposal fields into the local draft", async () => {
-    vi.mocked(servicioUML.refineMethodSpecification).mockResolvedValue({
+    vi.mocked(servicioUML.refinarEspecificacionMetodo).mockResolvedValue({
       action_id: "action-2",
       method_id: "method-1",
       base_revision: 0,
@@ -154,7 +154,7 @@ describe("MethodSpecificationEditor phase 4", () => {
     await screen.findByText("Seleccion parcial");
     fireEvent.click(screen.getByRole("button", { name: "Incorporar seleccion al borrador" }));
 
-    await waitFor(() => expect(servicioFase1.rejectAiAction).toHaveBeenCalled());
+    await waitFor(() => expect(servicioFase1.rechazarAccionIA).toHaveBeenCalled());
     expect(screen.getByRole("button", { name: "Guardar borrador" })).toBeEnabled();
   });
 });

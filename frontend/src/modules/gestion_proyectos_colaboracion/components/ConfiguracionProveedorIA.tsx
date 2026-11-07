@@ -69,7 +69,7 @@ export function ConfiguracionProveedorIA({
   const isControlled = controlledIsOpen !== undefined;
   const open = isControlled ? controlledIsOpen : internalOpen;
 
-  const handleClose = () => {
+  const manejarCierre = () => {
     if (isControlled) {
       controlledOnClose?.();
     } else {
@@ -77,7 +77,7 @@ export function ConfiguracionProveedorIA({
     }
   };
 
-  const handleToggle = () => {
+  const manejarAlternancia = () => {
     if (isControlled) {
       if (open) controlledOnClose?.();
     } else {
@@ -88,7 +88,7 @@ export function ConfiguracionProveedorIA({
   useEffect(() => {
     if (open) {
       setLoading(true);
-      Promise.all([servicioFase1.aiSettings(projectId), servicioFase1.aiProviderHealth(projectId)])
+      Promise.all([servicioFase1.configuracionIA(projectId), servicioFase1.estadoProveedorIA(projectId)])
         .then(([settings, data]) => {
           onChange(settings.preferred_provider);
           onSourceChange(settings.settings_json.origen_ollama === "aws" ? "aws" : "local");
@@ -100,30 +100,30 @@ export function ConfiguracionProveedorIA({
   }, [open, projectId]);
 
   useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
+    function alPulsarTecla(e: KeyboardEvent) {
       if (e.key === "Escape" && open) {
-        handleClose();
+        manejarCierre();
       }
     }
-    function onClickOutside(e: MouseEvent) {
+    function alPulsarFuera(e: MouseEvent) {
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        handleClose();
+        manejarCierre();
       }
     }
     if (open) {
-      window.addEventListener("keydown", onKeyDown);
-      window.addEventListener("mousedown", onClickOutside);
+      window.addEventListener("keydown", alPulsarTecla);
+      window.addEventListener("mousedown", alPulsarFuera);
     }
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("mousedown", onClickOutside);
+      window.removeEventListener("keydown", alPulsarTecla);
+      window.removeEventListener("mousedown", alPulsarFuera);
     };
   }, [open]);
 
-  const saveSelection = async (providerId: ProveedorIA, source: "local" | "aws") => {
+  const guardarSeleccion = async (providerId: ProveedorIA, source: "local" | "aws") => {
     try {
-      const settings = await servicioFase1.aiSettings(projectId);
-      await servicioFase1.updateAiSettings(projectId, {
+      const settings = await servicioFase1.configuracionIA(projectId);
+      await servicioFase1.actualizarConfiguracionIA(projectId, {
         enabled: settings.enabled,
         preferred_provider: providerId,
         fallback_enabled: settings.fallback_enabled,
@@ -138,20 +138,20 @@ export function ConfiguracionProveedorIA({
       toast.success("IA del proyecto actualizada", providerId === "ollama" ? `Ollama ${source === "aws" ? "en AWS" : "local"}` : providerId);
       onChange(providerId);
       onSourceChange(source);
-      handleClose();
+      manejarCierre();
     } catch {
       toast.error("Error al actualizar proveedor", "No se pudieron guardar los ajustes de la IA");
     }
   };
 
-  const selectProvider = (providerId: ProveedorIA) => saveSelection(providerId, currentSource);
+  const seleccionarProveedor = (providerId: ProveedorIA) => guardarSeleccion(providerId, currentSource);
 
   return (
     <div className="relative inline-block" ref={popoverRef}>
       {!isControlled && (
         <button
           type="button"
-          onClick={handleToggle}
+          onClick={manejarAlternancia}
           className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           aria-label="Ajustes de la IA"
           aria-expanded={open}
@@ -173,7 +173,7 @@ export function ConfiguracionProveedorIA({
             </h4>
             <button
               type="button"
-              onClick={handleClose}
+              onClick={manejarCierre}
               className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               aria-label="Cerrar ajustes"
             >
@@ -201,11 +201,11 @@ export function ConfiguracionProveedorIA({
                   tabIndex={0}
                   aria-checked={isSelected}
                   data-prov={prov.dataProv}
-                  onClick={() => void selectProvider(prov.id)}
+                  onClick={() => void seleccionarProveedor(prov.id)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      void selectProvider(prov.id);
+                      void seleccionarProveedor(prov.id);
                     }
                   }}
                   className={cn(
@@ -252,7 +252,7 @@ export function ConfiguracionProveedorIA({
                     key={source}
                     type="button"
                     aria-pressed={currentSource === source}
-                    onClick={() => void saveSelection("ollama", source)}
+                    onClick={() => void guardarSeleccion("ollama", source)}
                     className={cn(
                       "rounded-md border px-2 py-1.5 text-xs",
                       currentSource === source ? "border-teal-500 bg-teal-50 text-teal-800 dark:bg-teal-950 dark:text-teal-200" : "border-slate-200 dark:border-slate-700"

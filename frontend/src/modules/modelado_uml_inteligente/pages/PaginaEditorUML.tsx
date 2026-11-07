@@ -89,11 +89,11 @@ const springDataTypes = [
   "UUID"
 ];
 
-function visibilitySymbol(visibility: string) {
+function simboloVisibilidad(visibility: string) {
   return visibilityOptions.find((option) => option.value === visibility)?.symbol ?? "+";
 }
 
-type AiUmlResult = Awaited<ReturnType<typeof servicioIA.textToUml>>;
+type AiUmlResult = Awaited<ReturnType<typeof servicioIA.textoAUml>>;
 
 type BrowserSpeechRecognition = {
   lang: string;
@@ -119,7 +119,7 @@ type BrowserWindowWithFilePicker = Window & {
   }) => Promise<BrowserFileSystemFileHandle[]>;
 };
 
-function fileToBase64(file: File) {
+function archivoABase64(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
@@ -128,7 +128,7 @@ function fileToBase64(file: File) {
   });
 }
 
-function fileToText(file: File) {
+function archivoATexto(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
@@ -137,7 +137,7 @@ function fileToText(file: File) {
   });
 }
 
-function createClientEventId() {
+function crearIdEventoCliente() {
   if (typeof window.crypto.randomUUID === "function") {
     return window.crypto.randomUUID();
   }
@@ -155,7 +155,7 @@ function createClientEventId() {
   return `${hexadecimal.slice(0, 8)}-${hexadecimal.slice(8, 12)}-${hexadecimal.slice(12, 16)}-${hexadecimal.slice(16, 20)}-${hexadecimal.slice(20)}`;
 }
 
-function promptFromAiResult(result: AiUmlResult, fallback: string) {
+function instruccionDesdeResultadoIA(result: AiUmlResult, fallback: string) {
   const classNames = result.classes.map((umlClass) => umlClass.name).filter(Boolean);
   const relations = result.relationships
     .map((relationship) => `${relationship.source} ${relationship.relationship_type} ${relationship.target}`)
@@ -183,16 +183,16 @@ export function PaginaEditorUML() {
   const relationships = useAlmacenUML((state) => state.relationships);
   const validation = useAlmacenUML((state) => state.validation);
   const selectedClassId = useAlmacenUML((state) => state.selectedClassId);
-  const setClasses = useAlmacenUML((state) => state.setClasses);
-  const addClass = useAlmacenUML((state) => state.addClass);
-  const updateClass = useAlmacenUML((state) => state.updateClass);
-  const removeClass = useAlmacenUML((state) => state.removeClass);
-  const addRelationship = useAlmacenUML((state) => state.addRelationship);
-  const updateRelationship = useAlmacenUML((state) => state.updateRelationship);
-  const removeRelationship = useAlmacenUML((state) => state.removeRelationship);
-  const setRelationships = useAlmacenUML((state) => state.setRelationships);
-  const setValidation = useAlmacenUML((state) => state.setValidation);
-  const setSelectedClassId = useAlmacenUML((state) => state.setSelectedClassId);
+  const establecerClases = useAlmacenUML((state) => state.establecerClases);
+  const agregarClase = useAlmacenUML((state) => state.agregarClase);
+  const actualizarClase = useAlmacenUML((state) => state.actualizarClase);
+  const quitarClase = useAlmacenUML((state) => state.quitarClase);
+  const agregarRelacion = useAlmacenUML((state) => state.agregarRelacion);
+  const actualizarRelacion = useAlmacenUML((state) => state.actualizarRelacion);
+  const quitarRelacion = useAlmacenUML((state) => state.quitarRelacion);
+  const establecerRelaciones = useAlmacenUML((state) => state.establecerRelaciones);
+  const establecerValidacion = useAlmacenUML((state) => state.establecerValidacion);
+  const establecerIdClaseSeleccionada = useAlmacenUML((state) => state.establecerIdClaseSeleccionada);
   const [sourcePrompt, setSourcePrompt] = useState("");
   const [aiObservation, setAiObservation] = useState("");
   const [xmiContent, setXmiContent] = useState("");
@@ -201,7 +201,7 @@ export function PaginaEditorUML() {
   const [methodName, setMethodName] = useState("calcular");
   const [methodReturnType, setMethodReturnType] = useState("void");
   const [relationshipType, setRelationshipType] = useState("association");
-  const [relationshipLabel, setRelationshipLabel] = useState("usa");
+  const [etiquetaRelacion, setRelationshipLabel] = useState("usa");
   const [sourceMultiplicity, setSourceMultiplicity] = useState("1");
   const [targetMultiplicity, setTargetMultiplicity] = useState("0..*");
   const [activeTool, setActiveTool] = useState<UmlTool>("select");
@@ -226,18 +226,18 @@ export function PaginaEditorUML() {
   const methodNameInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    refreshDiagramModel();
-  }, [diagramId, setClasses, setRelationships]);
+    recargarModeloDiagrama();
+  }, [diagramId, establecerClases, establecerRelaciones]);
 
-  async function refreshDiagramModel() {
+  async function recargarModeloDiagrama() {
     try {
-      const model = await servicioUML.getDiagramModel(diagramId);
-      setClasses(model.classes);
-      setRelationships(model.relationships);
+      const model = await servicioUML.obtenerModeloDiagrama(diagramId);
+      establecerClases(model.classes);
+      establecerRelaciones(model.relationships);
       return model;
     } catch {
-      setClasses([]);
-      setRelationships([]);
+      establecerClases([]);
+      establecerRelaciones([]);
       return null;
     }
   }
@@ -260,7 +260,7 @@ export function PaginaEditorUML() {
       activeSocket.send(JSON.stringify({ type: "PING" }));
     }, 15000);
 
-    function connect() {
+    function conectar() {
       if (disposed) return;
       setConnectionStatus(retryCount > 0 ? "reconectando" : "conectando");
       const socket = crearSocketProyecto(projectId);
@@ -271,8 +271,8 @@ export function PaginaEditorUML() {
         retryCount = 0;
         setConnectionStatus("conectado");
         if (wasReconnecting) {
-          void refreshDiagramModel().then(() => {
-            setSelectedClassId(null);
+          void recargarModeloDiagrama().then(() => {
+            establecerIdClaseSeleccionada(null);
             setSelectedRelationshipId(null);
             setCanvasRevision((current) => current + 1);
           });
@@ -289,7 +289,7 @@ export function PaginaEditorUML() {
         setConnectionStatus("reconectando");
         const delay = Math.min(1000 * 2 ** retryCount, 10000);
         retryCount += 1;
-        reconnectTimer = window.setTimeout(connect, delay);
+        reconnectTimer = window.setTimeout(conectar, delay);
       };
       socket.onerror = () => setConnectionStatus("error");
       socket.onmessage = (message) => {
@@ -353,8 +353,8 @@ export function PaginaEditorUML() {
           window.clearTimeout(remoteRefreshTimerRef.current);
         }
         remoteRefreshTimerRef.current = window.setTimeout(() => {
-          void refreshDiagramModel().then(() => {
-            setSelectedClassId(null);
+          void recargarModeloDiagrama().then(() => {
+            establecerIdClaseSeleccionada(null);
             setSelectedRelationshipId(null);
             setCanvasRevision((current) => current + 1);
             const actorName = (event as typeof event & { actor?: { display_name?: string } }).actor?.display_name;
@@ -364,7 +364,7 @@ export function PaginaEditorUML() {
       };
     }
 
-    connect();
+    conectar();
     return () => {
       disposed = true;
       if (reconnectTimer !== null) {
@@ -380,8 +380,8 @@ export function PaginaEditorUML() {
     };
   }, [diagramId, projectId]);
 
-  function publishChange(payload: Record<string, unknown>) {
-    const clientEventId = createClientEventId();
+  function publicarCambio(payload: Record<string, unknown>) {
+    const clientEventId = crearIdEventoCliente();
     const event = {
       ...payload,
       diagram_id: diagramId,
@@ -406,7 +406,7 @@ export function PaginaEditorUML() {
   }, [selectedRelationship]);
 
   useEffect(() => {
-    function handleDeleteKey(event: KeyboardEvent) {
+    function manejarTeclaEliminar(event: KeyboardEvent) {
       if (event.key !== "Delete") {
         return;
       }
@@ -421,20 +421,20 @@ export function PaginaEditorUML() {
       }
       if (selectedClassId) {
         event.preventDefault();
-        void deleteSelectedClass();
+        void eliminarClaseSeleccionada();
         return;
       }
       if (selectedRelationshipId) {
         event.preventDefault();
-        void deleteSelectedRelationship();
+        void eliminarRelacionSeleccionada();
       }
     }
 
-    window.addEventListener("keydown", handleDeleteKey);
-    return () => window.removeEventListener("keydown", handleDeleteKey);
+    window.addEventListener("keydown", manejarTeclaEliminar);
+    return () => window.removeEventListener("keydown", manejarTeclaEliminar);
   }, [selectedClassId, selectedRelationshipId, selectedClass, selectedRelationship]);
 
-  async function handleAddClass() {
+  async function manejarAgregarClase() {
     if (isCreatingClass) {
       return;
     }
@@ -444,12 +444,12 @@ export function PaginaEditorUML() {
     };
     setIsCreatingClass(true);
     try {
-      const created = await servicioUML.createClass(diagramId, {
+      const created = await servicioUML.crearClase(diagramId, {
         name: `Clase${classes.length + 1}`,
         position_x: position.x,
         position_y: position.y
       });
-      addClass({
+      agregarClase({
         ...created,
         attributes: [],
         methods: [],
@@ -465,10 +465,10 @@ export function PaginaEditorUML() {
           style: {}
         }
       });
-      setSelectedClassId(created.id);
+      establecerIdClaseSeleccionada(created.id);
       setSelectedRelationshipId(null);
       setActiveTool("select");
-      publishChange({ action: "CREATE_CLASS", class_id: created.id });
+      publicarCambio({ action: "CREATE_CLASS", class_id: created.id });
     } catch {
       setAiObservation("No se pudo crear la clase. Revise la sesion o la conexion con el backend.");
     } finally {
@@ -476,44 +476,44 @@ export function PaginaEditorUML() {
     }
   }
 
-  async function handleValidate() {
-    await refreshDiagramModel();
-    setValidation(await servicioUML.validate(diagramId));
+  async function manejarValidacion() {
+    await recargarModeloDiagrama();
+    establecerValidacion(await servicioUML.validar(diagramId));
     setShowValidationModal(true);
   }
 
-  function renameClassInline(classId: string, name: string) {
+  function renombrarClaseEnLinea(classId: string, name: string) {
     const umlClass = useAlmacenUML.getState().classes.find((item) => item.id === classId);
     if (!umlClass) {
       return;
     }
-    updateClass({ ...umlClass, name });
+    actualizarClase({ ...umlClass, name });
     if (name.trim().length > 0) {
-      void servicioUML.updateClass(classId, { name: name.trim() }).then((updated) => {
+      void servicioUML.actualizarClase(classId, { name: name.trim() }).then((updated) => {
         const current = useAlmacenUML.getState().classes.find((item) => item.id === classId);
         if (current) {
-          updateClass({ ...current, ...updated });
+          actualizarClase({ ...current, ...updated });
         }
-        publishChange({ action: "UPDATE_CLASS", class_id: classId });
+        publicarCambio({ action: "UPDATE_CLASS", class_id: classId });
       });
     }
   }
 
-  async function handleElementTypeChange(nextType: TipoElementoUML) {
+  async function manejarCambioTipoElemento(nextType: TipoElementoUML) {
     if (!selectedClass) return;
     try {
-      const updated = await servicioUML.updateClass(
+      const updated = await servicioUML.actualizarClase(
         selectedClass.id,
-        { element_type: nextType } as unknown as Parameters<typeof servicioUML.updateClass>[1]
+        { element_type: nextType } as unknown as Parameters<typeof servicioUML.actualizarClase>[1]
       );
-      updateClass({ ...selectedClass, ...updated, element_type: nextType });
-      publishChange({ action: "UPDATE_CLASS", class_id: selectedClass.id });
+      actualizarClase({ ...selectedClass, ...updated, element_type: nextType });
+      publicarCambio({ action: "UPDATE_CLASS", class_id: selectedClass.id });
     } catch {
       setAiObservation("No se pudo actualizar el tipo de elemento.");
     }
   }
 
-  async function createRelationshipBetween(sourceId: string, targetId: string, tool: UmlTool) {
+  async function crearRelacionEntre(sourceId: string, targetId: string, tool: UmlTool) {
     if (sourceId === targetId) {
       return;
     }
@@ -522,16 +522,16 @@ export function PaginaEditorUML() {
       const targetClass = classes.find((item) => item.id === targetId);
       const positionX = ((sourceClass?.visual?.position_x ?? 160) + (targetClass?.visual?.position_x ?? 520)) / 2;
       const positionY = ((sourceClass?.visual?.position_y ?? 120) + (targetClass?.visual?.position_y ?? 120)) / 2 + 180;
-      const associationClass = await servicioUML.createClass(diagramId, {
+      const associationClass = await servicioUML.crearClase(diagramId, {
         name: `${sourceClass?.name ?? "Origen"}${targetClass?.name ?? "Destino"}`,
         position_x: positionX,
         position_y: positionY
       });
-      const generatedAttribute = await servicioUML.addAttribute(associationClass.id, {
+      const generatedAttribute = await servicioUML.agregarAtributo(associationClass.id, {
         name: `id${sourceClass?.name ?? "Origen"}`,
         data_type: "Long"
       });
-      addClass({
+      agregarClase({
         ...associationClass,
         attributes: [generatedAttribute],
         methods: [],
@@ -547,21 +547,21 @@ export function PaginaEditorUML() {
           style: {}
         }
       });
-      const association = await servicioUML.createRelationship(diagramId, {
+      const association = await servicioUML.crearRelacion(diagramId, {
         source_class_id: sourceId,
         target_class_id: targetId,
         relationship_type: "association",
-        label: relationshipLabel.trim() || "",
+        label: etiquetaRelacion.trim() || "",
         source_cardinality: "*",
         target_cardinality: "*",
         metadata_json: { association_class_id: associationClass.id }
       });
-      addRelationship(association);
-      setSelectedClassId(associationClass.id);
+      agregarRelacion(association);
+      establecerIdClaseSeleccionada(associationClass.id);
       setSelectedRelationshipId(null);
       setPendingSourceId("");
       setActiveTool("select");
-      publishChange({
+      publicarCambio({
         action: "CREATE_RELATIONSHIP",
         relationship_id: association.id,
         class_id: associationClass.id
@@ -586,60 +586,60 @@ export function PaginaEditorUML() {
       dependency: "depende",
       implementation: "realiza"
     };
-    const created = await servicioUML.createRelationship(diagramId, {
+    const created = await servicioUML.crearRelacion(diagramId, {
       source_class_id: sourceId,
       target_class_id: targetId,
       relationship_type: type,
-      label: relationshipLabel.trim() || defaultLabels[type],
+      label: etiquetaRelacion.trim() || defaultLabels[type],
       source_cardinality: sourceMultiplicity.trim() || null,
       target_cardinality: targetMultiplicity.trim() || null
     });
-    addRelationship(created);
+    agregarRelacion(created);
     setSelectedRelationshipId(created.id);
-    setSelectedClassId(null);
+    establecerIdClaseSeleccionada(null);
     setPendingSourceId("");
     setActiveTool("select");
-    publishChange({ action: "CREATE_RELATIONSHIP", relationship_id: created.id });
+    publicarCambio({ action: "CREATE_RELATIONSHIP", relationship_id: created.id });
   }
 
-  const handleClassClick = useCallback(
+  const manejarClicClase = useCallback(
     (classId: string) => {
       if (activeTool !== "select" && activeTool !== "class") {
         if (!pendingSourceId) {
           setPendingSourceId(classId);
-          setSelectedClassId(classId);
+          establecerIdClaseSeleccionada(classId);
           setSelectedRelationshipId(null);
           return;
         }
-        void createRelationshipBetween(pendingSourceId, classId, activeTool);
+        void crearRelacionEntre(pendingSourceId, classId, activeTool);
         setPendingSourceId("");
         return;
       }
-      setSelectedClassId(classId);
+      establecerIdClaseSeleccionada(classId);
       setSelectedRelationshipId(null);
     },
-    [activeTool, classes, pendingSourceId, setSelectedClassId]
+    [activeTool, classes, pendingSourceId, establecerIdClaseSeleccionada]
   );
 
-  const handleRelationshipClick = useCallback((relationshipId: string) => {
+  const manejarClicRelacion = useCallback((relationshipId: string) => {
     setSelectedRelationshipId(relationshipId);
-    setSelectedClassId(null);
+    establecerIdClaseSeleccionada(null);
     setPendingSourceId("");
     setIsRelationshipModalOpen(true);
-  }, [setSelectedClassId]);
+  }, [establecerIdClaseSeleccionada]);
 
-  const handleRelationshipDoubleClick = useCallback((relationshipId: string) => {
+  const manejarDobleClicRelacion = useCallback((relationshipId: string) => {
     setSelectedRelationshipId(relationshipId);
-    setSelectedClassId(null);
+    establecerIdClaseSeleccionada(null);
     setPendingSourceId("");
     setIsRelationshipModalOpen(true);
-  }, [setSelectedClassId]);
+  }, [establecerIdClaseSeleccionada]);
 
-  const handleClassMove = useCallback(
+  const manejarMovimientoClase = useCallback(
     (classId: string, position: { x: number; y: number }) => {
       const umlClass = classes.find((item) => item.id === classId);
       if (umlClass) {
-        updateClass({
+        actualizarClase({
           ...umlClass,
           visual: {
             id: umlClass.visual?.id ?? `local-${classId}`,
@@ -654,7 +654,7 @@ export function PaginaEditorUML() {
           }
         });
       }
-      void servicioUML.moveElement(diagramId, {
+      void servicioUML.moverElemento(diagramId, {
         element_type: "class",
         element_id: classId,
         position_x: position.x,
@@ -662,15 +662,15 @@ export function PaginaEditorUML() {
       }).then((visual) => {
         const movedClass = useAlmacenUML.getState().classes.find((item) => item.id === classId);
         if (movedClass) {
-          updateClass({ ...movedClass, visual });
+          actualizarClase({ ...movedClass, visual });
         }
       });
-      publishChange({ action: "MOVE_ELEMENT", class_id: classId, position });
+      publicarCambio({ action: "MOVE_ELEMENT", class_id: classId, position });
     },
-    [classes, diagramId, updateClass]
+    [classes, diagramId, actualizarClase]
   );
 
-  async function deleteSelectedClass() {
+  async function eliminarClaseSeleccionada() {
     if (!selectedClass) {
       return;
     }
@@ -682,54 +682,54 @@ export function PaginaEditorUML() {
           relationship.metadata_json?.association_class_id === selectedClass.id
       )
       .map((relationship) => relationship.id);
-    await servicioUML.deleteClass(selectedClass.id);
-    relatedRelationshipIds.forEach(removeRelationship);
-    removeClass(selectedClass.id);
-    setSelectedClassId(null);
+    await servicioUML.eliminarClase(selectedClass.id);
+    relatedRelationshipIds.forEach(quitarRelacion);
+    quitarClase(selectedClass.id);
+    establecerIdClaseSeleccionada(null);
     setSelectedRelationshipId(null);
-    await refreshDiagramModel();
-    publishChange({ action: "DELETE_CLASS", class_id: selectedClass.id });
+    await recargarModeloDiagrama();
+    publicarCambio({ action: "DELETE_CLASS", class_id: selectedClass.id });
   }
 
-  async function saveSelectedRelationship() {
+  async function guardarRelacionSeleccionada() {
     if (!selectedRelationship) {
       return;
     }
-    const updated = await servicioUML.updateRelationship(selectedRelationship.id, {
-      label: relationshipLabel.trim() || null,
+    const updated = await servicioUML.actualizarRelacion(selectedRelationship.id, {
+      label: etiquetaRelacion.trim() || null,
       source_cardinality: sourceMultiplicity.trim() || null,
       target_cardinality: targetMultiplicity.trim() || null,
       relationship_type: relationshipType
     });
-    updateRelationship(updated);
-    publishChange({ action: "UPDATE_RELATIONSHIP", relationship_id: updated.id });
+    actualizarRelacion(updated);
+    publicarCambio({ action: "UPDATE_RELATIONSHIP", relationship_id: updated.id });
   }
 
-  async function deleteSelectedRelationship() {
+  async function eliminarRelacionSeleccionada() {
     if (!selectedRelationship) {
       return;
     }
-    await servicioUML.deleteRelationship(selectedRelationship.id);
-    removeRelationship(selectedRelationship.id);
+    await servicioUML.eliminarRelacion(selectedRelationship.id);
+    quitarRelacion(selectedRelationship.id);
     setSelectedRelationshipId(null);
-    await refreshDiagramModel();
-    publishChange({ action: "DELETE_RELATIONSHIP", relationship_id: selectedRelationship.id });
+    await recargarModeloDiagrama();
+    publicarCambio({ action: "DELETE_RELATIONSHIP", relationship_id: selectedRelationship.id });
   }
 
-  async function addAttributeToSelectedClass() {
+  async function agregarAtributoAClaseSeleccionada() {
     if (!selectedClass || attributeName.trim().length === 0 || attributeType.trim().length === 0) {
       return;
     }
-    const created = await servicioUML.addAttribute(selectedClass.id, {
+    const created = await servicioUML.agregarAtributo(selectedClass.id, {
       name: attributeName.trim(),
       data_type: attributeType.trim()
     });
-    updateClass({ ...selectedClass, attributes: [...selectedClass.attributes, created] });
+    actualizarClase({ ...selectedClass, attributes: [...selectedClass.attributes, created] });
     setAttributeName("");
-    publishChange({ action: "CREATE_ATTRIBUTE", attribute_id: created.id });
+    publicarCambio({ action: "CREATE_ATTRIBUTE", attribute_id: created.id });
   }
 
-  async function saveAttribute(attributeId: string) {
+  async function guardarAtributo(attributeId: string) {
     if (!selectedClass) {
       return;
     }
@@ -737,7 +737,7 @@ export function PaginaEditorUML() {
     if (!attribute) {
       return;
     }
-    const updated = await servicioUML.updateAttribute(attributeId, {
+    const updated = await servicioUML.actualizarAtributo(attributeId, {
       name: attribute.name,
       data_type: attribute.data_type,
       visibility: attribute.visibility,
@@ -747,46 +747,46 @@ export function PaginaEditorUML() {
       order_index: attribute.order_index,
       constraints: attribute.constraints
     });
-    updateClass({
+    actualizarClase({
       ...selectedClass,
       attributes: selectedClass.attributes.map((item) => (item.id === attributeId ? updated : item))
     });
-    publishChange({ action: "UPDATE_ATTRIBUTE", attribute_id: attributeId });
+    publicarCambio({ action: "UPDATE_ATTRIBUTE", attribute_id: attributeId });
   }
 
-  async function deleteAttribute(attributeId: string) {
+  async function eliminarAtributo(attributeId: string) {
     if (!selectedClass) {
       return;
     }
-    await servicioUML.deleteAttribute(attributeId);
-    updateClass({ ...selectedClass, attributes: selectedClass.attributes.filter((item) => item.id !== attributeId) });
-    publishChange({ action: "DELETE_ATTRIBUTE", attribute_id: attributeId });
+    await servicioUML.eliminarAtributo(attributeId);
+    actualizarClase({ ...selectedClass, attributes: selectedClass.attributes.filter((item) => item.id !== attributeId) });
+    publicarCambio({ action: "DELETE_ATTRIBUTE", attribute_id: attributeId });
   }
 
-  function updateAttributeDraft(attributeId: string, patch: Partial<AtributoUML>) {
+  function actualizarBorradorAtributo(attributeId: string, patch: Partial<AtributoUML>) {
     if (!selectedClass) {
       return;
     }
-    updateClass({
+    actualizarClase({
       ...selectedClass,
       attributes: selectedClass.attributes.map((item) => (item.id === attributeId ? { ...item, ...patch } : item))
     });
   }
 
-  async function addMethodToSelectedClass() {
+  async function agregarMetodoAClaseSeleccionada() {
     if (!selectedClass || methodName.trim().length === 0) {
       return;
     }
-    const created = await servicioUML.addMethod(selectedClass.id, {
+    const created = await servicioUML.agregarMetodo(selectedClass.id, {
       name: methodName.trim(),
       return_type: methodReturnType.trim() || "void"
     });
-    updateClass({ ...selectedClass, methods: [...selectedClass.methods, created] });
+    actualizarClase({ ...selectedClass, methods: [...selectedClass.methods, created] });
     setMethodName("");
-    publishChange({ action: "CREATE_METHOD", method_id: created.id });
+    publicarCambio({ action: "CREATE_METHOD", method_id: created.id });
   }
 
-  async function saveMethod(methodId: string) {
+  async function guardarMetodo(methodId: string) {
     if (!selectedClass) {
       return;
     }
@@ -794,62 +794,62 @@ export function PaginaEditorUML() {
     if (!method) {
       return;
     }
-    const updated = await servicioUML.updateMethod(methodId, {
+    const updated = await servicioUML.actualizarMetodo(methodId, {
       name: method.name,
       return_type: method.return_type,
       visibility: method.visibility,
       order_index: method.order_index,
       metadata_json: method.metadata_json
     });
-    updateClass({
+    actualizarClase({
       ...selectedClass,
       methods: selectedClass.methods.map((item) => (item.id === methodId ? updated : item))
     });
-    publishChange({ action: "METHOD_SIGNATURE_UPDATED", method_id: methodId });
+    publicarCambio({ action: "METHOD_SIGNATURE_UPDATED", method_id: methodId });
   }
 
-  async function deleteMethod(methodId: string) {
+  async function eliminarMetodo(methodId: string) {
     if (!selectedClass) {
       return;
     }
-    await servicioUML.deleteMethod(methodId);
-    updateClass({ ...selectedClass, methods: selectedClass.methods.filter((item) => item.id !== methodId) });
-    publishChange({ action: "DELETE_METHOD", method_id: methodId });
+    await servicioUML.eliminarMetodo(methodId);
+    actualizarClase({ ...selectedClass, methods: selectedClass.methods.filter((item) => item.id !== methodId) });
+    publicarCambio({ action: "DELETE_METHOD", method_id: methodId });
   }
 
-  function updateMethodDraft(methodId: string, patch: Partial<MetodoUML>) {
+  function actualizarBorradorMetodo(methodId: string, patch: Partial<MetodoUML>) {
     if (!selectedClass) {
       return;
     }
-    updateClass({
+    actualizarClase({
       ...selectedClass,
       methods: selectedClass.methods.map((item) => (item.id === methodId ? { ...item, ...patch } : item))
     });
   }
 
-  async function applyAiResultToCurrentDiagram(
+  async function aplicarResultadoIAAlDiagramaActual(
     aiResult: AiUmlResult,
     sourceType: "text" | "voice" | "image",
     fallbackDescription: string,
     currentModel?: ModeloDiagrama | null
   ) {
-    const model = currentModel ?? await refreshDiagramModel();
+    const model = currentModel ?? await recargarModeloDiagrama();
     const currentClasses = model?.classes ?? useAlmacenUML.getState().classes;
     const currentRelationships = model?.relationships ?? useAlmacenUML.getState().relationships;
 
-    await servicioUML.applyAiModificationToDiagram({
+    await servicioUML.aplicarModificacionIAAlDiagrama({
       diagramId,
       classes: currentClasses,
       relationships: currentRelationships,
       result: aiResult
     });
-    const updatedModel = await refreshDiagramModel();
+    const updatedModel = await recargarModeloDiagrama();
     setCanvasRevision((current) => current + 1);
-    setSelectedClassId(null);
+    establecerIdClaseSeleccionada(null);
     setSelectedRelationshipId(null);
     setPendingSourceId("");
     setActiveTool("select");
-    publishChange({
+    publicarCambio({
       action: "AI_UPDATE_DIAGRAM",
       diagram_id: diagramId,
       source_type: sourceType
@@ -858,27 +858,27 @@ export function PaginaEditorUML() {
       setAiObservation(
         `${aiResult.engine} incorporo la imagen al diagrama actual. ` +
         `Se conservaron las ${currentClasses.length} clases y ${currentRelationships.length} relaciones previas. ` +
-        promptFromAiResult(aiResult, fallbackDescription)
+        instruccionDesdeResultadoIA(aiResult, fallbackDescription)
       );
     } else {
       setAiObservation(
-        `${aiResult.engine} actualizo este diagrama: ${promptFromAiResult(aiResult, fallbackDescription)}`
+        `${aiResult.engine} actualizo este diagrama: ${instruccionDesdeResultadoIA(aiResult, fallbackDescription)}`
       );
     }
     return updatedModel;
   }
 
-  async function generateFromSource(sourceType: "text" | "voice" | "image", file?: File, promptOverride?: string) {
+  async function generarDesdeFuente(sourceType: "text" | "voice" | "image", file?: File, promptOverride?: string) {
     const basePrompt = promptOverride?.trim() || sourcePrompt.trim() || "Modelo UML generado por IA local";
     if (sourceType === "text" || sourceType === "voice") {
-      await modifyCurrentDiagramFromPrompt(basePrompt, sourceType);
+      await modificarDiagramaActualDesdeInstruccion(basePrompt, sourceType);
       return;
     }
     const aiResult =
-      await servicioIA.imageToUml({
+      await servicioIA.imagenAUml({
         project_id: projectId,
         description: promptOverride?.trim() || undefined,
-        image_base64: file ? await fileToBase64(file) : undefined,
+        image_base64: file ? await archivoABase64(file) : undefined,
         file_name: file?.name
       });
     const unresolvedClasses = aiResult.classes.filter(
@@ -910,16 +910,16 @@ export function PaginaEditorUML() {
         .map((umlClass) => umlClass.name)
         .join(", ")}`
     );
-    await applyAiResultToCurrentDiagram(aiResult, sourceType, "Modelo UML generado desde imagen");
+    await aplicarResultadoIAAlDiagramaActual(aiResult, sourceType, "Modelo UML generado desde imagen");
   }
 
-  async function modifyCurrentDiagramFromPrompt(promptOverride?: string, sourceType: "text" | "voice" = "text") {
+  async function modificarDiagramaActualDesdeInstruccion(promptOverride?: string, sourceType: "text" | "voice" = "text") {
     const instruction = promptOverride?.trim() || sourcePrompt.trim();
     if (!instruction) {
       setAiObservation("Escriba una instruccion para editar el diagrama actual.");
       return;
     }
-    const model = await refreshDiagramModel();
+    const model = await recargarModeloDiagrama();
     const currentClasses = model?.classes ?? useAlmacenUML.getState().classes;
     const currentRelationships = model?.relationships ?? useAlmacenUML.getState().relationships;
     const selectedClassName =
@@ -927,13 +927,13 @@ export function PaginaEditorUML() {
     if (currentClasses.length === 0) {
       const generatedResult =
         sourceType === "voice"
-          ? await servicioIA.voiceToUml({ transcript: instruction })
-          : await servicioIA.textToUml(instruction);
-      await applyAiResultToCurrentDiagram(generatedResult, sourceType, instruction, model);
+          ? await servicioIA.vozAUml({ transcript: instruction })
+          : await servicioIA.textoAUml(instruction);
+      await aplicarResultadoIAAlDiagramaActual(generatedResult, sourceType, instruction, model);
       return;
     }
     const classNameById = new Map(currentClasses.map((umlClass) => [umlClass.id, umlClass.name]));
-    const aiResult = await servicioIA.modifyUml({
+    const aiResult = await servicioIA.modificarUml({
       instruction,
       selected_class_name: selectedClassName,
       classes: currentClasses.map((umlClass) => ({
@@ -977,7 +977,7 @@ export function PaginaEditorUML() {
         })
         .filter((relationship): relationship is NonNullable<typeof relationship> => relationship !== null)
     });
-    await applyAiResultToCurrentDiagram(aiResult, sourceType, instruction, model);
+    await aplicarResultadoIAAlDiagramaActual(aiResult, sourceType, instruction, model);
     setAiObservation(
       `${aiResult.engine} edito el diagrama actual: ${
         "changes" in aiResult && aiResult.changes.length > 0
@@ -987,7 +987,7 @@ export function PaginaEditorUML() {
     );
   }
 
-  async function importXmi(content = xmiContent, fileName = "modelo-importado.xml") {
+  async function importarXmi(content = xmiContent, fileName = "modelo-importado.xml") {
     const trimmedContent = content.trim();
     if (!trimmedContent) {
       setAiObservation("No se importo nada: el archivo XML esta vacio.");
@@ -995,17 +995,17 @@ export function PaginaEditorUML() {
     }
     setAiObservation(`Importando ${fileName}...`);
     try {
-      await servicioUML.importXmiIntoDiagram(diagramId, {
+      await servicioUML.importarXmiAlDiagrama(diagramId, {
         project_id: projectId,
         name: fileName.replace(/\.[^.]+$/, "") || "Modelo importado XML",
         file_name: fileName,
         content: trimmedContent
       });
-      setSelectedClassId(null);
+      establecerIdClaseSeleccionada(null);
       setSelectedRelationshipId(null);
       setPendingSourceId("");
       setActiveTool("select");
-      const model = await refreshDiagramModel();
+      const model = await recargarModeloDiagrama();
       setCanvasRevision((current) => current + 1);
       setXmiContent("");
       if (!model || model.classes.length === 0) {
@@ -1019,20 +1019,20 @@ export function PaginaEditorUML() {
           ? error.message
           : "El backend no acepto el XML o no pudo convertirlo al modelo UML.";
       setAiObservation(`No se pudo importar ${fileName}. ${detail}`);
-      await refreshDiagramModel();
+      await recargarModeloDiagrama();
     }
   }
 
-  async function handleImageSelected(event: ChangeEvent<HTMLInputElement>) {
+  async function manejarImagenSeleccionada(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (file) {
       setAiObservation(`Analizando ${file.name} para incorporarlo al diagrama actual...`);
-      await generateFromSource("image", file);
+      await generarDesdeFuente("image", file);
     }
   }
 
-  async function handleXmiSelected(event: ChangeEvent<HTMLInputElement>) {
+  async function manejarXmiSeleccionado(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) {
@@ -1041,14 +1041,14 @@ export function PaginaEditorUML() {
     }
     setAiObservation(`Archivo seleccionado: ${file.name}. Leyendo ${file.size} bytes...`);
     try {
-      await importXmi(await fileToText(file), file.name);
+      await importarXmi(await archivoATexto(file), file.name);
     } catch (error) {
       const detail = error instanceof Error ? error.message : "No se pudo leer el archivo seleccionado.";
       setAiObservation(`No se pudo leer ${file.name}. ${detail}`);
     }
   }
 
-  async function openXmiPicker() {
+  async function abrirSelectorXmi() {
     setAiObservation("Seleccione un archivo XML exportado desde Enterprise Architect.");
     const browserWindow = window as BrowserWindowWithFilePicker;
     if (typeof browserWindow.showOpenFilePicker === "function") {
@@ -1072,7 +1072,7 @@ export function PaginaEditorUML() {
         }
         const file = await handle.getFile();
         setAiObservation(`Archivo seleccionado: ${file.name}. Leyendo ${file.size} bytes...`);
-        await importXmi(await fileToText(file), file.name);
+        await importarXmi(await archivoATexto(file), file.name);
         return;
       } catch (error) {
         const domError = error as { name?: string; message?: string };
@@ -1091,7 +1091,7 @@ export function PaginaEditorUML() {
     xmiInputRef.current.click();
   }
 
-  function generateFromVoiceCapture() {
+  function generarDesdeCapturaVoz() {
     const browserWindow = window as Window & {
       SpeechRecognition?: new () => BrowserSpeechRecognition;
       webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
@@ -1121,10 +1121,10 @@ export function PaginaEditorUML() {
     recognition.start();
   }
 
-  function activateEditorTool(tool: UmlTool) {
+  function activarHerramientaEditor(tool: UmlTool) {
     setPendingSourceId("");
     if (tool === "class") {
-      void handleAddClass();
+      void manejarAgregarClase();
       return;
     }
     setActiveTool(tool);
@@ -1159,10 +1159,10 @@ export function PaginaEditorUML() {
     }
   }
 
-  function exportXmi() {
+  function exportarXmi() {
     setAiObservation("Preparando XML para Enterprise Architect...");
     void servicioUML
-      .exportXmi(diagramId)
+      .exportarXmi(diagramId)
       .then((xmi) => {
         const blob = new Blob([xmi.content], { type: "application/xml" });
         const url = URL.createObjectURL(blob);
@@ -1199,10 +1199,10 @@ export function PaginaEditorUML() {
 
       <Panel className="overflow-hidden bg-white dark:border-slate-700 dark:bg-slate-950">
         <BarraHerramientasUML
-          onAddClass={handleAddClass}
-          onValidate={handleValidate}
-          onExport={exportXmi}
-          onImport={openXmiPicker}
+          onAddClass={manejarAgregarClase}
+          onValidate={manejarValidacion}
+          onExport={exportarXmi}
+          onImport={abrirSelectorXmi}
           rightContent={(
             <nav aria-label="Panel lateral del editor" className="grid min-w-[330px] grid-cols-3 gap-1" role="tablist">
               {([
@@ -1230,13 +1230,13 @@ export function PaginaEditorUML() {
             </nav>
           )}
         />
-        <input ref={imageInputRef} className="hidden" type="file" accept="image/*" onChange={handleImageSelected} />
+        <input ref={imageInputRef} className="hidden" type="file" accept="image/*" onChange={manejarImagenSeleccionada} />
         <input
           ref={xmiInputRef}
           className="hidden"
           type="file"
           accept=".xml,.xmi,text/xml,application/xml,*/*"
-          onChange={handleXmiSelected}
+          onChange={manejarXmiSeleccionado}
         />
         <div className="grid min-h-[760px] xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="h-[760px] bg-slate-50 dark:bg-slate-900">
@@ -1245,11 +1245,11 @@ export function PaginaEditorUML() {
               classes={classes}
               isDark={isDark}
               key={`${diagramId}-${canvasRevision}`}
-              onClassClick={handleClassClick}
-              onClassMove={handleClassMove}
-              onClassRename={renameClassInline}
-              onRelationshipClick={handleRelationshipClick}
-              onRelationshipDoubleClick={handleRelationshipDoubleClick}
+              onClassClick={manejarClicClase}
+              onClassMove={manejarMovimientoClase}
+              onClassRename={renombrarClaseEnLinea}
+              onRelationshipClick={manejarClicRelacion}
+              onRelationshipDoubleClick={manejarDobleClicRelacion}
               pendingSourceId={pendingSourceId}
               relationships={relationships}
               selectedClassId={selectedClassId}
@@ -1298,7 +1298,7 @@ export function PaginaEditorUML() {
                           )}
                           disabled={tool === "class" && isCreatingClass}
                           key={tool}
-                          onClick={() => activateEditorTool(tool)}
+                          onClick={() => activarHerramientaEditor(tool)}
                           title={label}
                           type="button"
                         >
@@ -1346,7 +1346,7 @@ export function PaginaEditorUML() {
                     className="w-full px-0"
                     disabled={isListening}
                     icon={<Mic className={isListening ? "animate-pulse" : ""} size={18} aria-hidden="true" />}
-                    onClick={generateFromVoiceCapture}
+                    onClick={generarDesdeCapturaVoz}
                     title={isListening ? "Escuchando" : "Transcribir por voz"}
                     variant="secondary"
                   >
@@ -1357,7 +1357,7 @@ export function PaginaEditorUML() {
                     className="w-full px-0"
                     disabled={!sourcePrompt.trim()}
                     icon={<Send size={18} aria-hidden="true" />}
-                    onClick={() => modifyCurrentDiagramFromPrompt()}
+                    onClick={() => modificarDiagramaActualDesdeInstruccion()}
                     title="Editar diagrama"
                     variant="secondary"
                   >
@@ -1402,7 +1402,7 @@ export function PaginaEditorUML() {
                       );
                       return;
                     }
-                    await refreshDiagramModel();
+                    await recargarModeloDiagrama();
                     setCanvasRevision((current) => current + 1);
                   }}
                 />
@@ -1462,7 +1462,7 @@ export function PaginaEditorUML() {
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
                   <SelectorTipoElemento
                     value={selectedClass.element_type}
-                    onChange={handleElementTypeChange}
+                    onChange={manejarCambioTipoElemento}
                   />
                   {selectedClass.element_type === "enum" && (
                     <span className="text-xs text-amber-700 dark:text-amber-300">
@@ -1505,7 +1505,7 @@ export function PaginaEditorUML() {
                             <select
                               className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                               value={attribute.visibility}
-                              onChange={(event) => updateAttributeDraft(attribute.id, { visibility: event.target.value })}
+                              onChange={(event) => actualizarBorradorAtributo(attribute.id, { visibility: event.target.value })}
                             >
                               {visibilityOptions.map((option) => (
                                 <option key={option.value} value={option.value}>
@@ -1518,14 +1518,14 @@ export function PaginaEditorUML() {
                             <input
                               className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                               value={attribute.name}
-                              onChange={(event) => updateAttributeDraft(attribute.id, { name: event.target.value })}
+                              onChange={(event) => actualizarBorradorAtributo(attribute.id, { name: event.target.value })}
                             />
                           </td>
                           <td className="px-3 py-2">
                             <select
                               className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                               value={attribute.data_type}
-                              onChange={(event) => updateAttributeDraft(attribute.id, { data_type: event.target.value })}
+                              onChange={(event) => actualizarBorradorAtributo(attribute.id, { data_type: event.target.value })}
                             >
                               {springDataTypes.map((dataType) => (
                                 <option key={dataType} value={dataType}>
@@ -1540,7 +1540,7 @@ export function PaginaEditorUML() {
                                 aria-label="Guardar atributo"
                                 className="h-9 w-full min-w-9 !p-0"
                                 icon={<Save className="h-4 w-4 shrink-0" aria-hidden="true" />}
-                                onClick={() => saveAttribute(attribute.id)}
+                                onClick={() => guardarAtributo(attribute.id)}
                                 title="Guardar atributo"
                                 variant="secondary"
                               />
@@ -1548,7 +1548,7 @@ export function PaginaEditorUML() {
                                 aria-label="Eliminar atributo"
                                 className="h-9 w-full min-w-9 !p-0"
                                 icon={<Trash2 className="h-4 w-4 shrink-0" aria-hidden="true" />}
-                                onClick={() => deleteAttribute(attribute.id)}
+                                onClick={() => eliminarAtributo(attribute.id)}
                                 title="Eliminar atributo"
                                 variant="danger"
                               />
@@ -1557,7 +1557,7 @@ export function PaginaEditorUML() {
                         </tr>
                       ))}
                       <tr>
-                        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{visibilitySymbol("private")} Privado</td>
+                        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{simboloVisibilidad("private")} Privado</td>
                         <td className="px-3 py-2">
                           <input
                             ref={attributeNameInputRef}
@@ -1583,7 +1583,7 @@ export function PaginaEditorUML() {
                           </select>
                         </td>
                         <td className="px-3 py-2">
-                          <Boton disabled={!selectedClass} icon={<Plus size={15} aria-hidden="true" />} onClick={addAttributeToSelectedClass} variant="secondary">
+                          <Boton disabled={!selectedClass} icon={<Plus size={15} aria-hidden="true" />} onClick={agregarAtributoAClaseSeleccionada} variant="secondary">
                             Agregar
                           </Boton>
                         </td>
@@ -1633,7 +1633,7 @@ export function PaginaEditorUML() {
                             <select
                               className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                               value={method.visibility}
-                              onChange={(event) => updateMethodDraft(method.id, { visibility: event.target.value })}
+                              onChange={(event) => actualizarBorradorMetodo(method.id, { visibility: event.target.value })}
                             >
                               {visibilityOptions.map((option) => (
                                 <option key={option.value} value={option.value}>
@@ -1646,14 +1646,14 @@ export function PaginaEditorUML() {
                             <input
                               className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                               value={method.name}
-                              onChange={(event) => updateMethodDraft(method.id, { name: event.target.value })}
+                              onChange={(event) => actualizarBorradorMetodo(method.id, { name: event.target.value })}
                             />
                           </td>
                           <td className="px-3 py-2">
                             <input
                               className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                               value={method.return_type ?? ""}
-                              onChange={(event) => updateMethodDraft(method.id, { return_type: event.target.value })}
+                              onChange={(event) => actualizarBorradorMetodo(method.id, { return_type: event.target.value })}
                             />
                           </td>
                           <td className="px-3 py-2">
@@ -1662,7 +1662,7 @@ export function PaginaEditorUML() {
                                 aria-label="Guardar metodo"
                                 className="h-9 w-full min-w-9 !p-0"
                                 icon={<Save className="h-4 w-4 shrink-0" aria-hidden="true" />}
-                                onClick={() => saveMethod(method.id)}
+                                onClick={() => guardarMetodo(method.id)}
                                 title="Guardar metodo"
                                 variant="secondary"
                               />
@@ -1678,7 +1678,7 @@ export function PaginaEditorUML() {
                                 aria-label="Eliminar metodo"
                                 className="h-9 w-full min-w-9 !p-0"
                                 icon={<Trash2 className="h-4 w-4 shrink-0" aria-hidden="true" />}
-                                onClick={() => deleteMethod(method.id)}
+                                onClick={() => eliminarMetodo(method.id)}
                                 title="Eliminar metodo"
                                 variant="danger"
                               />
@@ -1687,7 +1687,7 @@ export function PaginaEditorUML() {
                         </tr>
                       ))}
                       <tr>
-                        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{visibilitySymbol("public")} Publico</td>
+                        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{simboloVisibilidad("public")} Publico</td>
                         <td className="px-3 py-2">
                           <input
                             ref={methodNameInputRef}
@@ -1708,7 +1708,7 @@ export function PaginaEditorUML() {
                           />
                         </td>
                         <td className="px-3 py-2">
-                          <Boton disabled={!selectedClass} icon={<Plus size={15} aria-hidden="true" />} onClick={addMethodToSelectedClass} variant="secondary">
+                          <Boton disabled={!selectedClass} icon={<Plus size={15} aria-hidden="true" />} onClick={agregarMetodoAClaseSeleccionada} variant="secondary">
                             Agregar
                           </Boton>
                         </td>
@@ -1767,7 +1767,7 @@ export function PaginaEditorUML() {
                                   icon={<Eye size={16} aria-hidden="true" />}
                                   onClick={() => {
                                     setSelectedRelationshipId(relationship.id);
-                                    setSelectedClassId(null);
+                                    establecerIdClaseSeleccionada(null);
                                     setIsRelationshipModalOpen(true);
                                   }}
                                   title="Editar relacion"
@@ -1845,7 +1845,7 @@ export function PaginaEditorUML() {
                       ? "border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500 focus:ring-teal-900/50"
                       : "border-slate-300 bg-white text-slate-950 placeholder:text-slate-400 focus:ring-teal-100"
                   )}
-                  value={relationshipLabel}
+                  value={etiquetaRelacion}
                   onChange={(event) => setRelationshipLabel(event.target.value)}
                 />
               </label>
@@ -1894,7 +1894,7 @@ export function PaginaEditorUML() {
                       : "border-slate-300 bg-white text-slate-900 hover:bg-slate-50"
                   )}
                   onClick={async () => {
-                    await saveSelectedRelationship();
+                    await guardarRelacionSeleccionada();
                     setIsRelationshipModalOpen(false);
                   }}
                   type="button"
@@ -1931,7 +1931,7 @@ export function PaginaEditorUML() {
             method={method}
             dark={isDark}
             onClose={() => setSpecificationMethodId(null)}
-            onMethodChange={(updated) => updateClass({
+            onMethodChange={(updated) => actualizarClase({
               ...selectedClass,
               methods: selectedClass.methods.map((item) => item.id === updated.id ? updated : item)
             })}

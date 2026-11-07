@@ -1,65 +1,65 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// Web Speech API type declarations for browsers that support it
-interface SpeechRecognitionResultItem {
+// Tipos para la API de reconocimiento de voz del navegador.
+interface ElementoResultadoVoz {
   transcript: string;
   confidence: number;
 }
 
-interface SpeechRecognitionResultList {
+interface ListaResultadosVoz {
   length: number;
-  item(index: number): SpeechRecognitionResult;
-  [index: number]: SpeechRecognitionResult;
+  item(index: number): ResultadoVoz;
+  [index: number]: ResultadoVoz;
 }
 
-interface SpeechRecognitionResult {
+interface ResultadoVoz {
   isFinal: boolean;
   length: number;
-  item(index: number): SpeechRecognitionResultItem;
-  [index: number]: SpeechRecognitionResultItem;
+  item(index: number): ElementoResultadoVoz;
+  [index: number]: ElementoResultadoVoz;
 }
 
-interface SpeechRecognitionEvent {
+interface EventoResultadoVoz {
   resultIndex: number;
-  results: SpeechRecognitionResultList;
+  results: ListaResultadosVoz;
 }
 
-interface SpeechRecognitionErrorEvent {
+interface EventoErrorVoz {
   error: string;
   message?: string;
 }
 
-interface BrowserSpeechRecognition extends EventTarget {
+interface ReconocimientoVozNavegador extends EventTarget {
   continuous: boolean;
   interimResults: boolean;
   lang: string;
   start(): void;
   stop(): void;
   abort(): void;
-  onstart: ((this: BrowserSpeechRecognition, ev: Event) => void) | null;
-  onend: ((this: BrowserSpeechRecognition, ev: Event) => void) | null;
-  onerror: ((this: BrowserSpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null;
-  onresult: ((this: BrowserSpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
+  onstart: ((this: ReconocimientoVozNavegador, ev: Event) => void) | null;
+  onend: ((this: ReconocimientoVozNavegador, ev: Event) => void) | null;
+  onerror: ((this: ReconocimientoVozNavegador, ev: EventoErrorVoz) => void) | null;
+  onresult: ((this: ReconocimientoVozNavegador, ev: EventoResultadoVoz) => void) | null;
 }
 
 declare global {
   interface Window {
-    SpeechRecognition?: new () => BrowserSpeechRecognition;
-    webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
+    SpeechRecognition?: new () => ReconocimientoVozNavegador;
+    webkitSpeechRecognition?: new () => ReconocimientoVozNavegador;
   }
 }
 
 export interface OpcionesReconocimientoVoz {
   lang?: string;
-  onFinal?: (text: string) => void;
+  alFinalizar?: (text: string) => void;
 }
 
 export interface ResultadoReconocimientoVoz {
-  supported: boolean;
-  listening: boolean;
-  interim: string;
-  start(): void;
-  stop(): void;
+  disponible: boolean;
+  escuchando: boolean;
+  transcripcionParcial: string;
+  iniciar(): void;
+  detener(): void;
   error: string | null;
 }
 
@@ -68,9 +68,9 @@ export function useReconocimientoVoz(options?: OpcionesReconocimientoVoz): Resul
   const [interim, setInterim] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
-  const onFinalRef = useRef(options?.onFinal);
-  onFinalRef.current = options?.onFinal;
+  const recognitionRef = useRef<ReconocimientoVozNavegador | null>(null);
+  const onFinalRef = useRef(options?.alFinalizar);
+  onFinalRef.current = options?.alFinalizar;
 
   const supported = typeof window !== "undefined" && Boolean(
     window.SpeechRecognition || window.webkitSpeechRecognition
@@ -114,7 +114,7 @@ export function useReconocimientoVoz(options?: OpcionesReconocimientoVoz): Resul
         setError(null);
       };
 
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
+      recognition.onresult = (event: EventoResultadoVoz) => {
         let finalChunk = "";
         let interimChunk = "";
 
@@ -135,7 +135,7 @@ export function useReconocimientoVoz(options?: OpcionesReconocimientoVoz): Resul
         }
       };
 
-      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      recognition.onerror = (event: EventoErrorVoz) => {
         if (event.error === "not-allowed") {
           setError("Permite el micrófono para dictar");
         } else if (event.error === "no-speech") {
@@ -174,11 +174,11 @@ export function useReconocimientoVoz(options?: OpcionesReconocimientoVoz): Resul
   }, []);
 
   return {
-    supported,
-    listening,
-    interim,
-    start,
-    stop,
+    disponible: supported,
+    escuchando: listening,
+    transcripcionParcial: interim,
+    iniciar: start,
+    detener: stop,
     error,
   };
 }

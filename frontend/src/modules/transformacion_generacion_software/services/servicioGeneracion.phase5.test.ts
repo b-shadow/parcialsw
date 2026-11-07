@@ -25,7 +25,7 @@ describe("phase5 coordinated generation service", () => {
   it("runs preflight before generation", async () => {
     vi.mocked(clienteApi.post).mockResolvedValue({ data: { ready: true } });
     const payload = { transformation_id: "t-1", name: "Academico", theme_config: theme };
-    await servicioGeneracion.preflightCoordinated(payload);
+    await servicioGeneracion.verificarGeneracionCoordinada(payload);
     expect(clienteApi.post).toHaveBeenCalledWith("/generation/coordinated/preflight", payload);
   });
 
@@ -40,13 +40,13 @@ describe("phase5 coordinated generation service", () => {
       allow_unverified: false,
       theme_config: theme
     };
-    await servicioGeneracion.coordinated(payload);
+    await servicioGeneracion.generarCoordinado(payload);
     expect(clienteApi.post).toHaveBeenCalledWith("/generation/coordinated", payload);
   });
 
   it("downloads the coordinated bundle", async () => {
     vi.mocked(clienteApi.get).mockResolvedValue({ data: new Blob() });
-    await servicioGeneracion.downloadCoordinated("g-1");
+    await servicioGeneracion.descargarCoordinado("g-1");
     expect(clienteApi.get).toHaveBeenCalledWith("/generation/coordinated/g-1/download", {
       responseType: "blob"
     });

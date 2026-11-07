@@ -20,7 +20,7 @@ import { servicioGeneracion } from "../../transformacion_generacion_software/ser
 import { servicioProyectos } from "../services/servicioProyectos";
 import type { Proyecto } from "../types/proyecto";
 
-function formatProjectDate(value: string) {
+function formatearFechaProyecto(value: string) {
   return new Intl.DateTimeFormat("es", {
     day: "2-digit",
     month: "short",
@@ -28,7 +28,7 @@ function formatProjectDate(value: string) {
   }).format(new Date(value));
 }
 
-function projectStatus(project: Proyecto) {
+function estadoProyecto(project: Proyecto) {
   return project.status === "active"
     ? { label: "Activo", tone: "bg-teal-50 text-accent dark:bg-teal-400/10 dark:text-teal-300" }
     : { label: "Archivado", tone: "bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300" };
@@ -62,15 +62,15 @@ export function PaginaProyectos() {
     );
   }, [projects, search]);
 
-  async function loadProjects() {
+  async function cargarProyectos() {
     try {
-      const loadedProjects = await servicioProyectos.list();
+      const loadedProjects = await servicioProyectos.listar();
       setProjects(loadedProjects);
       const totals = await Promise.all(
         loadedProjects.map(async (project) => {
           const [backends, frontends] = await Promise.all([
-            servicioGeneracion.backends(project.id).catch(() => []),
-            servicioGeneracion.frontends(project.id).catch(() => [])
+            servicioGeneracion.listarBackends(project.id).catch(() => []),
+            servicioGeneracion.listarFrontends(project.id).catch(() => [])
           ]);
           return backends.length + frontends.length;
         })
@@ -83,12 +83,12 @@ export function PaginaProyectos() {
   }
 
   useEffect(() => {
-    void loadProjects();
+    void cargarProyectos();
   }, []);
 
-  async function archiveProject(projectId: string) {
-    await servicioProyectos.archive(projectId);
-    await loadProjects();
+  async function archivarProyecto(projectId: string) {
+    await servicioProyectos.archivar(projectId);
+    await cargarProyectos();
   }
 
   return (
@@ -163,7 +163,7 @@ export function PaginaProyectos() {
 
           <div className="grid gap-4">
             {filteredProjects.map((project, index) => {
-              const status = projectStatus(project);
+              const status = estadoProyecto(project);
               const ProjectIcon = index % 2 === 0 ? BarChart3 : Code2;
               return (
                 <article
@@ -193,7 +193,7 @@ export function PaginaProyectos() {
                           </span>
                           <span className="inline-flex items-center gap-2">
                             <Calendar size={19} aria-hidden="true" />
-                            Creado: {formatProjectDate(project.created_at)}
+                            Creado: {formatearFechaProyecto(project.created_at)}
                           </span>
                         </div>
                       </div>
@@ -223,7 +223,7 @@ export function PaginaProyectos() {
                     <button
                       className={cn("inline-flex h-12 w-full items-center justify-center gap-3 rounded-lg border px-4 text-base font-black transition", isDark ? "border-slate-700 text-slate-200 hover:bg-slate-800" : "border-blue-200 text-blue-900 hover:bg-blue-50")}
                       disabled={project.status !== "active"}
-                      onClick={() => archiveProject(project.id)}
+                      onClick={() => archivarProyecto(project.id)}
                       type="button"
                     >
                       <Archive size={21} aria-hidden="true" />

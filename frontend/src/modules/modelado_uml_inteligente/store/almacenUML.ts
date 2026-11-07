@@ -7,16 +7,16 @@ type UmlState = {
   relationships: RelacionUML[];
   validation: ValidacionUML | null;
   selectedClassId: string | null;
-  setClasses: (classes: DetalleClaseUML[]) => void;
-  addClass: (umlClass: DetalleClaseUML) => void;
-  updateClass: (umlClass: DetalleClaseUML) => void;
-  removeClass: (classId: string) => void;
-  setRelationships: (relationships: RelacionUML[]) => void;
-  addRelationship: (relationship: RelacionUML) => void;
-  updateRelationship: (relationship: RelacionUML) => void;
-  removeRelationship: (relationshipId: string) => void;
-  setValidation: (validation: ValidacionUML | null) => void;
-  setSelectedClassId: (classId: string | null) => void;
+  establecerClases: (classes: DetalleClaseUML[]) => void;
+  agregarClase: (umlClass: DetalleClaseUML) => void;
+  actualizarClase: (umlClass: DetalleClaseUML) => void;
+  quitarClase: (classId: string) => void;
+  establecerRelaciones: (relationships: RelacionUML[]) => void;
+  agregarRelacion: (relationship: RelacionUML) => void;
+  actualizarRelacion: (relationship: RelacionUML) => void;
+  quitarRelacion: (relationshipId: string) => void;
+  establecerValidacion: (validation: ValidacionUML | null) => void;
+  establecerIdClaseSeleccionada: (classId: string | null) => void;
 };
 
 export const useAlmacenUML = create<UmlState>((set) => ({
@@ -24,11 +24,11 @@ export const useAlmacenUML = create<UmlState>((set) => ({
   relationships: [],
   validation: null,
   selectedClassId: null,
-  setClasses: (classes) => set({ classes }),
-  addClass: (umlClass) => set((state) => ({ classes: [...state.classes, umlClass] })),
-  updateClass: (umlClass) =>
+  establecerClases: (classes) => set({ classes }),
+  agregarClase: (umlClass) => set((state) => ({ classes: [...state.classes, umlClass] })),
+  actualizarClase: (umlClass) =>
     set((state) => ({ classes: state.classes.map((item) => (item.id === umlClass.id ? umlClass : item)) })),
-  removeClass: (classId) =>
+  quitarClase: (classId) =>
     set((state) => ({
       classes: state.classes.filter((item) => item.id !== classId),
       relationships: state.relationships.filter(
@@ -38,14 +38,14 @@ export const useAlmacenUML = create<UmlState>((set) => ({
           item.metadata_json?.association_class_id !== classId
       )
     })),
-  setRelationships: (relationships) => set({ relationships }),
-  addRelationship: (relationship) => set((state) => ({ relationships: [...state.relationships, relationship] })),
-  updateRelationship: (relationship) =>
+  establecerRelaciones: (relationships) => set({ relationships }),
+  agregarRelacion: (relationship) => set((state) => ({ relationships: [...state.relationships, relationship] })),
+  actualizarRelacion: (relationship) =>
     set((state) => ({
       relationships: state.relationships.map((item) => (item.id === relationship.id ? relationship : item))
     })),
-  removeRelationship: (relationshipId) =>
+  quitarRelacion: (relationshipId) =>
     set((state) => ({ relationships: state.relationships.filter((item) => item.id !== relationshipId) })),
-  setValidation: (validation) => set({ validation }),
-  setSelectedClassId: (classId) => set({ selectedClassId: classId })
+  establecerValidacion: (validation) => set({ validation }),
+  establecerIdClaseSeleccionada: (classId) => set({ selectedClassId: classId })
 }));

@@ -45,7 +45,7 @@ type Viewport = {
   scale: number;
 };
 
-function visibilitySymbol(visibility: string) {
+function simboloVisibilidad(visibility: string) {
   switch (visibility) {
     case "private":
       return "-";
@@ -59,7 +59,7 @@ function visibilitySymbol(visibility: string) {
   }
 }
 
-function classHeight(umlClass: DetalleClaseUML) {
+function alturaClase(umlClass: DetalleClaseUML) {
   const isEnum = umlClass.element_type === "enum";
   const hasStereotype = umlClass.element_type === "interface" || isEnum || !!umlClass.stereotype;
   const headerHeight = hasStereotype ? HEADER_HEIGHT + 14 : HEADER_HEIGHT;
@@ -68,12 +68,12 @@ function classHeight(umlClass: DetalleClaseUML) {
   return headerHeight + attributeRows * ROW_HEIGHT + (isEnum ? 0 : methodRows * ROW_HEIGHT + 12) + 26;
 }
 
-function classAttrs(umlClass: DetalleClaseUML, isDark: boolean, selected: boolean) {
+function atributosClase(umlClass: DetalleClaseUML, isDark: boolean, selected: boolean) {
   const attributeText = umlClass.attributes
-    .map((attribute) => `${visibilitySymbol(attribute.visibility)}  ${attribute.name}: ${attribute.data_type}`)
+    .map((attribute) => `${simboloVisibilidad(attribute.visibility)}  ${attribute.name}: ${attribute.data_type}`)
     .join("\n");
   const methodText = umlClass.methods
-    .map((method) => `${visibilitySymbol(method.visibility)}  ${method.name}(): ${method.return_type ?? "void"}`)
+    .map((method) => `${simboloVisibilidad(method.visibility)}  ${method.name}(): ${method.return_type ?? "void"}`)
     .join("\n");
   const attributeRows = Math.max(1, umlClass.attributes.length);
   const methodSeparatorY = HEADER_HEIGHT + attributeRows * ROW_HEIGHT + 12;
@@ -81,7 +81,7 @@ function classAttrs(umlClass: DetalleClaseUML, isDark: boolean, selected: boolea
   return {
     body: {
       width: CLASS_WIDTH,
-      height: classHeight(umlClass),
+      height: alturaClase(umlClass),
       fill: isDark ? "#0f172a" : "#fff8ee",
       stroke: lineColor,
       strokeWidth: selected ? 2 : 1
@@ -143,7 +143,7 @@ function classAttrs(umlClass: DetalleClaseUML, isDark: boolean, selected: boolea
 const UmlClassShape = joint.dia.Element.define(
   "case.UmlClass",
   {
-    attrs: classAttrs(
+    attrs: atributosClase(
       {
         id: "",
         diagram_id: "",
@@ -181,14 +181,14 @@ const jointCellNamespace = {
   }
 };
 
-function relationshipLabel(relationship: RelacionUML) {
+function etiquetaRelacion(relationship: RelacionUML) {
   return [relationship.source_cardinality, relationship.label, relationship.target_cardinality].filter(Boolean).join("  ");
 }
 
-function linkAttrs(relationship: RelacionUML, isDark: boolean, selected: boolean) {
+function atributosEnlace(relationship: RelacionUML, isDark: boolean, selected: boolean) {
   const stroke = relationship.relationship_type === "inheritance" ? "#1d4ed8" : "#0f766e";
   const dashed = ["dependency", "realization", "implementation"].includes(relationship.relationship_type);
-  const targetMarker = (() => {
+  const marcadorDestino = (() => {
     switch (relationship.relationship_type) {
       case "inheritance":
       case "realization":
@@ -209,27 +209,27 @@ function linkAttrs(relationship: RelacionUML, isDark: boolean, selected: boolean
       stroke,
       strokeWidth: selected ? 3 : 2,
       strokeDasharray: dashed ? "8 6" : undefined,
-      targetMarker
+      marcadorDestino
     }
   };
 }
 
-function classPosition(umlClass: DetalleClaseUML, index: number, transientPositions: Record<string, { x: number; y: number }>) {
+function posicionClase(umlClass: DetalleClaseUML, index: number, transientPositions: Record<string, { x: number; y: number }>) {
   return {
     x: transientPositions[umlClass.id]?.x ?? umlClass.visual?.position_x ?? 80 + index * 320,
     y: transientPositions[umlClass.id]?.y ?? umlClass.visual?.position_y ?? 90 + (index % 3) * 210
   };
 }
 
-function clampZoom(scale: number) {
+function limitarZoom(scale: number) {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, scale));
 }
 
-function squaredDistance(source: { x: number; y: number }, target: { x: number; y: number }) {
+function distanciaCuadrada(source: { x: number; y: number }, target: { x: number; y: number }) {
   return (source.x - target.x) ** 2 + (source.y - target.y) ** 2;
 }
 
-function closestConnectionPoints(
+function puntosConexionCercanos(
   source: { x: number; y: number; width: number; height: number },
   target: { x: number; y: number; width: number; height: number }
 ) {
@@ -253,7 +253,7 @@ function closestConnectionPoints(
 
   for (const sourcePort of sourcePorts) {
     for (const targetPort of targetPorts) {
-      const distance = squaredDistance(sourcePort, targetPort);
+      const distance = distanciaCuadrada(sourcePort, targetPort);
       if (distance < best.distance) {
         best = { source: sourcePort, target: targetPort, distance };
       }
@@ -407,8 +407,8 @@ export function LienzoUMLConjunto({
           x: umlClass.visual?.position_x ?? 80 + index * 320,
           y: umlClass.visual?.position_y ?? 90 + (index % 3) * 210
         },
-        size: { width: CLASS_WIDTH, height: classHeight(umlClass) },
-        attrs: classAttrs(umlClass, isDark, selectedClassId === umlClass.id || pendingSourceId === umlClass.id)
+        size: { width: CLASS_WIDTH, height: alturaClase(umlClass) },
+        attrs: atributosClase(umlClass, isDark, selectedClassId === umlClass.id || pendingSourceId === umlClass.id)
       });
       return element;
     });
@@ -423,12 +423,12 @@ export function LienzoUMLConjunto({
       const link = new joint.shapes.standard.Link({
         source: { id: relationship.source_class_id },
         target: { id: relationship.target_class_id },
-        attrs: linkAttrs(relationship, isDark, selectedRelationshipId === relationship.id),
+        attrs: atributosEnlace(relationship, isDark, selectedRelationshipId === relationship.id),
         relationshipId: relationship.id,
         router: { name: "normal" },
         connector: { name: "normal" }
       });
-      const label = relationshipLabel(relationship);
+      const label = etiquetaRelacion(relationship);
       if (label) {
         link.labels([
           {
@@ -474,7 +474,7 @@ export function LienzoUMLConjunto({
             stroke: isDark ? "#94a3b8" : "#64748b",
             strokeWidth: 2,
             strokeDasharray: "8 6",
-            targetMarker: { type: "path", d: "" }
+            marcadorDestino: { type: "path", d: "" }
           }
         },
         router: { name: "normal" },
@@ -491,7 +491,7 @@ export function LienzoUMLConjunto({
     paper.updateViews();
   }, [classById, classes, isDark, pendingSourceId, relationships, selectedClassId, selectedRelationshipId, viewport.scale, viewport.x, viewport.y]);
 
-  function screenToWorld(clientX: number, clientY: number) {
+  function pantallaAMundo(clientX: number, clientY: number) {
     const rect = containerRef.current?.getBoundingClientRect();
     const left = rect?.left ?? 0;
     const top = rect?.top ?? 0;
@@ -501,12 +501,12 @@ export function LienzoUMLConjunto({
     };
   }
 
-  function zoomAt(clientX: number, clientY: number, nextScale: number) {
+  function zoomEn(clientX: number, clientY: number, nextScale: number) {
     setViewport((current) => {
       const rect = containerRef.current?.getBoundingClientRect();
       const left = rect?.left ?? 0;
       const top = rect?.top ?? 0;
-      const scale = clampZoom(nextScale);
+      const scale = limitarZoom(nextScale);
       const worldX = (clientX - left - current.x) / current.scale;
       const worldY = (clientY - top - current.y) / current.scale;
       return {
@@ -524,11 +524,11 @@ export function LienzoUMLConjunto({
     }
     const canvasElement = element;
 
-    function handleNativeWheel(event: WheelEvent) {
+    function manejarRuedaNativa(event: WheelEvent) {
       event.preventDefault();
       const currentViewport = viewportRef.current;
       const factor = event.deltaY > 0 ? 0.9 : 1.1;
-      const nextScale = clampZoom(currentViewport.scale * factor);
+      const nextScale = limitarZoom(currentViewport.scale * factor);
       const rect = canvasElement.getBoundingClientRect();
       const worldX = (event.clientX - rect.left - currentViewport.x) / currentViewport.scale;
       const worldY = (event.clientY - rect.top - currentViewport.y) / currentViewport.scale;
@@ -539,21 +539,21 @@ export function LienzoUMLConjunto({
       });
     }
 
-    canvasElement.addEventListener("wheel", handleNativeWheel, { passive: false });
-    return () => canvasElement.removeEventListener("wheel", handleNativeWheel);
+    canvasElement.addEventListener("wheel", manejarRuedaNativa, { passive: false });
+    return () => canvasElement.removeEventListener("wheel", manejarRuedaNativa);
   }, []);
 
-  function zoomAtCenter(nextScale: number) {
+  function zoomEnCentro(nextScale: number) {
     const rect = containerRef.current?.getBoundingClientRect();
-    zoomAt((rect?.left ?? 0) + (rect?.width ?? 320) / 2, (rect?.top ?? 0) + (rect?.height ?? 240) / 2, nextScale);
+    zoomEn((rect?.left ?? 0) + (rect?.width ?? 320) / 2, (rect?.top ?? 0) + (rect?.height ?? 240) / 2, nextScale);
   }
 
-  function handlePointerDown(event: PointerEvent<HTMLDivElement>, umlClass: DetalleClaseUML, index: number) {
+  function manejarPunteroAbajo(event: PointerEvent<HTMLDivElement>, umlClass: DetalleClaseUML, index: number) {
     if (activeTool !== "select") {
       return;
     }
-    const position = classPosition(umlClass, index, transientPositions);
-    const worldPointer = screenToWorld(event.clientX, event.clientY);
+    const position = posicionClase(umlClass, index, transientPositions);
+    const worldPointer = pantallaAMundo(event.clientX, event.clientY);
     dragRef.current = {
       classId: umlClass.id,
       offsetX: worldPointer.x - position.x,
@@ -564,12 +564,12 @@ export function LienzoUMLConjunto({
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
-  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+  function manejarMovimientoPuntero(event: PointerEvent<HTMLDivElement>) {
     const drag = dragRef.current;
     if (!drag) {
       return;
     }
-    const worldPointer = screenToWorld(event.clientX, event.clientY);
+    const worldPointer = pantallaAMundo(event.clientX, event.clientY);
     const nextPosition = {
       x: Math.max(24, worldPointer.x - drag.offsetX),
       y: Math.max(24, worldPointer.y - drag.offsetY)
@@ -579,7 +579,7 @@ export function LienzoUMLConjunto({
     setTransientPositions((current) => ({ ...current, [drag.classId]: nextPosition }));
   }
 
-  function handlePointerUp(event: PointerEvent<HTMLDivElement>, umlClass: DetalleClaseUML) {
+  function manejarPunteroArriba(event: PointerEvent<HTMLDivElement>, umlClass: DetalleClaseUML) {
     const drag = dragRef.current;
     if (!drag || drag.classId !== umlClass.id) {
       onClassClick(umlClass.id);
@@ -594,7 +594,7 @@ export function LienzoUMLConjunto({
     onClassClick(umlClass.id);
   }
 
-  function handleCanvasPointerDown(event: PointerEvent<HTMLDivElement>) {
+  function manejarPunteroAbajoLienzo(event: PointerEvent<HTMLDivElement>) {
     if (event.target !== event.currentTarget) {
       return;
     }
@@ -607,7 +607,7 @@ export function LienzoUMLConjunto({
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
-  function handleCanvasPointerMove(event: PointerEvent<HTMLDivElement>) {
+  function manejarMovimientoPunteroLienzo(event: PointerEvent<HTMLDivElement>) {
     const pan = panRef.current;
     if (!pan) {
       return;
@@ -619,7 +619,7 @@ export function LienzoUMLConjunto({
     }));
   }
 
-  function handleCanvasPointerUp(event: PointerEvent<HTMLDivElement>) {
+  function manejarPunteroArribaLienzo(event: PointerEvent<HTMLDivElement>) {
     if (!panRef.current) {
       return;
     }
@@ -627,7 +627,7 @@ export function LienzoUMLConjunto({
     event.currentTarget.releasePointerCapture(event.pointerId);
   }
 
-  function renderRelationship(relationship: RelacionUML) {
+  function renderizarRelacion(relationship: RelacionUML) {
     const sourceIndex = classes.findIndex((umlClass) => umlClass.id === relationship.source_class_id);
     const targetIndex = classes.findIndex((umlClass) => umlClass.id === relationship.target_class_id);
     const sourceClass = sourceIndex >= 0 ? classes[sourceIndex] : null;
@@ -635,11 +635,11 @@ export function LienzoUMLConjunto({
     if (!sourceClass || !targetClass) {
       return null;
     }
-    const sourcePosition = classPosition(sourceClass, sourceIndex, transientPositions);
-    const targetPosition = classPosition(targetClass, targetIndex, transientPositions);
-    const sourceHeight = classHeight(sourceClass);
-    const targetHeight = classHeight(targetClass);
-    const connection = closestConnectionPoints(
+    const sourcePosition = posicionClase(sourceClass, sourceIndex, transientPositions);
+    const targetPosition = posicionClase(targetClass, targetIndex, transientPositions);
+    const sourceHeight = alturaClase(sourceClass);
+    const targetHeight = alturaClase(targetClass);
+    const connection = puntosConexionCercanos(
       { x: sourcePosition.x, y: sourcePosition.y, width: CLASS_WIDTH, height: sourceHeight },
       { x: targetPosition.x, y: targetPosition.y, width: CLASS_WIDTH, height: targetHeight }
     );
@@ -649,7 +649,7 @@ export function LienzoUMLConjunto({
     const y2 = connection.target.y;
     const selected = selectedRelationshipId === relationship.id;
     const stroke = relationship.relationship_type === "inheritance" ? "#1d4ed8" : "#0f766e";
-    const label = relationshipLabel(relationship);
+    const label = etiquetaRelacion(relationship);
     const associationClassId =
       typeof relationship.metadata_json?.association_class_id === "string"
         ? relationship.metadata_json.association_class_id
@@ -658,7 +658,7 @@ export function LienzoUMLConjunto({
     const associationClass = associationIndex >= 0 ? classes[associationIndex] : null;
     const midX = (x1 + x2) / 2;
     const midY = (y1 + y2) / 2;
-    const associationPosition = associationClass ? classPosition(associationClass, associationIndex, transientPositions) : null;
+    const associationPosition = associationClass ? posicionClase(associationClass, associationIndex, transientPositions) : null;
     const markerEnd = (() => {
       switch (relationship.relationship_type) {
         case "inheritance":
@@ -730,9 +730,9 @@ export function LienzoUMLConjunto({
   return (
     <div
       className="joint-uml-canvas relative h-[760px] cursor-grab overflow-hidden active:cursor-grabbing"
-      onPointerDown={handleCanvasPointerDown}
-      onPointerMove={handleCanvasPointerMove}
-      onPointerUp={handleCanvasPointerUp}
+      onPointerDown={manejarPunteroAbajoLienzo}
+      onPointerMove={manejarMovimientoPunteroLienzo}
+      onPointerUp={manejarPunteroArribaLienzo}
       ref={containerRef}
       style={{
         backgroundColor: isDark ? "#111827" : "#f8fafc",
@@ -772,10 +772,10 @@ export function LienzoUMLConjunto({
               <path d="M 0 0 L 8 4 L 0 8" fill="none" stroke="#0f766e" strokeWidth="1.8" />
             </marker>
           </defs>
-          {relationships.map(renderRelationship)}
+          {relationships.map(renderizarRelacion)}
         </svg>
         {classes.map((umlClass, index) => {
-          const position = classPosition(umlClass, index, transientPositions);
+          const position = posicionClase(umlClass, index, transientPositions);
           const selected = selectedClassId === umlClass.id || pendingSourceId === umlClass.id;
           const isEnum = umlClass.element_type === "enum";
           const isInterface = umlClass.element_type === "interface";
@@ -792,14 +792,14 @@ export function LienzoUMLConjunto({
                     : "border-slate-500 dark:border-slate-500"
               } ${isDark ? "bg-slate-950 text-slate-100" : "bg-orange-50 text-slate-950"}`}
               key={umlClass.id}
-              onPointerDown={(event) => handlePointerDown(event, umlClass, index)}
-              onPointerMove={handlePointerMove}
-              onPointerUp={(event) => handlePointerUp(event, umlClass)}
+              onPointerDown={(event) => manejarPunteroAbajo(event, umlClass, index)}
+              onPointerMove={manejarMovimientoPuntero}
+              onPointerUp={(event) => manejarPunteroArriba(event, umlClass)}
               style={{
                 left: position.x,
                 top: position.y,
                 width: CLASS_WIDTH,
-                minHeight: classHeight(umlClass)
+                minHeight: alturaClase(umlClass)
               }}
             >
               {lock && (
@@ -839,7 +839,7 @@ export function LienzoUMLConjunto({
               <div className={`min-h-[46px] whitespace-pre-line border-b px-5 py-3 ${isDark ? "border-slate-700" : "border-slate-300"}`}>
                 {umlClass.attributes.map((attribute, itemIndex) => (
                   <div className={isDark ? "text-slate-200" : "text-orange-900"} key={`${attribute.name}-${itemIndex}`}>
-                    {visibilitySymbol(attribute.visibility)}&nbsp; {attribute.name}: {attribute.data_type}
+                    {simboloVisibilidad(attribute.visibility)}&nbsp; {attribute.name}: {attribute.data_type}
                   </div>
                 ))}
               </div>
@@ -847,7 +847,7 @@ export function LienzoUMLConjunto({
                 <div className="min-h-[46px] whitespace-pre-line px-5 py-3">
                   {umlClass.methods.map((method, itemIndex) => (
                     <div className={isDark ? "text-slate-200" : "text-green-800"} key={`${method.name}-${itemIndex}`}>
-                      {visibilitySymbol(method.visibility)}&nbsp; {method.name}(): {method.return_type ?? "void"}
+                      {simboloVisibilidad(method.visibility)}&nbsp; {method.name}(): {method.return_type ?? "void"}
                     </div>
                   ))}
                 </div>
@@ -859,14 +859,14 @@ export function LienzoUMLConjunto({
       <div className="absolute bottom-4 left-4 z-30 flex overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-950">
         <button
           className="h-9 w-10 border-r border-slate-300 text-lg font-semibold text-slate-800 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-          onClick={() => zoomAtCenter(viewport.scale * 1.15)}
+          onClick={() => zoomEnCentro(viewport.scale * 1.15)}
           type="button"
         >
           +
         </button>
         <button
           className="h-9 w-10 border-r border-slate-300 text-lg font-semibold text-slate-800 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-          onClick={() => zoomAtCenter(viewport.scale / 1.15)}
+          onClick={() => zoomEnCentro(viewport.scale / 1.15)}
           type="button"
         >
           -

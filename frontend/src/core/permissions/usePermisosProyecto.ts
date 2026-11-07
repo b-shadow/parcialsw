@@ -14,7 +14,7 @@ interface ProjectPermissionsCache {
 interface PermissionsStoreState {
   cache: Record<string, ProjectPermissionsCache>;
   inFlight: Record<string, Promise<MiParticipacion> | undefined>;
-  fetchPermissions: (projectId: string, force?: boolean) => Promise<void>;
+  obtenerPermisos: (projectId: string, force?: boolean) => Promise<void>;
   invalidate: (projectId?: string) => void;
 }
 
@@ -24,7 +24,7 @@ export const useAlmacenPermisos = create<PermissionsStoreState>((set, get) => ({
   cache: {},
   inFlight: {},
 
-  fetchPermissions: async (projectId: string, force = false) => {
+  obtenerPermisos: async (projectId: string, force = false) => {
     if (!projectId) return;
 
     const state = get();
@@ -125,22 +125,22 @@ export function usePermisosProyecto(projectId?: string): {
   role: RolProyecto | null;
   can: (code: CodigoPermiso) => boolean;
   loading: boolean;
-  refresh: () => Promise<void>;
+  recargar: () => Promise<void>;
 } {
   const cacheEntry = useAlmacenPermisos((s) => (projectId ? s.cache[projectId] : undefined));
-  const fetchPermissions = useAlmacenPermisos((s) => s.fetchPermissions);
+  const obtenerPermisos = useAlmacenPermisos((s) => s.obtenerPermisos);
 
   useEffect(() => {
     if (projectId) {
-      void fetchPermissions(projectId);
+      void obtenerPermisos(projectId);
     }
-  }, [projectId, fetchPermissions]);
+  }, [projectId, obtenerPermisos]);
 
-  const refresh = useCallback(async () => {
+  const recargar = useCallback(async () => {
     if (projectId) {
-      await fetchPermissions(projectId, true);
+      await obtenerPermisos(projectId, true);
     }
-  }, [projectId, fetchPermissions]);
+  }, [projectId, obtenerPermisos]);
 
   const loading = projectId ? (cacheEntry?.loading ?? true) : false;
   const role = cacheEntry?.role ?? null;
@@ -160,6 +160,6 @@ export function usePermisosProyecto(projectId?: string): {
     role,
     can,
     loading,
-    refresh,
+    recargar,
   };
 }

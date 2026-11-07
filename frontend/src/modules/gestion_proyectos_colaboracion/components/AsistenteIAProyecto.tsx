@@ -45,11 +45,11 @@ type Props = {
   mode?: "floating" | "embedded";
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function esRegistro(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function isV2(event: EventoSocketProyectoAnalizado): event is EventoSocketProyectoV2 {
+function esVersionDos(event: EventoSocketProyectoAnalizado): event is EventoSocketProyectoV2 {
   return "protocol_version" in event && event.protocol_version === 2;
 }
 
@@ -92,12 +92,12 @@ export function AsistenteIAProyecto({
   const endRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<ClienteSocketProyecto | null>(null);
 
-  const catchUp = useCallback(async () => {
+  const ponerseAlDia = useCallback(async () => {
     if (!conversationId) return;
     const state = useAlmacenIAProyecto.getState();
     let cursor = ultimaSecuenciaContinuaMensajes(state.messages);
     for (let pageNumber = 0; pageNumber < 20; pageNumber += 1) {
-      const page = await servicioFase1.messages(projectId, {
+      const page = await servicioFase1.listarMensajes(projectId, {
         conversation_id: conversationId,
         after_sequence: cursor,
         limit: 100,
@@ -109,91 +109,91 @@ export function AsistenteIAProyecto({
       cursor = nextCursor;
     }
     const [actions, recommendations, changes] = await Promise.all([
-      servicioFase1.actions(projectId, { conversation_id: conversationId, limit: 100 }),
-      servicioFase1.recommendations(projectId, { conversation_id: conversationId, limit: 100 }),
-      servicioProyectos.changes(projectId, 200, state.projectSequence),
+      servicioFase1.listarAcciones(projectId, { conversation_id: conversationId, limit: 100 }),
+      servicioFase1.listarRecomendaciones(projectId, { conversation_id: conversationId, limit: 100 }),
+      servicioProyectos.listarCambios(projectId, 200, state.projectSequence),
     ]);
     if (useAlmacenIAProyecto.getState().conversationId !== conversationId) return;
-    state.setActions(actions);
-    state.setRecommendations(recommendations);
-    state.setSequences(Math.max(state.projectSequence, ...changes.map((item) => item.sequence_number)));
+    state.establecerAcciones(actions);
+    state.establecerRecomendaciones(recommendations);
+    state.establecerSecuencias(Math.max(state.projectSequence, ...changes.map((item) => item.sequence_number)));
   }, [conversationId, projectId]);
 
-  const handleEvent = useCallback(
+  const manejarEvento = useCallback(
     (event: EventoSocketProyectoAnalizado) => {
       const state = useAlmacenIAProyecto.getState();
       if (state.projectId !== projectId || state.conversationId !== conversationId) return;
-      if (!isV2(event)) {
+      if (!esVersionDos(event)) {
         if (event.type === "SESSION_CONNECTED") {
           const session = event as typeof event & { project_sequence?: number };
-          state.setSequences(session.project_sequence, undefined);
+          state.establecerSecuencias(session.project_sequence, undefined);
         }
         return;
       }
       const payloadConversationId =
-        isRecord(event.payload) && typeof event.payload.conversation_id === "string"
+        esRegistro(event.payload) && typeof event.payload.conversation_id === "string"
           ? event.payload.conversation_id
           : null;
       const belongsToActiveChat = !payloadConversationId || payloadConversationId === conversationId;
-      state.setSequences(
+      state.establecerSecuencias(
         event.sequence_number
       );
       if (event.type === "SYNC_REQUIRED") {
-        void catchUp().catch(() => setError("No se pudo sincronizar el historial."));
+        void ponerseAlDia().catch(() => setError("No se pudo sincronizar el historial."));
       } else if (
         belongsToActiveChat &&
         (event.type === "AI_MESSAGE_CREATED" || event.type === "AI_MESSAGE_STATUS_CHANGED") &&
-        isRecord(event.payload)
+        esRegistro(event.payload)
       ) {
         state.upsertMessage(event.payload as MensajeIA);
       } else if (
         belongsToActiveChat &&
         (event.type === "AI_ACTION_PROPOSED" || event.type === "AI_ACTION_STATUS_CHANGED") &&
-        isRecord(event.payload)
+        esRegistro(event.payload)
       ) {
         state.upsertAction(event.payload as AccionIA);
       } else if (
         belongsToActiveChat &&
         (event.type === "AI_RECOMMENDATION_CREATED" || event.type === "AI_RECOMMENDATION_STATUS_CHANGED") &&
-        isRecord(event.payload)
+        esRegistro(event.payload)
       ) {
         state.upsertRecommendation(event.payload as RecomendacionIA);
       } else if (event.type === "PRESENCE_SNAPSHOT" && Array.isArray(event.payload.members)) {
-        state.setPresence(event.payload.members as PresenciaProyecto[]);
-      } else if (event.type === "PRESENCE_JOINED" && isRecord(event.payload.member)) {
+        state.establecerPresencia(event.payload.members as PresenciaProyecto[]);
+      } else if (event.type === "PRESENCE_JOINED" && esRegistro(event.payload.member)) {
         state.upsertPresence(event.payload.member as PresenciaProyecto);
       } else if (event.type === "PRESENCE_LEFT" && typeof event.payload.user_id === "string") {
-        state.removePresence(event.payload.user_id);
+        state.quitarPresencia(event.payload.user_id);
       } else if (belongsToActiveChat && event.type === "AI_PROCESSING_STARTED") {
-        state.setProcessing(true);
+        state.establecerProcesamiento(true);
       } else if (
         belongsToActiveChat &&
         (event.type === "AI_PROCESSING_FINISHED" || event.type === "AI_PROCESSING_FAILED")
       ) {
-        state.setProcessing(false);
+        state.establecerProcesamiento(false);
       }
     },
-    [catchUp, conversationId, projectId]
+    [ponerseAlDia, conversationId, projectId]
   );
 
   // Carga inicial de ajustes de IA y salud del proveedor
   useEffect(() => {
     if (!open) return;
     let active = true;
-    const refresh = () => {
-      servicioFase1.aiSettings(projectId).then((settings) => {
+    const recargar = () => {
+      servicioFase1.configuracionIA(projectId).then((settings) => {
         if (!active) return;
         setCurrentProvider(settings.preferred_provider);
         setCurrentSource(settings.settings_json.origen_ollama === "aws" ? "aws" : "local");
       }).catch(() => {});
-      servicioFase1.aiProviderHealth(projectId).then((health) => {
+      servicioFase1.estadoProveedorIA(projectId).then((health) => {
         if (active) setProviderHealth(health);
       }).catch(() => {
         if (active) setProviderHealth(null);
       });
     };
-    refresh();
-    const timer = window.setInterval(refresh, 30_000);
+    recargar();
+    const timer = window.setInterval(recargar, 30_000);
     return () => {
       active = false;
       window.clearInterval(timer);
@@ -203,7 +203,7 @@ export function AsistenteIAProyecto({
   useEffect(() => {
     setLoading(true);
     servicioFase1
-      .conversations(projectId)
+      .listarConversaciones(projectId)
       .then((items) => {
         setConversations(items);
         const saved = localStorage.getItem(`case-ai-chat:${projectId}`);
@@ -226,37 +226,37 @@ export function AsistenteIAProyecto({
     setDraft(localStorage.getItem(`case-ai-draft:${projectId}:${conversationId}`) ?? "");
     setLoading(true);
     Promise.all([
-      servicioFase1.messages(projectId, { conversation_id: conversationId, limit: 50 }),
-      servicioFase1.actions(projectId, { conversation_id: conversationId, limit: 100 }),
-      servicioFase1.recommendations(projectId, { conversation_id: conversationId, limit: 100 }),
+      servicioFase1.listarMensajes(projectId, { conversation_id: conversationId, limit: 50 }),
+      servicioFase1.listarAcciones(projectId, { conversation_id: conversationId, limit: 100 }),
+      servicioFase1.listarRecomendaciones(projectId, { conversation_id: conversationId, limit: 100 }),
     ])
       .then(([page, actions, recommendations]) => {
         if (!active || useAlmacenIAProyecto.getState().conversationId !== conversationId) return;
-        state.setHistory(page.items, page.has_more_before);
-        state.setActions(actions);
-        state.setRecommendations(recommendations);
+        state.establecerHistorial(page.items, page.has_more_before);
+        state.establecerAcciones(actions);
+        state.establecerRecomendaciones(recommendations);
       })
       .catch(() => { if (active) setError("No se pudo cargar el asistente del proyecto."); })
       .finally(() => { if (active) setLoading(false); });
 
     const client = new ClienteSocketProyecto({
       projectId,
-      getProjectSequence: () => useAlmacenIAProyecto.getState().projectSequence,
-      getConversationSequence: () => ultimaSecuenciaContinuaMensajes(useAlmacenIAProyecto.getState().messages),
-      onEvent: handleEvent,
-      onStatus: state.setSocketStatus,
+      obtenerSecuenciaProyecto: () => useAlmacenIAProyecto.getState().projectSequence,
+      obtenerSecuenciaConversacion: () => ultimaSecuenciaContinuaMensajes(useAlmacenIAProyecto.getState().messages),
+      alRecibirEvento: manejarEvento,
+      alCambiarEstado: state.establecerEstadoSocket,
     });
     clientRef.current = client;
-    client.connect();
+    client.conectar();
     return () => {
       active = false;
-      client.close();
+      client.cerrar();
       clientRef.current = null;
     };
-  }, [conversationId, handleEvent, projectId]);
+  }, [conversationId, manejarEvento, projectId]);
 
   useEffect(() => {
-    clientRef.current?.setActiveDiagram(diagramId ?? null);
+    clientRef.current?.establecerDiagramaActivo(diagramId ?? null);
   }, [diagramId]);
 
   useEffect(() => {
@@ -265,12 +265,12 @@ export function AsistenteIAProyecto({
     }
   }, [conversationId, draft, projectId]);
 
-  const createConversation = async () => {
+  const crearConversacion = async () => {
     if (loading) return;
     setLoading(true);
     setError(null);
     try {
-      const created = await servicioFase1.createConversation(projectId);
+      const created = await servicioFase1.crearConversacion(projectId);
       setConversations((items) => [created, ...items]);
       setConversationId(created.id);
       if (diagramId) {
@@ -297,7 +297,7 @@ export function AsistenteIAProyecto({
     return map;
   }, [store.actions]);
 
-  const submit = async (
+  const enviarSolicitud = async (
     content: string,
     label: string,
     restoreDraft = false,
@@ -313,7 +313,7 @@ export function AsistenteIAProyecto({
     setPendingRequest({ id: clientMessageId, content, label });
     let interactionCompleted = false;
     try {
-      const response = await servicioFase1.interact(projectId, {
+      const response = await servicioFase1.interactuar(projectId, {
         client_message_id: clientMessageId,
         conversation_id: conversationId,
         content,
@@ -323,23 +323,23 @@ export function AsistenteIAProyecto({
       interactionCompleted = true;
       response.actions.forEach(store.upsertAction);
       response.recommendations.forEach(store.upsertRecommendation);
-      await catchUp();
-      setConversations(await servicioFase1.conversations(projectId));
+      await ponerseAlDia();
+      setConversations(await servicioFase1.listarConversaciones(projectId));
       return true;
     } catch {
-      store.setProcessing(false);
+      store.establecerProcesamiento(false);
       if (interactionCompleted) {
         setError("La respuesta se guardó, pero no se pudo sincronizar el historial. Recarga el chat.");
         return true;
       }
       let remoteStatus: "answered" | "pending" | "failed" | "unknown" = "unknown";
       try {
-        const page = await servicioFase1.messages(projectId, {
+        const page = await servicioFase1.listarMensajes(projectId, {
           conversation_id: conversationId,
           limit: 50,
         });
         if (useAlmacenIAProyecto.getState().conversationId === conversationId) {
-          store.setHistory(page.items, page.has_more_before);
+          store.establecerHistorial(page.items, page.has_more_before);
         }
         const submitted = page.items.find((item) => item.client_message_id === clientMessageId);
         if (submitted) {
@@ -351,11 +351,11 @@ export function AsistenteIAProyecto({
         // El borrador sigue disponible incluso si el historial no puede recargarse.
       }
       if (remoteStatus === "answered") {
-        try { await catchUp(); } catch { /* El historial ya contiene la respuesta. */ }
+        try { await ponerseAlDia(); } catch { /* El historial ya contiene la respuesta. */ }
         return true;
       }
       if (remoteStatus === "pending") {
-        store.setProcessing(true);
+        store.establecerProcesamiento(true);
         setError("El mensaje se guardó y el asistente sigue procesándolo.");
         return true;
       }
@@ -372,20 +372,20 @@ export function AsistenteIAProyecto({
     }
   };
 
-  const send = async () => {
+  const enviar = async () => {
     const content = draft.trim();
     if (!content || loading) return;
     setDraft("");
-    await submit(content, "El asistente está analizando el diagrama...", true, false);
+    await enviarSolicitud(content, "El asistente está analizando el diagrama...", true, false);
   };
 
   // Reconocimiento de voz (useSpeechRecognition)
-  const handleFinalSpeech = useCallback(
+  const manejarDictadoFinal = useCallback(
     (text: string) => {
       if (!text.trim()) return;
       if (autoSend) {
         setDraft("");
-        void submit(text.trim(), "El asistente está analizando el dictado por voz...", false, true);
+        void enviarSolicitud(text.trim(), "El asistente está analizando el dictado por voz...", false, true);
       } else {
         setDraft((prev) => (prev.trim() ? `${prev.trim()} ${text.trim()}` : text.trim()));
       }
@@ -395,10 +395,10 @@ export function AsistenteIAProyecto({
 
   const speech = useReconocimientoVoz({
     lang: "es-ES",
-    onFinal: handleFinalSpeech,
+    alFinalizar: manejarDictadoFinal,
   });
 
-  const prepareRecommendation = async (recommendation: RecomendacionIA) => {
+  const prepararRecomendacion = async (recommendation: RecomendacionIA) => {
     const preparation = preparacionRecomendacion(recommendation.title);
     if (preparation.kind === "manual") {
       setRecommendationGuidance({ id: recommendation.id, text: preparation.guidance });
@@ -406,15 +406,15 @@ export function AsistenteIAProyecto({
       return;
     }
     setRecommendationGuidance(null);
-    await submit(
+    await enviarSolicitud(
       `Corrige el diagrama aplicando esta recomendación: ${recommendation.title}. ${recommendation.description}`,
       `Preparando la corrección: ${recommendation.title}...`
     );
   };
 
-  const prepareWithCriterion = async (recommendation: RecomendacionIA) => {
+  const prepararConCriterio = async (recommendation: RecomendacionIA) => {
     if (!recommendationCriterion.trim()) return;
-    const accepted = await submit(
+    const accepted = await enviarSolicitud(
       solicitudCorreccionConCriterio(
         recommendation.title,
         recommendation.description,
@@ -429,11 +429,11 @@ export function AsistenteIAProyecto({
     }
   };
 
-  const loadOlder = async () => {
+  const cargarAnteriores = async () => {
     const first = store.messages[0]?.sequence_number;
     if (!first) return;
     if (!conversationId) return;
-    const page = await servicioFase1.messages(projectId, {
+    const page = await servicioFase1.listarMensajes(projectId, {
       conversation_id: conversationId,
       before_sequence: first,
       limit: 50,
@@ -441,15 +441,15 @@ export function AsistenteIAProyecto({
     store.prependHistory(page.items, page.has_more_before);
   };
 
-  const decideAction = async (action: AccionIA, decision: "confirm" | "reject") => {
+  const decidirAccion = async (action: AccionIA, decision: "confirm" | "reject") => {
     setBusyActionId(action.id);
     setError(null);
     setActionFeedback(null);
     try {
       const result =
         decision === "confirm"
-          ? await servicioFase1.confirmAiAction(projectId, action.id)
-          : await servicioFase1.rejectAiAction(projectId, action.id);
+          ? await servicioFase1.confirmarAccionIA(projectId, action.id)
+          : await servicioFase1.rechazarAccionIA(projectId, action.id);
       store.upsertAction(result.action);
       if (decision === "confirm") {
         setActionFeedback(result.action.status === "applied"
@@ -458,24 +458,24 @@ export function AsistenteIAProyecto({
       }
     } catch {
       setError("La acción cambió o no tienes permiso para ejecutarla.");
-      await catchUp();
+      await ponerseAlDia();
     } finally {
       setBusyActionId(null);
     }
   };
 
-  const decideRecommendation = async (
+  const decidirRecomendacion = async (
     recommendation: RecomendacionIA,
     status: "accepted" | "dismissed" | "resolved"
   ) => {
     try {
-      const updated = await servicioFase1.updateRecommendation(projectId, recommendation.id, {
+      const updated = await servicioFase1.actualizarRecomendacion(projectId, recommendation.id, {
         status,
       });
       store.upsertRecommendation(updated);
     } catch {
       setError("La recomendación cambió o ya fue resuelta.");
-      await catchUp();
+      await ponerseAlDia();
     }
   };
 
@@ -570,7 +570,7 @@ export function AsistenteIAProyecto({
                     onChange={(p) => {
                       setCurrentProvider(p);
                       servicioFase1
-                        .aiProviderHealth(projectId)
+                        .estadoProveedorIA(projectId)
                         .then((h) => setProviderHealth(h))
                         .catch(() => {});
                     }}
@@ -606,7 +606,7 @@ export function AsistenteIAProyecto({
               <button
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-slate-800"
                 disabled={loading}
-                onClick={() => void createConversation()}
+                onClick={() => void crearConversacion()}
                 title="Nuevo chat"
                 type="button"
               >
@@ -620,7 +620,7 @@ export function AsistenteIAProyecto({
             {store.hasMoreBefore && (
               <button
                 className="mx-auto mb-2 flex items-center gap-1 text-xs font-semibold text-teal-600 hover:underline"
-                onClick={() => void loadOlder()}
+                onClick={() => void cargarAnteriores()}
               >
                 <ChevronUp size={14} />
                 Cargar mensajes anteriores
@@ -775,7 +775,7 @@ export function AsistenteIAProyecto({
                               <button
                                 disabled={busyActionId === action.id || !dependenciasAccionListas(action, store.actions)}
                                 className="inline-flex h-7 items-center gap-1 rounded-md bg-teal-700 px-2.5 text-xs font-bold text-white shadow-sm hover:bg-teal-800 disabled:opacity-60"
-                                onClick={() => void decideAction(action, "confirm")}
+                                onClick={() => void decidirAccion(action, "confirm")}
                               >
                                 {busyActionId === action.id ? (
                                   <LoaderCircle className="animate-spin" size={12} />
@@ -787,7 +787,7 @@ export function AsistenteIAProyecto({
                               <button
                                 disabled={busyActionId === action.id}
                                 className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 disabled:opacity-60"
-                                onClick={() => void decideAction(action, "reject")}
+                                onClick={() => void decidirAccion(action, "reject")}
                               >
                                 <X size={12} />
                                 Rechazar
@@ -843,14 +843,14 @@ export function AsistenteIAProyecto({
                     <button
                       disabled={loading || !canChat || !conversationId}
                       className="h-7 rounded-md bg-teal-700 px-2.5 text-xs font-bold text-white shadow-sm hover:bg-teal-800 disabled:opacity-60"
-                      onClick={() => void prepareRecommendation(item)}
+                      onClick={() => void prepararRecomendacion(item)}
                     >
                       {loading ? "Procesando..." : preparacionRecomendacion(item.title).kind === "automatic"
                         ? "Preparar corrección" : "Definir criterio"}
                     </button>
                     <button
                       className="h-7 rounded-md border border-current px-2.5 text-xs font-bold"
-                      onClick={() => void decideRecommendation(item, "dismissed")}
+                      onClick={() => void decidirRecomendacion(item, "dismissed")}
                     >
                       Descartar
                     </button>
@@ -873,7 +873,7 @@ export function AsistenteIAProyecto({
                       <button
                         type="button"
                         disabled={!recommendationCriterion.trim() || loading || !canChat || !conversationId}
-                        onClick={() => void prepareWithCriterion(item)}
+                        onClick={() => void prepararConCriterio(item)}
                         className="mt-2 rounded-md bg-teal-700 px-2.5 py-1.5 font-bold text-white disabled:opacity-50"
                       >
                         {loading ? "Procesando..." : "Preparar propuesta"}
@@ -902,12 +902,12 @@ export function AsistenteIAProyecto({
           <footer
             className={cn("shrink-0 border-t p-3", dark ? "border-slate-800" : "border-slate-200")}
           >
-            {speech.listening && speech.interim && (
+            {speech.escuchando && speech.transcripcionParcial && (
               <div
                 className="mb-2 text-xs italic text-slate-500 bg-slate-50 dark:bg-slate-900/60 p-2 rounded-lg border border-dashed border-teal-400"
                 aria-live="polite"
               >
-                Dictando: {speech.interim}
+                Dictando: {speech.transcripcionParcial}
               </div>
             )}
 
@@ -923,7 +923,7 @@ export function AsistenteIAProyecto({
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
-                    void send();
+                    void enviar();
                   }
                 }}
                 rows={2}
@@ -941,23 +941,23 @@ export function AsistenteIAProyecto({
               />
 
               {/* Botón de micrófono: se renderiza solo si el navegador soporta SpeechRecognition */}
-              {speech.supported && canChat && (
+              {speech.disponible && canChat && (
                 <button
                   type="button"
                   id="mic"
-                  aria-pressed={speech.listening}
+                  aria-pressed={speech.escuchando}
                   aria-label="Dictar por voz"
-                  title={speech.listening ? "Detener dictado" : "Dictar por voz"}
+                  title={speech.escuchando ? "Detener dictado" : "Dictar por voz"}
                   onClick={() => {
-                    if (speech.listening) {
-                      speech.stop();
+                    if (speech.escuchando) {
+                      speech.detener();
                     } else {
-                      speech.start();
+                      speech.iniciar();
                     }
                   }}
                   className={cn(
                     "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition shadow-sm",
-                    speech.listening
+                    speech.escuchando
                       ? "border-rose-500 bg-rose-600 text-white animate-pulse"
                       : dark
                       ? "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
@@ -970,11 +970,11 @@ export function AsistenteIAProyecto({
 
               <button
                 type="button"
-                id="send"
+                id="enviar"
                 aria-label="Enviar"
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-40"
                 disabled={!draft.trim() || loading || !conversationId || !canChat}
-                onClick={() => void send()}
+                onClick={() => void enviar()}
                 title="Enviar mensaje"
               >
                 <Send size={18} />
@@ -982,12 +982,12 @@ export function AsistenteIAProyecto({
             </div>
 
             {/* Opciones del compositor */}
-            {speech.supported && canChat && (
+            {speech.disponible && canChat && (
               <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
                 <label className="inline-flex items-center gap-1.5 cursor-pointer">
                   <input
                     type="checkbox"
-                    id="auto-send"
+                    id="auto-enviar"
                     checked={autoSend}
                     onChange={(e) => setAutoSend(e.target.checked)}
                     className="rounded border-slate-300 text-teal-600 focus:ring-teal-500"

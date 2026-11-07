@@ -29,7 +29,7 @@ function classDetail(patch: Partial<DetalleClaseUML> & Pick<DetalleClaseUML, "id
   };
 }
 
-describe("umlService.applyAiModificationToDiagram", () => {
+describe("servicioUML.aplicarModificacionIAAlDiagrama", () => {
   it("fusiona lo detectado con el diagrama actual sin reemplazar sus clases", async () => {
     const createdClass: ClaseUML = {
       id: "class-perfil",
@@ -78,7 +78,7 @@ describe("umlService.applyAiModificationToDiagram", () => {
       throw new Error(`Unexpected POST ${url}`);
     });
 
-    await servicioUML.applyAiModificationToDiagram({
+    await servicioUML.aplicarModificacionIAAlDiagrama({
       diagramId: "diagram-1",
       classes: [
         classDetail({

@@ -11,15 +11,15 @@ import { validarCorreo, validarContrasena } from "../validations/validacionAuten
 
 export function PaginaRegistro() {
   const navigate = useNavigate();
-  const setToken = useAlmacenAutenticacion((state) => state.setToken);
-  const setUser = useAlmacenAutenticacion((state) => state.setUser);
+  const establecerToken = useAlmacenAutenticacion((state) => state.establecerToken);
+  const establecerUsuario = useAlmacenAutenticacion((state) => state.establecerUsuario);
   const [fullName, setFullName] = useState("Editor UML");
   const [email, setEmail] = useState("editor@example.com");
   const [password, setPassword] = useState("Password123");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(event: FormEvent) {
+  async function manejarEnvio(event: FormEvent) {
     event.preventDefault();
     setError("");
     if (fullName.trim().length < 3 || !validarCorreo(email) || !validarContrasena(password)) {
@@ -28,11 +28,11 @@ export function PaginaRegistro() {
     }
     setLoading(true);
     try {
-      await servicioAutenticacion.register({ full_name: fullName, email, password });
-      const token = await servicioAutenticacion.login({ email, password });
-      setToken(token.access_token);
-      const user = await servicioAutenticacion.me();
-      setUser(user);
+      await servicioAutenticacion.registrar({ full_name: fullName, email, password });
+      const token = await servicioAutenticacion.iniciarSesion({ email, password });
+      establecerToken(token.access_token);
+      const user = await servicioAutenticacion.obtenerSesion();
+      establecerUsuario(user);
       navigate("/proyectos/nuevo");
     } catch {
       setError("No se pudo registrar el usuario.");
@@ -48,7 +48,7 @@ export function PaginaRegistro() {
           <p className="text-sm font-semibold text-accent">CASE Inteligente</p>
           <h1 className="mt-1 text-2xl font-semibold">Registro</h1>
         </div>
-        <form className="grid gap-4" onSubmit={handleSubmit}>
+        <form className="grid gap-4" onSubmit={manejarEnvio}>
           <Entrada label="Nombre completo" value={fullName} onChange={(event) => setFullName(event.target.value)} />
           <Entrada label="Correo" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
           <Entrada

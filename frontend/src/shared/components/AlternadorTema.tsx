@@ -9,7 +9,7 @@ type ThemeToggleProps = {
 
 export function AlternadorTema({ className }: ThemeToggleProps) {
   const mode = useAlmacenTema((state) => state.mode);
-  const toggleMode = useAlmacenTema((state) => state.toggleMode);
+  const alternarModo = useAlmacenTema((state) => state.alternarModo);
   const isDark = mode === "dark";
 
   return (
@@ -22,7 +22,7 @@ export function AlternadorTema({ className }: ThemeToggleProps) {
           : "border-teal-500/70 bg-white text-slate-700 hover:bg-teal-50",
         className
       )}
-      onClick={toggleMode}
+      onClick={alternarModo}
       title={isDark ? "Modo oscuro activo" : "Modo claro activo"}
       type="button"
     >

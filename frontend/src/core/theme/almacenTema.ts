@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 export type ModoTema = "light" | "dark";
 
-function initialTheme(): ModoTema {
+function temaInicial(): ModoTema {
   const stored = window.localStorage.getItem("case_theme");
   if (stored === "light" || stored === "dark") {
     return stored;
@@ -13,7 +13,7 @@ function initialTheme(): ModoTema {
   return "light";
 }
 
-function applyTheme(mode: ModoTema) {
+function aplicarTema(mode: ModoTema) {
   document.documentElement.classList.toggle("dark", mode === "dark");
   document.documentElement.dataset.theme = mode;
   window.localStorage.setItem("case_theme", mode);
@@ -21,22 +21,22 @@ function applyTheme(mode: ModoTema) {
 
 type ThemeState = {
   mode: ModoTema;
-  setMode: (mode: ModoTema) => void;
-  toggleMode: () => void;
+  establecerModo: (mode: ModoTema) => void;
+  alternarModo: () => void;
 };
 
 export const useAlmacenTema = create<ThemeState>((set, get) => {
-  const mode = initialTheme();
-  applyTheme(mode);
+  const mode = temaInicial();
+  aplicarTema(mode);
   return {
     mode,
-    setMode: (nextMode) => {
-      applyTheme(nextMode);
+    establecerModo: (nextMode) => {
+      aplicarTema(nextMode);
       set({ mode: nextMode });
     },
-    toggleMode: () => {
+    alternarModo: () => {
       const nextMode = get().mode === "dark" ? "light" : "dark";
-      applyTheme(nextMode);
+      aplicarTema(nextMode);
       set({ mode: nextMode });
     }
   };

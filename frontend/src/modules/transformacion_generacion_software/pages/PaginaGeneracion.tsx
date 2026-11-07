@@ -15,21 +15,21 @@ import { servicioGeneracion } from "../services/servicioGeneracion";
 import { temaPredeterminadoV2 } from "../theme/contratoTema";
 import type { ConfiguracionTemaFlutter, BackendGenerado, FrontendGenerado } from "../types/generacion";
 
-type GenerationTab = "backend" | "frontend";
-type BusyAction = "loading" | "backend" | "frontend" | "download" | "";
+type PestanaGeneracion = "backend" | "frontend";
+type AccionOcupada = "loading" | "backend" | "frontend" | "download" | "";
 
-function formattedDate(value: string) {
+function fechaFormateada(value: string) {
   return new Intl.DateTimeFormat("es-BO", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
-function statusTone(status: string): "neutral" | "success" | "warning" | "danger" {
+function tonoEstado(status: string): "neutral" | "success" | "warning" | "danger" {
   if (status === "generated" || status === "verified") return "success";
   if (status === "failed") return "danger";
   if (status === "generating") return "warning";
   return "neutral";
 }
 
-function downloadBlob(blob: Blob, fileName: string) {
+function descargarBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -40,7 +40,7 @@ function downloadBlob(blob: Blob, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-function generationError(error: unknown, fallback: string): string {
+function mensajeErrorGeneracion(error: unknown, fallback: string): string {
   if (!axios.isAxiosError(error)) return fallback;
   const detail = error.response?.data?.detail;
   if (typeof detail === "string") return detail;
@@ -52,7 +52,7 @@ function generationError(error: unknown, fallback: string): string {
 
 export function PaginaGeneracion() {
   const { projectId = "" } = useParams();
-  const [activeTab, setActiveTab] = useState<GenerationTab>("backend");
+  const [activeTab, setActiveTab] = useState<PestanaGeneracion>("backend");
   const [project, setProject] = useState<Proyecto | null>(null);
   const [diagramId, setDiagramId] = useState("");
   const [backends, setBackends] = useState<BackendGenerado[]>([]);
@@ -61,7 +61,7 @@ export function PaginaGeneracion() {
   const [apiBaseUrl, setApiBaseUrl] = useState("http://10.0.2.2:8080");
   const [themeConfig, setThemeConfig] = useState<ConfiguracionTemaFlutter>(temaPredeterminadoV2);
   const [previewTransformationId, setPreviewTransformationId] = useState<string>();
-  const [busy, setBusy] = useState<BusyAction>("loading");
+  const [busy, setBusy] = useState<AccionOcupada>("loading");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -71,13 +71,13 @@ export function PaginaGeneracion() {
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
-    async function load() {
+    async function cargar() {
       setBusy("loading");
       setError("");
       try {
         const [loadedProject, diagrams, backendHistory, frontendHistory] = await Promise.all([
-          servicioProyectos.get(projectId), servicioUML.listDiagrams(projectId),
-          servicioGeneracion.backends(projectId), servicioGeneracion.frontends(projectId)
+          servicioProyectos.obtener(projectId), servicioUML.listarDiagramas(projectId),
+          servicioGeneracion.listarBackends(projectId), servicioGeneracion.listarFrontends(projectId)
         ]);
         if (cancelled) return;
         setProject(loadedProject);
@@ -93,64 +93,64 @@ export function PaginaGeneracion() {
         if (!cancelled) setBusy("");
       }
     }
-    void load();
+    void cargar();
     return () => { cancelled = true; };
   }, [projectId]);
 
-  async function refreshHistory() {
+  async function recargarHistorial() {
     const [backendHistory, frontendHistory] = await Promise.all([
-      servicioGeneracion.backends(projectId), servicioGeneracion.frontends(projectId)
+      servicioGeneracion.listarBackends(projectId), servicioGeneracion.listarFrontends(projectId)
     ]);
     setBackends(backendHistory);
     setFrontends(frontendHistory);
     return { backendHistory, frontendHistory };
   }
 
-  async function generateBackend() {
+  async function generarBackend() {
     if (!diagramId || !project) return;
     setBusy("backend"); setError(""); setMessage("");
     try {
-      const transformation = await servicioGeneracion.transform({ diagram_id: diagramId, target_platform: "spring_boot" });
-      const generated = await servicioGeneracion.springBoot({ transformation_id: transformation.id, name: project.name, version_label: "auto" });
-      const history = await refreshHistory();
+      const transformation = await servicioGeneracion.transformar({ diagram_id: diagramId, target_platform: "spring_boot" });
+      const generated = await servicioGeneracion.generarSpringBoot({ transformation_id: transformation.id, name: project.name, version_label: "auto" });
+      const history = await recargarHistorial();
       setSelectedBackendId(generated.id);
       setBackends(history.backendHistory);
       setMessage(`${generated.name} fue generado y guardado correctamente.`);
     } catch (error) {
-      setError(generationError(error, "No se pudo generar el backend. Revise el diagrama e intente nuevamente."));
-      await refreshHistory().catch(() => undefined);
+      setError(mensajeErrorGeneracion(error, "No se pudo generar el backend. Revise el diagrama e intente nuevamente."));
+      await recargarHistorial().catch(() => undefined);
     } finally { setBusy(""); }
   }
 
-  async function generateFrontend() {
+  async function generarFrontend() {
     if (!diagramId || !project || !selectedBackendId) return;
     setBusy("frontend"); setError(""); setMessage("");
     try {
-      const transformation = await servicioGeneracion.transform({ diagram_id: diagramId, target_platform: "flutter" });
-      const generated = await servicioGeneracion.flutter({
+      const transformation = await servicioGeneracion.transformar({ diagram_id: diagramId, target_platform: "flutter" });
+      const generated = await servicioGeneracion.generarFlutter({
         transformation_id: transformation.id, name: project.name, version_label: "auto",
         backend_id: selectedBackendId, api_base_url: apiBaseUrl.trim() || undefined, theme_config: themeConfig
       });
       setPreviewTransformationId(transformation.id);
-      const history = await refreshHistory();
+      const history = await recargarHistorial();
       setFrontends(history.frontendHistory);
       setMessage(`${generated.name} fue generado y guardado correctamente.`);
     } catch (error) {
-      setError(generationError(error, "No se pudo generar Flutter. Revise el diagrama, el backend elegido y la configuracion visual."));
-      await refreshHistory().catch(() => undefined);
+      setError(mensajeErrorGeneracion(error, "No se pudo generar Flutter. Revise el diagrama, el backend elegido y la configuracion visual."));
+      await recargarHistorial().catch(() => undefined);
     } finally { setBusy(""); }
   }
 
-  async function downloadBackend(backend: BackendGenerado) {
+  async function descargarBackend(backend: BackendGenerado) {
     setBusy("download"); setError("");
-    try { downloadBlob(await servicioGeneracion.downloadSpringBoot(backend.id), `${backend.name}.zip`); }
+    try { descargarBlob(await servicioGeneracion.descargarSpringBoot(backend.id), `${backend.name}.zip`); }
     catch { setError("No se pudo descargar ese backend."); }
     finally { setBusy(""); }
   }
 
-  async function downloadFrontend(frontend: FrontendGenerado) {
+  async function descargarFrontend(frontend: FrontendGenerado) {
     setBusy("download"); setError("");
-    try { downloadBlob(await servicioGeneracion.downloadFlutter(frontend.id), `${frontend.name}.zip`); }
+    try { descargarBlob(await servicioGeneracion.descargarFlutter(frontend.id), `${frontend.name}.zip`); }
     catch { setError("No se pudo descargar esa aplicacion Flutter."); }
     finally { setBusy(""); }
   }
@@ -170,7 +170,7 @@ export function PaginaGeneracion() {
             {project ? `${project.name}: genera y conserva cada version del backend y de Flutter.` : "Cargando proyecto..."}
           </p>
         </div>
-        <Boton disabled={busy !== ""} icon={<RefreshCw className={busy === "loading" ? "animate-spin" : ""} size={17} />} onClick={() => void refreshHistory()} variant="secondary">
+        <Boton disabled={busy !== ""} icon={<RefreshCw className={busy === "loading" ? "animate-spin" : ""} size={17} />} onClick={() => void recargarHistorial()} variant="secondary">
           Actualizar historial
         </Boton>
       </header>
@@ -179,32 +179,32 @@ export function PaginaGeneracion() {
       {message && <p className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"><CheckCircle2 size={17} />{message}</p>}
 
       <div className="grid grid-cols-2 overflow-hidden rounded-md border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-        <TabButton active={activeTab === "backend"} icon={<Server size={18} />} label="Backend" onClick={() => setActiveTab("backend")} />
-        <TabButton active={activeTab === "frontend"} icon={<Smartphone size={18} />} label="Frontend Flutter" onClick={() => setActiveTab("frontend")} />
+        <BotonPestana active={activeTab === "backend"} icon={<Server size={18} />} label="Backend" onClick={() => setActiveTab("backend")} />
+        <BotonPestana active={activeTab === "frontend"} icon={<Smartphone size={18} />} label="Frontend Flutter" onClick={() => setActiveTab("frontend")} />
       </div>
 
       {activeTab === "backend" ? (
         <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
           <Panel className="h-fit p-5 dark:border-slate-700 dark:bg-slate-900">
-            <SectionTitle icon={<Server size={22} />} title="Generar backend" subtitle="Java y Spring Boot" />
+            <TituloSeccion icon={<Server size={22} />} title="Generar backend" subtitle="Java y Spring Boot" />
             <dl className="mt-5 grid gap-3 border-y border-slate-200 py-4 text-sm dark:border-slate-700">
-              <InfoRow label="Siguiente version" value={nextBackendVersion} />
-              <InfoRow label="Nombre" value={`${project?.name ?? "Proyecto"}_${nextBackendVersion}`} />
-              <InfoRow label="Origen" value="Diagrama actual" />
+              <FilaInformacion label="Siguiente version" value={nextBackendVersion} />
+              <FilaInformacion label="Nombre" value={`${project?.name ?? "Proyecto"}_${nextBackendVersion}`} />
+              <FilaInformacion label="Origen" value="Diagrama actual" />
             </dl>
-            <Boton className="mt-5 w-full" disabled={!diagramId || busy !== ""} icon={busy === "backend" ? <LoaderCircle className="animate-spin" size={18} /> : <PackageOpen size={18} />} onClick={() => void generateBackend()}>
+            <Boton className="mt-5 w-full" disabled={!diagramId || busy !== ""} icon={busy === "backend" ? <LoaderCircle className="animate-spin" size={18} /> : <PackageOpen size={18} />} onClick={() => void generarBackend()}>
               {busy === "backend" ? "Generando backend..." : "Generar nueva version"}
             </Boton>
           </Panel>
-          <GenerationHistory emptyMessage="Aun no se genero ningun backend para este proyecto." title="Versiones de backend">
-            {backends.map((backend) => <HistoryRow createdAt={backend.created_at} disabled={!backend.artifact_path || backend.status !== "generated" || busy === "download"} key={backend.id} name={backend.name} onDownload={() => void downloadBackend(backend)} status={backend.status} subtitle={`Spring Boot | ${backend.manifest.file_count ?? 0} archivos`} version={backend.version_label} />)}
-          </GenerationHistory>
+          <HistorialGeneracion emptyMessage="Aun no se genero ningun backend para este proyecto." title="Versiones de backend">
+            {backends.map((backend) => <FilaHistorial createdAt={backend.created_at} disabled={!backend.artifact_path || backend.status !== "generated" || busy === "download"} key={backend.id} name={backend.name} onDownload={() => void descargarBackend(backend)} status={backend.status} subtitle={`Spring Boot | ${backend.manifest.file_count ?? 0} archivos`} version={backend.version_label} />)}
+          </HistorialGeneracion>
         </div>
       ) : (
         <div className="grid gap-5">
           <div className="grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
             <Panel className="h-fit p-5 dark:border-slate-700 dark:bg-slate-900">
-              <SectionTitle icon={<Smartphone size={22} />} title="Generar Flutter" subtitle={`Siguiente version: ${project?.name ?? "Proyecto"}_${nextFrontendVersion}`} />
+              <TituloSeccion icon={<Smartphone size={22} />} title="Generar Flutter" subtitle={`Siguiente version: ${project?.name ?? "Proyecto"}_${nextFrontendVersion}`} />
               <label className="mt-5 grid gap-1.5 text-sm font-semibold">Version del backend
                 <select className="h-11 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 dark:border-slate-700 dark:bg-slate-950" onChange={(event) => setSelectedBackendId(event.target.value)} value={selectedBackendId}>
                   <option value="">Seleccione un backend generado</option>
@@ -214,17 +214,17 @@ export function PaginaGeneracion() {
               <label className="mt-4 grid gap-1.5 text-sm font-semibold">URL del backend para la app
                 <input className="h-11 rounded-md border border-slate-300 bg-transparent px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 dark:border-slate-700" onChange={(event) => setApiBaseUrl(event.target.value)} value={apiBaseUrl} />
               </label>
-              <Boton className="mt-5 w-full" disabled={!diagramId || !selectedBackendId || busy !== ""} icon={busy === "frontend" ? <LoaderCircle className="animate-spin" size={18} /> : <PackageOpen size={18} />} onClick={() => void generateFrontend()}>
+              <Boton className="mt-5 w-full" disabled={!diagramId || !selectedBackendId || busy !== ""} icon={busy === "frontend" ? <LoaderCircle className="animate-spin" size={18} /> : <PackageOpen size={18} />} onClick={() => void generarFrontend()}>
                 {busy === "frontend" ? "Generando Flutter..." : "Generar nueva version"}
               </Boton>
               {!generatedBackends.length && <p className="mt-3 text-xs text-amber-700">Primero genere al menos una version del backend.</p>}
             </Panel>
-            <GenerationHistory emptyMessage="Aun no se genero ninguna aplicacion Flutter para este proyecto." title="Versiones de Flutter">
+            <HistorialGeneracion emptyMessage="Aun no se genero ninguna aplicacion Flutter para este proyecto." title="Versiones de Flutter">
               {frontends.map((frontend) => {
                 const backend = frontend.backend_id ? backendById.get(frontend.backend_id) : undefined;
-                return <HistoryRow createdAt={frontend.created_at} disabled={!frontend.artifact_path || frontend.status !== "generated" || busy === "download"} key={frontend.id} name={frontend.name} onDownload={() => void downloadFrontend(frontend)} status={frontend.status} subtitle={backend ? `Creado para backend ${backend.name} (${backend.version_label})` : "Backend de origen no disponible"} version={frontend.version_label} />;
+                return <FilaHistorial createdAt={frontend.created_at} disabled={!frontend.artifact_path || frontend.status !== "generated" || busy === "download"} key={frontend.id} name={frontend.name} onDownload={() => void descargarFrontend(frontend)} status={frontend.status} subtitle={backend ? `Creado para backend ${backend.name} (${backend.version_label})` : "Backend de origen no disponible"} version={frontend.version_label} />;
               })}
-            </GenerationHistory>
+            </HistorialGeneracion>
           </div>
           <section>
             <div className="mb-4 flex items-center gap-3"><Palette className="text-accent" size={22} /><div><h2 className="font-bold text-blue-950 dark:text-white">Estilo de la aplicacion Flutter</h2><p className="text-sm text-slate-500 dark:text-slate-400">Configura y previsualiza el tema usado en la siguiente generacion.</p></div></div>
@@ -236,23 +236,23 @@ export function PaginaGeneracion() {
   );
 }
 
-function TabButton({ active, icon, label, onClick }: { active: boolean; icon: ReactNode; label: string; onClick: () => void }) {
+function BotonPestana({ active, icon, label, onClick }: { active: boolean; icon: ReactNode; label: string; onClick: () => void }) {
   return <button className={cn("flex h-12 items-center justify-center gap-2 border-r border-slate-200 text-sm font-bold transition last:border-r-0 dark:border-slate-700", active ? "bg-accent text-white" : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800")} onClick={onClick} type="button">{icon}{label}</button>;
 }
 
-function SectionTitle({ icon, subtitle, title }: { icon: ReactNode; subtitle: string; title: string }) {
+function TituloSeccion({ icon, subtitle, title }: { icon: ReactNode; subtitle: string; title: string }) {
   return <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-md bg-teal-50 text-accent dark:bg-teal-400/10 dark:text-teal-300">{icon}</span><div><h2 className="font-bold text-blue-950 dark:text-white">{title}</h2><p className="text-xs text-slate-500 dark:text-slate-400">{subtitle}</p></div></div>;
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function FilaInformacion({ label, value }: { label: string; value: string }) {
   return <div className="flex justify-between gap-3"><dt className="text-slate-500">{label}</dt><dd className="truncate font-bold">{value}</dd></div>;
 }
 
-function GenerationHistory({ children, emptyMessage, title }: { children: ReactNode; emptyMessage: string; title: string }) {
+function HistorialGeneracion({ children, emptyMessage, title }: { children: ReactNode; emptyMessage: string; title: string }) {
   const hasChildren = Array.isArray(children) ? children.length > 0 : Boolean(children);
   return <Panel className="min-w-0 overflow-hidden dark:border-slate-700 dark:bg-slate-900"><header className="flex items-center gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-700"><PackageOpen className="text-accent" size={21} /><h2 className="font-bold text-blue-950 dark:text-white">{title}</h2></header>{hasChildren ? <div className="divide-y divide-slate-200 dark:divide-slate-700">{children}</div> : <p className="px-5 py-12 text-center text-sm text-slate-500">{emptyMessage}</p>}</Panel>;
 }
 
-function HistoryRow({ createdAt, disabled, name, onDownload, status, subtitle, version }: { createdAt: string; disabled: boolean; name: string; onDownload: () => void; status: string; subtitle: string; version: string }) {
-  return <div className="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-bold text-slate-900 dark:text-white">{name}</p><InsigniaEstado tone={statusTone(status)}>{status}</InsigniaEstado><span className="text-xs font-bold text-blue-700 dark:text-blue-300">{version}</span></div><p className="mt-1 truncate text-sm text-slate-600 dark:text-slate-300">{subtitle}</p><p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500"><CalendarDays size={14} />{formattedDate(createdAt)}</p></div><Boton aria-label={`Descargar ${name}`} className="w-full sm:w-auto" disabled={disabled} icon={<Download size={17} />} onClick={onDownload} title={`Descargar ${name}`} variant="secondary">Descargar</Boton></div>;
+function FilaHistorial({ createdAt, disabled, name, onDownload, status, subtitle, version }: { createdAt: string; disabled: boolean; name: string; onDownload: () => void; status: string; subtitle: string; version: string }) {
+  return <div className="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-bold text-slate-900 dark:text-white">{name}</p><InsigniaEstado tone={tonoEstado(status)}>{status}</InsigniaEstado><span className="text-xs font-bold text-blue-700 dark:text-blue-300">{version}</span></div><p className="mt-1 truncate text-sm text-slate-600 dark:text-slate-300">{subtitle}</p><p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500"><CalendarDays size={14} />{fechaFormateada(createdAt)}</p></div><Boton aria-label={`Descargar ${name}`} className="w-full sm:w-auto" disabled={disabled} icon={<Download size={17} />} onClick={onDownload} title={`Descargar ${name}`} variant="secondary">Descargar</Boton></div>;
 }

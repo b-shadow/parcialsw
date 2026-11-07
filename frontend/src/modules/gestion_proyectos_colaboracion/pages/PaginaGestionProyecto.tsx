@@ -15,12 +15,12 @@ import type { IntegranteProyecto, CandidatoIntegranteProyecto } from "../types/p
 
 const fieldClassName = "h-12 w-full rounded-md border border-slate-300 bg-white text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-accent focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-teal-500 dark:focus:ring-teal-900";
 
-function memberInitial(member: IntegranteProyecto) {
+function inicialIntegrante(member: IntegranteProyecto) {
   const source = member.full_name?.trim() || member.email?.trim() || "U";
   return source.charAt(0).toUpperCase();
 }
 
-function formatJoinedAt(value: string) {
+function formatearFechaIngreso(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return { date: "Sin fecha", time: "" };
   return {
@@ -32,7 +32,7 @@ function formatJoinedAt(value: string) {
 export function PaginaGestionProyecto() {
   const { projectId = "" } = useParams();
   const activeProject = useAlmacenProyecto((state) => state.activeProject);
-  const setActiveProject = useAlmacenProyecto((state) => state.setActiveProject);
+  const establecerProyectoActivo = useAlmacenProyecto((state) => state.establecerProyectoActivo);
   const currentUser = useAlmacenAutenticacion((state) => state.user);
   const [members, setMembers] = useState<IntegranteProyecto[]>([]);
   const [candidates, setCandidates] = useState<CandidatoIntegranteProyecto[]>([]);
@@ -51,17 +51,17 @@ export function PaginaGestionProyecto() {
       || members.some((member) => member.user_id === currentUser?.id && member.project_role === "ORGANIZADOR")
   );
 
-  async function loadProjectContext() {
+  async function cargarContextoProyecto() {
     if (!projectId) return;
     const [project, projectMembers] = await Promise.all([
-      servicioProyectos.get(projectId),
-      servicioProyectos.members(projectId)
+      servicioProyectos.obtener(projectId),
+      servicioProyectos.listarIntegrantes(projectId)
     ]);
     const isOrganizer = project.owner_id === currentUser?.id || projectMembers.some(
       (member) => member.user_id === currentUser?.id && member.project_role === "ORGANIZADOR"
     );
-    const projectUsers = isOrganizer ? await servicioProyectos.memberCandidates(projectId) : [];
-    setActiveProject(project);
+    const projectUsers = isOrganizer ? await servicioProyectos.candidatosIntegrante(projectId) : [];
+    establecerProyectoActivo(project);
     setMembers(projectMembers);
     setCandidates(projectUsers);
     setName(project.name);
@@ -70,43 +70,43 @@ export function PaginaGestionProyecto() {
   }
 
   useEffect(() => {
-    void loadProjectContext().catch(() => setMessage("No se pudo cargar la gestión del proyecto."));
+    void cargarContextoProyecto().catch(() => setMessage("No se pudo cargar la gestión del proyecto."));
   }, [currentUser?.id, projectId]);
 
-  async function saveProject(event: FormEvent) {
+  async function guardarProyecto(event: FormEvent) {
     event.preventDefault();
-    const updated = await servicioProyectos.update(projectId, {
+    const updated = await servicioProyectos.actualizar(projectId, {
       name: name.trim(), description: description.trim() || null
     });
-    setActiveProject(updated);
+    establecerProyectoActivo(updated);
     setMessage("Proyecto actualizado.");
   }
 
-  async function addMember(event: FormEvent) {
+  async function agregarIntegrante(event: FormEvent) {
     event.preventDefault();
     if (!selectedUserId) return;
-    await servicioProyectos.addMember(projectId, { user_id: selectedUserId, project_role: selectedRole });
-    await loadProjectContext();
+    await servicioProyectos.agregarIntegrante(projectId, { user_id: selectedUserId, project_role: selectedRole });
+    await cargarContextoProyecto();
     setMessage("Colaborador agregado.");
   }
 
-  async function updateMemberRole(member: IntegranteProyecto, project_role: "ORGANIZADOR" | "EDITOR") {
-    const updated = await servicioProyectos.updateMember(projectId, member.id, { project_role });
+  async function actualizarRolIntegrante(member: IntegranteProyecto, project_role: "ORGANIZADOR" | "EDITOR") {
+    const updated = await servicioProyectos.actualizarIntegrante(projectId, member.id, { project_role });
     setMembers((current) => current.map((item) => item.id === member.id
       ? { ...updated, full_name: updated.full_name ?? item.full_name, email: updated.email ?? item.email }
       : item));
     setMessage("Rol de colaborador actualizado.");
   }
 
-  async function removeMember(memberId: string) {
-    await servicioProyectos.removeMember(projectId, memberId);
-    await loadProjectContext();
+  async function quitarIntegrante(memberId: string) {
+    await servicioProyectos.quitarIntegrante(projectId, memberId);
+    await cargarContextoProyecto();
     setMessage("Colaborador quitado.");
   }
 
-  async function archiveProject() {
-    const updated = await servicioProyectos.archive(projectId);
-    setActiveProject(updated);
+  async function archivarProyecto() {
+    const updated = await servicioProyectos.archivar(projectId);
+    establecerProyectoActivo(updated);
     setMessage("Proyecto archivado.");
   }
 
@@ -132,7 +132,7 @@ export function PaginaGestionProyecto() {
         </div>
         <div className="flex flex-wrap gap-3 sm:justify-end">
           {canManage && (
-            <Boton className="h-12 border-slate-300 px-5" icon={<Archive size={19} aria-hidden="true" />} onClick={archiveProject} variant="secondary">
+            <Boton className="h-12 border-slate-300 px-5" icon={<Archive size={19} aria-hidden="true" />} onClick={archivarProyecto} variant="secondary">
               Archivar
             </Boton>
           )}
@@ -164,7 +164,7 @@ export function PaginaGestionProyecto() {
             )}
           </div>
 
-          <form className="grid gap-5" onSubmit={saveProject}>
+          <form className="grid gap-5" onSubmit={guardarProyecto}>
             <label className="grid gap-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
               <span>Nombre del proyecto <span className="text-rose-500">*</span></span>
               <span className="relative block">
@@ -195,7 +195,7 @@ export function PaginaGestionProyecto() {
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Invita usuarios al proyecto asignando un rol.</p>
                 </div>
               </div>
-              <form className="grid gap-4 rounded-md bg-teal-50 p-4 dark:bg-teal-950/40 lg:grid-cols-12 lg:items-end" onSubmit={addMember}>
+              <form className="grid gap-4 rounded-md bg-teal-50 p-4 dark:bg-teal-950/40 lg:grid-cols-12 lg:items-end" onSubmit={agregarIntegrante}>
                 <label className="grid min-w-0 gap-2 text-sm font-semibold text-slate-800 dark:text-slate-200 lg:col-span-6">
                   <span>Usuario <span className="text-rose-500">*</span></span>
                   <span className="relative block">
@@ -239,12 +239,12 @@ export function PaginaGestionProyecto() {
               </div>
               {members.length === 0 && <p className="px-5 py-8 text-center text-sm text-slate-500 dark:text-slate-400">No hay colaboradores en este proyecto.</p>}
               {members.map((member) => {
-                const joinedAt = formatJoinedAt(member.joined_at);
+                const joinedAt = formatearFechaIngreso(member.joined_at);
                 const isOwner = activeProject?.owner_id === member.user_id;
                 return (
                   <div className="grid gap-4 border-t border-slate-200 p-4 first:border-t-0 dark:border-slate-700 md:grid-cols-12 md:items-center md:px-5" key={member.id}>
                     <div className="flex min-w-0 items-center gap-3 md:col-span-4">
-                      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-blue-100 font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300">{memberInitial(member)}</span>
+                      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-blue-100 font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300">{inicialIntegrante(member)}</span>
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{member.full_name ?? "Usuario del proyecto"}</p>
                         <p className="truncate text-xs text-slate-500 dark:text-slate-400">{member.email ?? member.user_id}</p>
@@ -253,7 +253,7 @@ export function PaginaGestionProyecto() {
                     <div className="md:col-span-2">
                       <span className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400 md:hidden">Rol</span>
                       {canManage && !isOwner ? (
-                        <select aria-label={`Rol de ${member.full_name ?? member.email ?? "colaborador"}`} className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 outline-none focus:border-accent focus:ring-2 focus:ring-teal-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" value={member.project_role} onChange={(event) => updateMemberRole(member, event.target.value as "ORGANIZADOR" | "EDITOR")}>
+                        <select aria-label={`Rol de ${member.full_name ?? member.email ?? "colaborador"}`} className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 outline-none focus:border-accent focus:ring-2 focus:ring-teal-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" value={member.project_role} onChange={(event) => actualizarRolIntegrante(member, event.target.value as "ORGANIZADOR" | "EDITOR")}>
                           <option value="ORGANIZADOR">Organizador</option><option value="EDITOR">Editor</option>
                         </select>
                       ) : (
@@ -270,7 +270,7 @@ export function PaginaGestionProyecto() {
                     <div className="md:col-span-3">
                       <span className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400 md:hidden">Acciones</span>
                       {canManage && !isOwner ? (
-                        <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-rose-300 px-3 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-200 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950" onClick={() => removeMember(member.id)} type="button">
+                        <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-rose-300 px-3 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-200 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950" onClick={() => quitarIntegrante(member.id)} type="button">
                           <Trash2 size={16} aria-hidden="true" />Quitar
                         </button>
                       ) : isOwner ? (

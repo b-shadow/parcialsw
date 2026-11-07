@@ -20,10 +20,10 @@ import { servicioIA } from "../../modelado_uml_inteligente/services/servicioIA";
 import { servicioUML } from "../../modelado_uml_inteligente/services/servicioUML";
 import { servicioProyectos } from "../services/servicioProyectos";
 
-type AiSource = "text" | "voice" | "image";
-type AiUmlResult = Awaited<ReturnType<typeof servicioIA.textToUml>>;
+type FuenteIA = "text" | "voice" | "image";
+type ResultadoUmlIA = Awaited<ReturnType<typeof servicioIA.textoAUml>>;
 
-type BrowserSpeechRecognition = {
+type ReconocimientoVozNavegador = {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
@@ -33,7 +33,7 @@ type BrowserSpeechRecognition = {
   start: () => void;
 };
 
-function fileToBase64(file: File) {
+function archivoABase64(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
@@ -42,7 +42,7 @@ function fileToBase64(file: File) {
   });
 }
 
-function fileToText(file: File) {
+function archivoATexto(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
@@ -51,7 +51,7 @@ function fileToText(file: File) {
   });
 }
 
-function validateImageResult(result: AiUmlResult) {
+function validarResultadoImagen(result: ResultadoUmlIA) {
   const names = result.classes.map((item) => item.name.trim().toLocaleLowerCase());
   return (
     result.classes.length > 0 &&
@@ -61,7 +61,7 @@ function validateImageResult(result: AiUmlResult) {
   );
 }
 
-function creationError(error: unknown, fallback: string): string {
+function mensajeErrorCreacion(error: unknown, fallback: string): string {
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data?.detail;
     if (typeof detail === "string") return detail;
@@ -78,7 +78,7 @@ export function PaginaCrearProyecto() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [aiSource, setAiSource] = useState<AiSource>("text");
+  const [aiSource, setAiSource] = useState<FuenteIA>("text");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [xmiFile, setXmiFile] = useState<File | null>(null);
   const [isListening, setIsListening] = useState(false);
@@ -94,7 +94,7 @@ export function PaginaCrearProyecto() {
     ? "border-slate-700 bg-[#08111f] text-white placeholder:text-slate-500"
     : "border-blue-200 bg-white text-[#070b5f] placeholder:text-blue-700/45";
 
-  function hasAnyInput() {
+  function hayAlgunaEntrada() {
     return Boolean(
       name.trim() ||
       description.trim() ||
@@ -104,8 +104,8 @@ export function PaginaCrearProyecto() {
     );
   }
 
-  function projectData(allowCompletelyEmpty: boolean) {
-    if (allowCompletelyEmpty && !hasAnyInput()) {
+  function datosProyecto(allowCompletelyEmpty: boolean) {
+    if (allowCompletelyEmpty && !hayAlgunaEntrada()) {
       return { name: "Proyecto sin titulo", description: undefined };
     }
     if (name.trim().length < 2 || !description.trim()) {
@@ -114,10 +114,10 @@ export function PaginaCrearProyecto() {
     return { name: name.trim(), description: description.trim() };
   }
 
-  function startVoiceCapture() {
+  function iniciarCapturaVoz() {
     const browserWindow = window as Window & {
-      SpeechRecognition?: new () => BrowserSpeechRecognition;
-      webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
+      SpeechRecognition?: new () => ReconocimientoVozNavegador;
+      webkitSpeechRecognition?: new () => ReconocimientoVozNavegador;
     };
     const SpeechRecognition = browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -143,13 +143,13 @@ export function PaginaCrearProyecto() {
     recognition.start();
   }
 
-  async function buildAiResult() {
+  async function construirResultadoIA() {
     if (aiSource === "image" && imageFile) {
-      const result = await servicioIA.imageToUml({
-        image_base64: await fileToBase64(imageFile),
+      const result = await servicioIA.imagenAUml({
+        image_base64: await archivoABase64(imageFile),
         file_name: imageFile.name,
       });
-      if (!validateImageResult(result)) {
+      if (!validarResultadoImagen(result)) {
         throw new Error(result.observations.join(" ") || "La imagen no pudo leerse con suficiente precision.");
       }
       return result;
@@ -157,32 +157,32 @@ export function PaginaCrearProyecto() {
     if (!prompt.trim()) return null;
     if (prompt.trim().length < 3) throw new Error("Describa el modelo con mayor detalle.");
     return aiSource === "voice"
-      ? servicioIA.voiceToUml({ transcript: prompt.trim() })
-      : servicioIA.textToUml(prompt.trim());
+      ? servicioIA.vozAUml({ transcript: prompt.trim() })
+      : servicioIA.textoAUml(prompt.trim());
   }
 
-  async function initializeProject(data: { name: string; description?: string }) {
-    const project = await servicioProyectos.create(data);
-    const diagrams = await servicioUML.listDiagrams(project.id);
+  async function inicializarProyecto(data: { name: string; description?: string }) {
+    const project = await servicioProyectos.crear(data);
+    const diagrams = await servicioUML.listarDiagramas(project.id);
     const diagram = diagrams[0];
     if (!diagram) throw new Error("No se pudo inicializar el diagrama del proyecto.");
     return { project, diagram };
   }
 
-  async function createProject() {
+  async function crearProyecto() {
     if (isProcessing) return;
     setIsProcessing(true);
     setMessage("Preparando el proyecto...");
     try {
       if (xmiFile && !prompt.trim() && !imageFile) {
-        projectData(false);
+        datosProyecto(false);
         throw new Error("El archivo esta listo. Use Importar para cargar el XMI.");
       }
-      const data = projectData(true);
-      const aiResult = await buildAiResult();
-      const { project, diagram } = await initializeProject(data);
+      const data = datosProyecto(true);
+      const aiResult = await construirResultadoIA();
+      const { project, diagram } = await inicializarProyecto(data);
       if (aiResult) {
-        await servicioUML.applyAiModificationToDiagram({
+        await servicioUML.aplicarModificacionIAAlDiagrama({
           diagramId: diagram.id,
           classes: [],
           relationships: [],
@@ -191,35 +191,35 @@ export function PaginaCrearProyecto() {
       }
       navigate(`/proyectos/${project.id}/uml/${diagram.id}`, { replace: true });
     } catch (error) {
-      setMessage(creationError(error, "No se pudo crear el proyecto."));
+      setMessage(mensajeErrorCreacion(error, "No se pudo crear el proyecto."));
     } finally {
       setIsProcessing(false);
     }
   }
 
-  async function importProject() {
+  async function importarProyecto() {
     if (isProcessing) return;
     setIsProcessing(true);
     setMessage("Importando el archivo XMI...");
     try {
       if (!xmiFile) throw new Error("Seleccione un archivo XML o XMI.");
-      const data = projectData(false);
-      const { project, diagram } = await initializeProject(data);
-      await servicioUML.importXmiIntoDiagram(diagram.id, {
+      const data = datosProyecto(false);
+      const { project, diagram } = await inicializarProyecto(data);
+      await servicioUML.importarXmiAlDiagrama(diagram.id, {
         project_id: project.id,
         name: data.name,
         file_name: xmiFile.name,
-        content: await fileToText(xmiFile),
+        content: await archivoATexto(xmiFile),
       });
       navigate(`/proyectos/${project.id}/uml/${diagram.id}`, { replace: true });
     } catch (error) {
-      setMessage(creationError(error, "No se pudo importar el proyecto."));
+      setMessage(mensajeErrorCreacion(error, "No se pudo importar el proyecto."));
     } finally {
       setIsProcessing(false);
     }
   }
 
-  function handleImage(event: ChangeEvent<HTMLInputElement>) {
+  function manejarImagen(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
     setImageFile(file);
     if (file) {
@@ -228,20 +228,20 @@ export function PaginaCrearProyecto() {
     }
   }
 
-  function clearImage() {
+  function limpiarImagen() {
     setImageFile(null);
     setAiSource("text");
     if (imageInputRef.current) imageInputRef.current.value = "";
     setMessage("");
   }
 
-  function handleXmi(event: ChangeEvent<HTMLInputElement>) {
+  function manejarXmi(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
     setXmiFile(file);
     setMessage(file ? `Archivo seleccionado: ${file.name}` : "");
   }
 
-  function clearXmi() {
+  function limpiarXmi() {
     setXmiFile(null);
     if (xmiInputRef.current) xmiInputRef.current.value = "";
     setMessage("");
@@ -297,10 +297,10 @@ export function PaginaCrearProyecto() {
             />
             <div className="grid grid-cols-3 gap-2">
               <button className={cn("h-10 rounded-md border text-sm font-bold", aiSource === "text" ? "border-teal-500 bg-teal-50 text-teal-800" : "border-slate-300")} onClick={() => setAiSource("text")} type="button"><FileText className="mr-1 inline" size={15} />Texto</button>
-              <button className={cn("h-10 rounded-md border text-sm font-bold", aiSource === "voice" ? "border-teal-500 bg-teal-50 text-teal-800" : "border-slate-300")} disabled={isListening} onClick={startVoiceCapture} type="button"><Mic className="mr-1 inline" size={15} />{isListening ? "Oyendo" : "Voz"}</button>
+              <button className={cn("h-10 rounded-md border text-sm font-bold", aiSource === "voice" ? "border-teal-500 bg-teal-50 text-teal-800" : "border-slate-300")} disabled={isListening} onClick={iniciarCapturaVoz} type="button"><Mic className="mr-1 inline" size={15} />{isListening ? "Oyendo" : "Voz"}</button>
               <button className={cn("h-10 rounded-md border text-sm font-bold", aiSource === "image" ? "border-teal-500 bg-teal-50 text-teal-800" : "border-slate-300")} onClick={() => imageInputRef.current?.click()} type="button"><Image className="mr-1 inline" size={15} />Imagen</button>
             </div>
-            <input ref={imageInputRef} className="hidden" type="file" accept="image/*" onChange={handleImage} />
+            <input ref={imageInputRef} className="hidden" type="file" accept="image/*" onChange={manejarImagen} />
             {imageFile && (
               <div className="flex items-center gap-3 border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
                 <Image className="shrink-0 text-teal-700" size={18} />
@@ -308,12 +308,12 @@ export function PaginaCrearProyecto() {
                   <p className="truncate text-sm font-semibold">{imageFile.name}</p>
                   <p className="text-xs text-slate-500">{imageFile.type || "Imagen"}</p>
                 </div>
-                <button className="grid size-8 place-items-center rounded-md text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" onClick={clearImage} title="Limpiar imagen" type="button"><X size={17} /></button>
+                <button className="grid size-8 place-items-center rounded-md text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" onClick={limpiarImagen} title="Limpiar imagen" type="button"><X size={17} /></button>
               </div>
             )}
 
             <div className="mt-1 border-t border-slate-200 pt-4 dark:border-slate-700">
-              <input ref={xmiInputRef} className="hidden" type="file" accept=".xml,.xmi,text/xml,application/xml" onChange={handleXmi} />
+              <input ref={xmiInputRef} className="hidden" type="file" accept=".xml,.xmi,text/xml,application/xml" onChange={manejarXmi} />
               {!xmiFile ? (
                 <button className="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-300 text-sm font-bold hover:border-teal-500 hover:bg-teal-50 dark:border-slate-700 dark:hover:bg-slate-800" onClick={() => xmiInputRef.current?.click()} type="button">
                   <Upload size={17} />
@@ -326,7 +326,7 @@ export function PaginaCrearProyecto() {
                     <p className="truncate text-sm font-semibold">{xmiFile.name}</p>
                     <p className="text-xs text-slate-500">{xmiFile.type || "Archivo XMI/XML"}</p>
                   </div>
-                  <button className="grid size-8 place-items-center rounded-md text-slate-500 hover:bg-white dark:hover:bg-slate-800" onClick={clearXmi} title="Limpiar archivo XMI" type="button"><X size={17} /></button>
+                  <button className="grid size-8 place-items-center rounded-md text-slate-500 hover:bg-white dark:hover:bg-slate-800" onClick={limpiarXmi} title="Limpiar archivo XMI" type="button"><X size={17} /></button>
                 </div>
               )}
             </div>
@@ -336,11 +336,11 @@ export function PaginaCrearProyecto() {
         <div className="flex flex-col gap-3 border-t border-slate-200 px-6 py-4 md:flex-row md:items-center md:justify-between dark:border-slate-700">
           <p className={cn("min-h-5 text-sm", message ? "text-amber-700 dark:text-amber-300" : "text-slate-500")} role="status">{message}</p>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <button className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-teal-700 px-6 text-sm font-bold text-white hover:bg-teal-800 disabled:cursor-wait disabled:opacity-60" disabled={isProcessing} onClick={() => void createProject()} type="button">
+            <button className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-teal-700 px-6 text-sm font-bold text-white hover:bg-teal-800 disabled:cursor-wait disabled:opacity-60" disabled={isProcessing} onClick={() => void crearProyecto()} type="button">
               {isProcessing ? <LoaderCircle className="animate-spin" size={18} /> : <Plus size={18} />}
               Crear proyecto
             </button>
-            <button className="inline-flex h-12 items-center justify-center gap-2 rounded-md border border-teal-700 px-6 text-sm font-bold text-teal-800 hover:bg-teal-50 disabled:cursor-wait disabled:opacity-60 dark:text-teal-200 dark:hover:bg-teal-950/30" disabled={isProcessing} onClick={() => void importProject()} type="button">
+            <button className="inline-flex h-12 items-center justify-center gap-2 rounded-md border border-teal-700 px-6 text-sm font-bold text-teal-800 hover:bg-teal-50 disabled:cursor-wait disabled:opacity-60 dark:text-teal-200 dark:hover:bg-teal-950/30" disabled={isProcessing} onClick={() => void importarProyecto()} type="button">
               <Upload size={18} />
               Importar
             </button>

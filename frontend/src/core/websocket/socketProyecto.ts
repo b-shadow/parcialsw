@@ -43,13 +43,13 @@ export type EventoSocketProyectoAnalizado = EventoSocketProyecto | EventoSocketP
 
 export type EstadoSocketProyecto = "connecting" | "connected" | "reconnecting" | "disconnected";
 
-function authProtocols() {
+function protocolosAutenticacion() {
   const token = useAlmacenAutenticacion.getState().token ?? window.localStorage.getItem("case_access_token") ?? "";
   return ["case-v1", `case-auth.${token}`];
 }
 
 export function crearSocketProyecto(projectId: string): WebSocket {
-  return new WebSocket(`${entorno.wsBaseUrl}/ws/projects/${projectId}?contrato=es`, authProtocols());
+  return new WebSocket(`${entorno.wsBaseUrl}/ws/projects/${projectId}?contrato=es`, protocolosAutenticacion());
 }
 
 export function analizarEventoSocketProyecto(raw: string): EventoSocketProyectoAnalizado | null {
@@ -81,10 +81,10 @@ export function enviarEventoProyecto(socket: WebSocket | null, payload: Record<s
 
 type SocketClientOptions = {
   projectId: string;
-  getProjectSequence: () => number;
-  getConversationSequence: () => number;
-  onEvent: (event: EventoSocketProyectoAnalizado) => void;
-  onStatus: (status: EstadoSocketProyecto) => void;
+  obtenerSecuenciaProyecto: () => number;
+  obtenerSecuenciaConversacion: () => number;
+  alRecibirEvento: (event: EventoSocketProyectoAnalizado) => void;
+  alCambiarEstado: (status: EstadoSocketProyecto) => void;
 };
 
 export class ClienteSocketProyecto {
@@ -97,21 +97,21 @@ export class ClienteSocketProyecto {
 
   constructor(private readonly options: SocketClientOptions) {}
 
-  connect() {
+  conectar() {
     if (this.socket?.readyState === WebSocket.OPEN || this.socket?.readyState === WebSocket.CONNECTING) return;
     this.manuallyClosed = false;
-    this.options.onStatus(this.attempts ? "reconnecting" : "connecting");
+    this.options.alCambiarEstado(this.attempts ? "reconnecting" : "connecting");
     const socket = crearSocketProyecto(this.options.projectId);
     this.socket = socket;
     socket.onopen = () => {
       this.attempts = 0;
-      this.options.onStatus("connected");
-      this.send({
+      this.options.alCambiarEstado("connected");
+      this.enviar({
         type: "SYNC_STATE",
-        last_project_sequence: this.options.getProjectSequence(),
-        last_conversation_sequence: this.options.getConversationSequence()
+        last_project_sequence: this.options.obtenerSecuenciaProyecto(),
+        last_conversation_sequence: this.options.obtenerSecuenciaConversacion()
       });
-      this.startHeartbeat();
+      this.iniciarLatido();
     };
     socket.onmessage = (message) => {
       const parsed = analizarEventoSocketProyecto(String(message.data));
@@ -125,21 +125,21 @@ export class ClienteSocketProyecto {
           if (oldest) this.seenEventIds.delete(oldest);
         }
       }
-      this.options.onEvent(parsed);
+      this.options.alRecibirEvento(parsed);
     };
     socket.onerror = () => socket.close();
     socket.onclose = () => {
-      this.stopHeartbeat();
+      this.detenerLatido();
       this.socket = null;
       if (this.manuallyClosed) {
-        this.options.onStatus("disconnected");
+        this.options.alCambiarEstado("disconnected");
         return;
       }
-      this.scheduleReconnect();
+      this.programarReconexion();
     };
   }
 
-  send(payload: Record<string, unknown>) {
+  enviar(payload: Record<string, unknown>) {
     if (this.socket?.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(contratoAlEspanol(payload)));
       return true;
@@ -147,15 +147,15 @@ export class ClienteSocketProyecto {
     return false;
   }
 
-  setActiveDiagram(diagramId: string | null) {
-    this.send({ type: "ACTIVE_DIAGRAM", diagram_id: diagramId });
+  establecerDiagramaActivo(diagramId: string | null) {
+    this.enviar({ type: "ACTIVE_DIAGRAM", diagram_id: diagramId });
   }
 
-  close() {
+  cerrar() {
     this.manuallyClosed = true;
     if (this.reconnectTimer !== null) window.clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
-    this.stopHeartbeat();
+    this.detenerLatido();
     const socket = this.socket;
     if (socket?.readyState === WebSocket.CONNECTING) {
       socket.onopen = () => socket.close(1000, "client_close");
@@ -163,23 +163,23 @@ export class ClienteSocketProyecto {
       socket?.close(1000, "client_close");
     }
     this.socket = null;
-    this.options.onStatus("disconnected");
+    this.options.alCambiarEstado("disconnected");
   }
 
-  private scheduleReconnect() {
+  private programarReconexion() {
     this.attempts += 1;
-    this.options.onStatus("reconnecting");
+    this.options.alCambiarEstado("reconnecting");
     const base = Math.min(30_000, 1_000 * 2 ** Math.min(this.attempts - 1, 5));
     const delay = Math.round(base * (0.8 + Math.random() * 0.4));
-    this.reconnectTimer = window.setTimeout(() => this.connect(), delay);
+    this.reconnectTimer = window.setTimeout(() => this.conectar(), delay);
   }
 
-  private startHeartbeat() {
-    this.stopHeartbeat();
-    this.heartbeatTimer = window.setInterval(() => this.send({ type: "PING" }), 20_000);
+  private iniciarLatido() {
+    this.detenerLatido();
+    this.heartbeatTimer = window.setInterval(() => this.enviar({ type: "PING" }), 20_000);
   }
 
-  private stopHeartbeat() {
+  private detenerLatido() {
     if (this.heartbeatTimer !== null) window.clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = null;
   }

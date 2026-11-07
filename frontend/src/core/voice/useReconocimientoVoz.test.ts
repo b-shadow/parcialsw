@@ -19,8 +19,8 @@ describe("useSpeechRecognition (V1.8)", () => {
 
   it("Sin SpeechRecognition en window -> supported false", () => {
     const { result } = renderHook(() => useReconocimientoVoz());
-    expect(result.current.supported).toBe(false);
-    expect(result.current.listening).toBe(false);
+    expect(result.current.disponible).toBe(false);
+    expect(result.current.escuchando).toBe(false);
     expect(result.current.error).toBeNull();
   });
 
@@ -51,13 +51,13 @@ describe("useSpeechRecognition (V1.8)", () => {
     window.SpeechRecognition = MockSpeechRecognition as any;
 
     const { result } = renderHook(() => useReconocimientoVoz());
-    expect(result.current.supported).toBe(true);
+    expect(result.current.disponible).toBe(true);
 
     act(() => {
-      result.current.start();
+      result.current.iniciar();
     });
 
-    expect(result.current.listening).toBe(true);
+    expect(result.current.escuchando).toBe(true);
 
     act(() => {
       mockInstance.onresult({
@@ -72,12 +72,12 @@ describe("useSpeechRecognition (V1.8)", () => {
       });
     });
 
-    expect(result.current.interim).toBe("crea una clase");
+    expect(result.current.transcripcionParcial).toBe("crea una clase");
   });
 
-  it("Evento de resultado final -> llama onFinal con el texto", () => {
+  it("Evento de resultado final -> llama alFinalizar con el texto", () => {
     let mockInstance: any = null;
-    const onFinal = vi.fn();
+    const alFinalizar = vi.fn();
 
     class MockSpeechRecognition {
       continuous = false;
@@ -102,10 +102,10 @@ describe("useSpeechRecognition (V1.8)", () => {
 
     window.SpeechRecognition = MockSpeechRecognition as any;
 
-    const { result } = renderHook(() => useReconocimientoVoz({ onFinal }));
+    const { result } = renderHook(() => useReconocimientoVoz({ alFinalizar }));
 
     act(() => {
-      result.current.start();
+      result.current.iniciar();
     });
 
     act(() => {
@@ -121,7 +121,7 @@ describe("useSpeechRecognition (V1.8)", () => {
       });
     });
 
-    expect(onFinal).toHaveBeenCalledWith("crea una clase Factura");
+    expect(alFinalizar).toHaveBeenCalledWith("crea una clase Factura");
   });
 
   it("Error 'not-allowed' -> error = 'Permite el micrófono para dictar'", () => {
@@ -150,7 +150,7 @@ describe("useSpeechRecognition (V1.8)", () => {
     const { result } = renderHook(() => useReconocimientoVoz());
 
     act(() => {
-      result.current.start();
+      result.current.iniciar();
     });
 
     act(() => {
@@ -158,6 +158,6 @@ describe("useSpeechRecognition (V1.8)", () => {
     });
 
     expect(result.current.error).toBe("Permite el micrófono para dictar");
-    expect(result.current.listening).toBe(false);
+    expect(result.current.escuchando).toBe(false);
   });
 });

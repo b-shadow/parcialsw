@@ -39,7 +39,7 @@ describe("projectAiStore", () => {
 
   it("ordena y deduplica mensajes recibidos por REST y WebSocket", () => {
     const store = useAlmacenIAProyecto.getState();
-    store.setHistory([message(2), message(1)], false);
+    store.establecerHistorial([message(2), message(1)], false);
     store.upsertMessage(message(2, "Actualizado"));
 
     expect(useAlmacenIAProyecto.getState().messages.map((item) => item.sequence_number)).toEqual([1, 2]);
@@ -50,7 +50,7 @@ describe("projectAiStore", () => {
   it("conserva mensajes WebSocket que llegan antes del historial REST", () => {
     const store = useAlmacenIAProyecto.getState();
     store.upsertMessage(message(3));
-    store.setHistory([message(1), message(2)], false);
+    store.establecerHistorial([message(1), message(2)], false);
 
     expect(useAlmacenIAProyecto.getState().messages.map((item) => item.sequence_number)).toEqual([1, 2, 3]);
     expect(useAlmacenIAProyecto.getState().conversationSequence).toBe(3);
@@ -58,7 +58,7 @@ describe("projectAiStore", () => {
 
   it("sincroniza desde el ultimo mensaje continuo si falta uno intermedio", () => {
     const store = useAlmacenIAProyecto.getState();
-    store.setHistory([message(1), message(3)], false);
+    store.establecerHistorial([message(1), message(3)], false);
 
     expect(ultimaSecuenciaContinuaMensajes(useAlmacenIAProyecto.getState().messages)).toBe(1);
     store.upsertMessage(message(2));
@@ -67,8 +67,8 @@ describe("projectAiStore", () => {
 
   it("no retrocede cursores frente a eventos fuera de orden", () => {
     const store = useAlmacenIAProyecto.getState();
-    store.setSequences(20, 10);
-    store.setSequences(18, 8);
+    store.establecerSecuencias(20, 10);
+    store.establecerSecuencias(18, 8);
 
     expect(useAlmacenIAProyecto.getState().projectSequence).toBe(20);
     expect(useAlmacenIAProyecto.getState().conversationSequence).toBe(10);
@@ -76,7 +76,7 @@ describe("projectAiStore", () => {
 
   it("reinicia datos al cambiar de proyecto", () => {
     const store = useAlmacenIAProyecto.getState();
-    store.setHistory([message(1)], true);
+    store.establecerHistorial([message(1)], true);
     store.initialize("another-project");
 
     expect(useAlmacenIAProyecto.getState().messages).toEqual([]);
@@ -85,7 +85,7 @@ describe("projectAiStore", () => {
 
   it("mantiene la presencia ordenada y sin duplicar usuarios reconectados", () => {
     const store = useAlmacenIAProyecto.getState();
-    store.setPresence([presence("user-b", "Bruno"), presence("user-a", "Ana")]);
+    store.establecerPresencia([presence("user-b", "Bruno"), presence("user-a", "Ana")]);
     store.upsertPresence(presence("user-a", "Ana Maria", 2));
 
     expect(useAlmacenIAProyecto.getState().presence).toEqual([
@@ -96,8 +96,8 @@ describe("projectAiStore", () => {
 
   it("retira de inmediato al integrante que abandona el proyecto", () => {
     const store = useAlmacenIAProyecto.getState();
-    store.setPresence([presence("user-a", "Ana"), presence("user-b", "Bruno")]);
-    store.removePresence("user-a");
+    store.establecerPresencia([presence("user-a", "Ana"), presence("user-b", "Bruno")]);
+    store.quitarPresencia("user-a");
 
     expect(useAlmacenIAProyecto.getState().presence).toEqual([presence("user-b", "Bruno")]);
   });

@@ -9,20 +9,20 @@ export const temaPredeterminadoV2: ConfiguracionTemaFlutter = {
   components: { button_style: "filled", input_style: "outline", card_style: "outlined", navigation_style: "automatic", density: "normal", show_field_labels: true }
 };
 
-function readableOn(background: string) {
+function legibleSobre(background: string) {
   return calcularContraste(background, "#000000") >= calcularContraste(background, "#FFFFFF") ? "#000000" : "#FFFFFF";
 }
 
 export function adaptarTemaV1AV2(input: ConfiguracionTemaFlutterV1): ConfiguracionTemaFlutter {
   const theme = structuredClone(temaPredeterminadoV2);
   theme.light.primary = input.primary_color.toUpperCase();
-  theme.light.on_primary = readableOn(theme.light.primary);
+  theme.light.on_primary = legibleSobre(theme.light.primary);
   theme.light.secondary = input.secondary_color.toUpperCase();
-  theme.light.on_secondary = readableOn(theme.light.secondary);
+  theme.light.on_secondary = legibleSobre(theme.light.secondary);
   theme.light.background = input.background_color.toUpperCase();
-  theme.light.on_background = readableOn(theme.light.background);
+  theme.light.on_background = legibleSobre(theme.light.background);
   theme.light.surface = input.surface_color.toUpperCase();
-  theme.light.on_surface = readableOn(theme.light.surface);
+  theme.light.on_surface = legibleSobre(theme.light.surface);
   theme.typography.font_family = "system";
   theme.typography.heading_font_family = "system";
   theme.shape = { button_radius: input.border_radius, input_radius: input.border_radius, card_radius: input.border_radius, dialog_radius: input.border_radius };
@@ -46,9 +46,9 @@ export function resolverTokensModoColor(theme: ConfiguracionTemaFlutter, mode: "
   return theme[mode];
 }
 
-function channel(value: number) { const ratio = value / 255; return ratio <= 0.04045 ? ratio / 12.92 : ((ratio + 0.055) / 1.055) ** 2.4; }
+function canalColor(value: number) { const ratio = value / 255; return ratio <= 0.04045 ? ratio / 12.92 : ((ratio + 0.055) / 1.055) ** 2.4; }
 export function calcularContraste(first: string, second: string) {
-  const luminance = (color: string) => { const values = [1, 3, 5].map((index) => Number.parseInt(color.slice(index, index + 2), 16)); return 0.2126 * channel(values[0]) + 0.7152 * channel(values[1]) + 0.0722 * channel(values[2]); };
+  const luminance = (color: string) => { const values = [1, 3, 5].map((index) => Number.parseInt(color.slice(index, index + 2), 16)); return 0.2126 * canalColor(values[0]) + 0.7152 * canalColor(values[1]) + 0.0722 * canalColor(values[2]); };
   const values = [luminance(first), luminance(second)];
   return (Math.max(...values) + 0.05) / (Math.min(...values) + 0.05);
 }

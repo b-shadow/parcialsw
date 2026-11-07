@@ -7,7 +7,7 @@ import { InsigniaEstado } from "../../../shared/components/InsigniaEstado";
 import type { Rol, Usuario } from "../types/usuario";
 import { servicioUsuarios } from "../services/servicioUsuarios";
 
-function formatDate(value?: string | null) {
+function formatearFecha(value?: string | null) {
   if (!value) {
     return "Sin registro";
   }
@@ -32,13 +32,13 @@ export function PaginaUsuariosAdmin() {
     [selectedUserId, users]
   );
 
-  async function load() {
+  async function cargar() {
     setIsLoading(true);
     setMessage("");
     try {
       const [userList, roleList] = await Promise.all([
-        servicioUsuarios.list(),
-        servicioUsuarios.listRoles()
+        servicioUsuarios.listar(),
+        servicioUsuarios.listarRoles()
       ]);
       setUsers(userList);
       setRoles(roleList);
@@ -56,7 +56,7 @@ export function PaginaUsuariosAdmin() {
   }
 
   useEffect(() => {
-    load();
+    cargar();
   }, []);
 
   useEffect(() => {
@@ -66,14 +66,14 @@ export function PaginaUsuariosAdmin() {
     }
   }, [selectedUser]);
 
-  async function saveChanges() {
+  async function guardarCambios() {
     if (!selectedUser) {
       return;
     }
     setIsSaving(true);
     setMessage("");
     try {
-      const updated = await servicioUsuarios.updateUser(selectedUser.id, {
+      const updated = await servicioUsuarios.actualizarUsuario(selectedUser.id, {
         is_active: isActive,
         role_name: selectedRole
       });
@@ -93,7 +93,7 @@ export function PaginaUsuariosAdmin() {
           <h1 className="text-2xl font-semibold">Gestion de usuarios</h1>
           <p className="text-sm text-slate-500">Administracion global de usuarios, roles y estado de acceso.</p>
         </div>
-        <Boton icon={<RefreshCcw size={16} aria-hidden="true" />} onClick={load} type="button" variant="secondary">
+        <Boton icon={<RefreshCcw size={16} aria-hidden="true" />} onClick={cargar} type="button" variant="secondary">
           Actualizar
         </Boton>
       </div>
@@ -136,7 +136,7 @@ export function PaginaUsuariosAdmin() {
                         {user.is_active ? "active" : "inactive"}
                       </InsigniaEstado>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{formatDate(user.last_access_at)}</td>
+                    <td className="px-4 py-3 text-slate-600">{formatearFecha(user.last_access_at)}</td>
                   </tr>
                 ))}
                 {!isLoading && users.length === 0 && (
@@ -198,7 +198,7 @@ export function PaginaUsuariosAdmin() {
               <Boton
                 disabled={isSaving}
                 icon={<Save size={16} aria-hidden="true" />}
-                onClick={saveChanges}
+                onClick={guardarCambios}
                 type="button"
               >
                 {isSaving ? "Guardando..." : "Guardar cambios"}

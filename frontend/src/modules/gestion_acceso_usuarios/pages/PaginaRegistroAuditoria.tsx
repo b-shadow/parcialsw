@@ -8,14 +8,14 @@ import { InsigniaEstado } from "../../../shared/components/InsigniaEstado";
 import type { RegistroAuditoria, Usuario } from "../types/usuario";
 import { servicioUsuarios } from "../services/servicioUsuarios";
 
-function formatDate(value: string) {
+function formatearFecha(value: string) {
   return new Intl.DateTimeFormat("es", {
     dateStyle: "medium",
     timeStyle: "short"
   }).format(new Date(value));
 }
 
-function metadataPreview(value: Record<string, unknown>) {
+function vistaPreviaMetadatos(value: Record<string, unknown>) {
   const text = JSON.stringify(value);
   return text === "{}" ? "Sin metadatos" : text;
 }
@@ -31,13 +31,13 @@ export function PaginaRegistroAuditoria() {
 
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
 
-  async function load(params?: { module?: string; action?: string; user_id?: string }) {
+  async function cargar(params?: { module?: string; action?: string; user_id?: string }) {
     setIsLoading(true);
     setMessage("");
     try {
       const [logList, userList] = await Promise.all([
-        servicioUsuarios.listAuditLogs({ ...params, limit: 150 }),
-        servicioUsuarios.list()
+        servicioUsuarios.listarBitacora({ ...params, limit: 150 }),
+        servicioUsuarios.listar()
       ]);
       setLogs(logList);
       setUsers(userList);
@@ -49,12 +49,12 @@ export function PaginaRegistroAuditoria() {
   }
 
   useEffect(() => {
-    load();
+    cargar();
   }, []);
 
-  function applyFilters(event: FormEvent<HTMLFormElement>) {
+  function aplicarFiltros(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    load({
+    cargar({
       module: moduleFilter.trim() || undefined,
       action: actionFilter.trim() || undefined,
       user_id: userFilter || undefined
@@ -68,13 +68,13 @@ export function PaginaRegistroAuditoria() {
           <h1 className="text-2xl font-semibold">Bitacora del sistema</h1>
           <p className="text-sm text-slate-500">Seguimiento de acciones, usuarios, resultados y metadatos operativos.</p>
         </div>
-        <Boton icon={<RefreshCcw size={16} aria-hidden="true" />} onClick={() => load()} type="button" variant="secondary">
+        <Boton icon={<RefreshCcw size={16} aria-hidden="true" />} onClick={() => cargar()} type="button" variant="secondary">
           Actualizar
         </Boton>
       </div>
 
       <Panel className="p-5">
-        <form className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_auto]" onSubmit={applyFilters}>
+        <form className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_auto]" onSubmit={aplicarFiltros}>
           <Entrada label="Modulo" onChange={(event) => setModuleFilter(event.target.value)} placeholder="acceso_usuarios" value={moduleFilter} />
           <Entrada label="Accion" onChange={(event) => setActionFilter(event.target.value)} placeholder="UPDATE_USER" value={actionFilter} />
           <label className="grid gap-1.5 text-sm font-medium text-slate-700">
@@ -126,7 +126,7 @@ export function PaginaRegistroAuditoria() {
                 const user = log.user_id ? usersById.get(log.user_id) : undefined;
                 return (
                   <tr key={log.id} className="hover:bg-slate-50">
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(log.created_at)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatearFecha(log.created_at)}</td>
                     <td className="px-4 py-3">
                       <p className="font-medium text-ink">{user?.full_name ?? "Sistema"}</p>
                       <p className="text-xs text-slate-500">{user?.email ?? log.user_id ?? "Sin usuario"}</p>
@@ -138,8 +138,8 @@ export function PaginaRegistroAuditoria() {
                     </td>
                     <td className="max-w-md px-4 py-3 text-slate-600">
                       <p>{log.detail ?? "Sin detalle"}</p>
-                      <p className="mt-1 truncate text-xs text-slate-400" title={metadataPreview(log.metadata_json)}>
-                        {metadataPreview(log.metadata_json)}
+                      <p className="mt-1 truncate text-xs text-slate-400" title={vistaPreviaMetadatos(log.metadata_json)}>
+                        {vistaPreviaMetadatos(log.metadata_json)}
                       </p>
                     </td>
                   </tr>

@@ -6,23 +6,23 @@ import { temaPredeterminadoV2 } from "../theme/contratoTema";
 import { EspacioEstilosFlutter } from "./EspacioEstilosFlutter";
 
 const mocks = vi.hoisted(() => ({
-  getTheme: vi.fn(), presets: vi.fn(), uiManifest: vi.fn(), saveTheme: vi.fn(),
+  obtenerTema: vi.fn(), listarPreajustes: vi.fn(), manifiestoInterfaz: vi.fn(), guardarTema: vi.fn(),
 }));
 
 vi.mock("../../../core/websocket/socketProyecto", () => ({
-  ClienteSocketProyecto: class { connect() {} close() {} }
+  ClienteSocketProyecto: class { conectar() {} cerrar() {} }
 }));
 vi.mock("../services/servicioGeneracion", () => ({ servicioGeneracion: {
-  ...mocks, createPreset: vi.fn(), deletePreset: vi.fn()
+  ...mocks, crearPreajuste: vi.fn(), eliminarPreajuste: vi.fn()
 } }));
 
 afterEach(() => cleanup());
 
 describe("FlutterStyleWorkspace", () => {
   it("refleja opciones visuales y navega entre módulos y pantallas", async () => {
-    mocks.getTheme.mockResolvedValue({ theme: temaPredeterminadoV2, revision: 1, diagnostics: [], valid: true });
-    mocks.presets.mockResolvedValue([]);
-    mocks.uiManifest.mockResolvedValue({
+    mocks.obtenerTema.mockResolvedValue({ theme: temaPredeterminadoV2, revision: 1, diagnostics: [], valid: true });
+    mocks.listarPreajustes.mockResolvedValue([]);
+    mocks.manifiestoInterfaz.mockResolvedValue({
       schema_version: 1, source_hash: "hash", source_transformation_id: "tx", supported_states: ["content", "error"], diagnostics: [],
       modules: [
         { id: "venta", name: "venta", label: "Venta", icon: "folder", screens: [
@@ -68,9 +68,9 @@ describe("FlutterStyleWorkspace", () => {
     expect(screen.getByLabelText("Pantalla")).toHaveValue("curso-list");
   });
   it("carga tema y representa entidades reales del ui_manifest", async () => {
-    mocks.getTheme.mockResolvedValue({ theme: temaPredeterminadoV2, revision: 3, diagnostics: [], valid: true });
-    mocks.presets.mockResolvedValue([]);
-    mocks.uiManifest.mockResolvedValue({ schema_version: 1, source_hash: "abc123456789", source_transformation_id: "tx", supported_states: ["content"], diagnostics: [], modules: [{ id: "curso", name: "curso", label: "Curso", icon: "folder", screens: [{ id: "curso-list", kind: "list", title: "Curso", fields: [{ id: "nombre", name: "nombre", label: "Nombre", control: "text_input", required: true, logical_type: "string" }], actions: [] }] }] });
+    mocks.obtenerTema.mockResolvedValue({ theme: temaPredeterminadoV2, revision: 3, diagnostics: [], valid: true });
+    mocks.listarPreajustes.mockResolvedValue([]);
+    mocks.manifiestoInterfaz.mockResolvedValue({ schema_version: 1, source_hash: "abc123456789", source_transformation_id: "tx", supported_states: ["content"], diagnostics: [], modules: [{ id: "curso", name: "curso", label: "Curso", icon: "folder", screens: [{ id: "curso-list", kind: "list", title: "Curso", fields: [{ id: "nombre", name: "nombre", label: "Nombre", control: "text_input", required: true, logical_type: "string" }], actions: [] }] }] });
     const onChange = vi.fn();
     render(<EspacioEstilosFlutter projectId="project" transformationId="tx" value={temaPredeterminadoV2} onChange={onChange} />);
     await waitFor(() => expect(screen.getAllByText("Curso").length).toBeGreaterThan(0));
@@ -79,13 +79,13 @@ describe("FlutterStyleWorkspace", () => {
   });
 
   it("aplica un cambio al borrador sin guardarlo automaticamente", async () => {
-    mocks.getTheme.mockResolvedValue({ theme: temaPredeterminadoV2, revision: 1, diagnostics: [], valid: true });
-    mocks.presets.mockResolvedValue([]);
-    mocks.uiManifest.mockResolvedValue({ schema_version: 1, source_hash: "hash", source_transformation_id: "tx", supported_states: [], diagnostics: [], modules: [] });
+    mocks.obtenerTema.mockResolvedValue({ theme: temaPredeterminadoV2, revision: 1, diagnostics: [], valid: true });
+    mocks.listarPreajustes.mockResolvedValue([]);
+    mocks.manifiestoInterfaz.mockResolvedValue({ schema_version: 1, source_hash: "hash", source_transformation_id: "tx", supported_states: [], diagnostics: [], modules: [] });
     const onChange = vi.fn();
     render(<EspacioEstilosFlutter projectId="project" transformationId="tx" value={temaPredeterminadoV2} onChange={onChange} />);
     fireEvent.change(screen.getByLabelText("Selector primary"), { target: { value: "#123456" } });
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ light: expect.objectContaining({ primary: "#123456" }) }));
-    expect(mocks.saveTheme).not.toHaveBeenCalled();
+    expect(mocks.guardarTema).not.toHaveBeenCalled();
   });
 });

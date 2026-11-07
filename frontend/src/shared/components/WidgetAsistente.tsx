@@ -4,18 +4,18 @@ import { Bot, HelpCircle, Maximize2, MessageCircle, Minimize2, Send, X } from "l
 import { useAlmacenTema } from "../../core/theme/almacenTema";
 import { cn } from "../utils/cn";
 
-type AssistantMessage = {
+type MensajeAsistente = {
   role: "assistant" | "user";
   text: string;
 };
 
-type HelpTopic = {
+type TemaAyuda = {
   title: string;
   keywords: string[];
   answer: string;
 };
 
-const topics: HelpTopic[] = [
+const temas: TemaAyuda[] = [
   {
     title: "Generar UML desde imagen",
     keywords: ["foto", "imagen", "image", "uml", "diagrama", "camara", "dibujo", "papel"],
@@ -78,27 +78,27 @@ const topics: HelpTopic[] = [
   }
 ];
 
-const initialMessages: AssistantMessage[] = [
+const mensajesIniciales: MensajeAsistente[] = [
   {
     role: "assistant",
     text: "Hola. Soy el asistente del sistema. Puedes preguntarme donde generar UML desde fotos, como exportar a Enterprise Architect, como generar backend/frontend o como editar multiplicidades."
   }
 ];
 
-function normalizeQuestion(value: string) {
+function normalizarPregunta(value: string) {
   return value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 }
 
-function answerQuestion(question: string) {
-  const normalized = normalizeQuestion(question);
-  const scored = topics
+function responderPregunta(question: string) {
+  const normalized = normalizarPregunta(question);
+  const scored = temas
     .map((topic) => ({
       topic,
       score: topic.keywords.reduce((total, keyword) => {
-        return total + (normalized.includes(normalizeQuestion(keyword)) ? 1 : 0);
+        return total + (normalized.includes(normalizarPregunta(keyword)) ? 1 : 0);
       }, 0)
     }))
     .sort((first, second) => second.score - first.score);
@@ -109,7 +109,7 @@ function answerQuestion(question: string) {
   return "No tengo una respuesta exacta para esa consulta todavia. Prueba preguntando por imagen a UML, texto, voz, exportar XML, multiplicidad, generacion Spring Boot/Flutter, PostgreSQL o versiones.";
 }
 
-const quickQuestions = [
+const preguntasRapidas = [
   "Donde genero diagramas mediante fotos?",
   "Como exporto a Enterprise Architect?",
   "Como genero backend y frontend?",
@@ -120,12 +120,12 @@ export function WidgetAsistente() {
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [question, setQuestion] = useState("");
-  const [messages, setMessages] = useState<AssistantMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<MensajeAsistente[]>(mensajesIniciales);
   const isDark = useAlmacenTema((state) => state.mode === "dark");
   const panelSize = isExpanded ? "h-[640px] w-[520px]" : "h-[520px] w-[380px]";
-  const suggestedQuestions = useMemo(() => quickQuestions, []);
+  const suggestedQuestions = useMemo(() => preguntasRapidas, []);
 
-  function ask(nextQuestion: string) {
+  function preguntar(nextQuestion: string) {
     const trimmed = nextQuestion.trim();
     if (!trimmed) {
       return;
@@ -133,14 +133,14 @@ export function WidgetAsistente() {
     setMessages((current) => [
       ...current,
       { role: "user", text: trimmed },
-      { role: "assistant", text: answerQuestion(trimmed) }
+      { role: "assistant", text: responderPregunta(trimmed) }
     ]);
     setQuestion("");
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function manejarEnvio(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    ask(question);
+    preguntar(question);
   }
 
   return (
@@ -212,14 +212,14 @@ export function WidgetAsistente() {
                     isDark ? "border-slate-700 text-slate-200 hover:bg-slate-800" : "border-slate-200 text-slate-700 hover:bg-slate-50"
                   )}
                   key={item}
-                  onClick={() => ask(item)}
+                  onClick={() => preguntar(item)}
                   type="button"
                 >
                   {item}
                 </button>
               ))}
             </div>
-            <form className="flex gap-2" onSubmit={handleSubmit}>
+            <form className="flex gap-2" onSubmit={manejarEnvio}>
               <input
                 className={cn(
                   "h-10 min-w-0 flex-1 rounded-md border px-3 text-sm outline-none transition focus:border-accent focus:ring-2",

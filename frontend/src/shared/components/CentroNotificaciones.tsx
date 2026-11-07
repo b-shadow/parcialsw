@@ -27,13 +27,13 @@ export function CentroNotificaciones() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const load = useCallback(async (append = false, requestedCursor?: string | null) => {
+  const cargar = useCallback(async (append = false, requestedCursor?: string | null) => {
     setLoading(true);
     setError("");
     try {
       const [page, count] = await Promise.all([
-        servicioNotificaciones.list(append ? requestedCursor ?? undefined : undefined),
-        servicioNotificaciones.unreadCount()
+        servicioNotificaciones.listar(append ? requestedCursor ?? undefined : undefined),
+        servicioNotificaciones.cantidadNoLeidas()
       ]);
       setItems((current) => append ? [...current, ...page.items] : page.items);
       setCursor(page.next_cursor);
@@ -47,9 +47,9 @@ export function CentroNotificaciones() {
   }, []);
 
   useEffect(() => {
-    void servicioNotificaciones.unreadCount().then(setUnread).catch(() => undefined);
+    void servicioNotificaciones.cantidadNoLeidas().then(setUnread).catch(() => undefined);
     const timer = window.setInterval(() => {
-      void servicioNotificaciones.unreadCount().then(setUnread).catch(() => undefined);
+      void servicioNotificaciones.cantidadNoLeidas().then(setUnread).catch(() => undefined);
     }, 30_000);
     return () => window.clearInterval(timer);
   }, []);
@@ -58,30 +58,30 @@ export function CentroNotificaciones() {
     const query = new URLSearchParams(location.search);
     const notificationId = query.get("notification_id");
     if (!notificationId) return;
-    void servicioNotificaciones.clicked(notificationId).then(() => {
+    void servicioNotificaciones.abrir(notificationId).then(() => {
       query.delete("notification_id");
       navigate(`${location.pathname}${query.toString() ? `?${query}` : ""}`, { replace: true });
     }).catch(() => undefined);
   }, [location.pathname, location.search, navigate]);
 
   useEffect(() => {
-    const refresh = (raw: Event) => {
+    const recargar = (raw: Event) => {
       const detail = (raw as CustomEvent<Record<string, unknown>>).detail;
       if (["NOTIFICATION_CREATED", "PROJECT_VERSION_CREATED", "PROJECT_VERSION_RESTORED"].includes(String(detail?.type))) {
-        void servicioNotificaciones.unreadCount().then(setUnread).catch(() => undefined);
-        if (open) void load(false);
+        void servicioNotificaciones.cantidadNoLeidas().then(setUnread).catch(() => undefined);
+        if (open) void cargar(false);
       }
     };
-    window.addEventListener("case:project-socket-event", refresh);
-    return () => window.removeEventListener("case:project-socket-event", refresh);
-  }, [load, open]);
+    window.addEventListener("case:project-socket-event", recargar);
+    return () => window.removeEventListener("case:project-socket-event", recargar);
+  }, [cargar, open]);
 
   useEffect(() => {
-    if (open) void load(false);
-  }, [load, open]);
+    if (open) void cargar(false);
+  }, [cargar, open]);
 
-  async function select(item: NotificacionBandeja) {
-    const updated = await servicioNotificaciones.clicked(item.id);
+  async function seleccionar(item: NotificacionBandeja) {
+    const updated = await servicioNotificaciones.abrir(item.id);
     setItems((current) => current.map((value) => value.id === item.id ? updated : value));
     setUnread((value) => Math.max(0, value - (item.read_at ? 0 : 1)));
     setOpen(false);
@@ -89,8 +89,8 @@ export function CentroNotificaciones() {
     buttonRef.current?.focus();
   }
 
-  async function readAll() {
-    await servicioNotificaciones.markAllRead();
+  async function leerTodas() {
+    await servicioNotificaciones.marcarTodasLeidas();
     setItems((current) => current.map((item) => ({ ...item, read_at: item.read_at ?? new Date().toISOString() })));
     setUnread(0);
   }
@@ -112,21 +112,21 @@ export function CentroNotificaciones() {
           <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-700">
             <div><h2 className="text-sm font-bold">Notificaciones</h2><p className="text-xs text-slate-500">{unread ? `${unread} sin leer` : "Todo al dia"}</p></div>
             <div className="flex gap-1">
-              <button aria-label="Marcar todas como leidas" className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => void readAll()} title="Marcar todas como leidas" type="button"><CheckCheck size={18} /></button>
+              <button aria-label="Marcar todas como leidas" className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => void leerTodas()} title="Marcar todas como leidas" type="button"><CheckCheck size={18} /></button>
               <button aria-label="Cerrar notificaciones" className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => setOpen(false)} title="Cerrar" type="button"><X size={18} /></button>
             </div>
           </header>
           <div className="overflow-y-auto">
             {items.map((item) => (
-              <button key={item.id} className={cn("flex w-full gap-3 border-b border-slate-100 px-4 py-3 text-left dark:border-slate-800", !item.read_at && "bg-teal-50/70 dark:bg-teal-950/20")} onClick={() => void select(item)} type="button">
+              <button key={item.id} className={cn("flex w-full gap-3 border-b border-slate-100 px-4 py-3 text-left dark:border-slate-800", !item.read_at && "bg-teal-50/70 dark:bg-teal-950/20")} onClick={() => void seleccionar(item)} type="button">
                 <span className="mt-0.5 text-teal-700">{item.severity === "error" ? <CircleAlert size={18} /> : <Inbox size={18} />}</span>
                 <span className="min-w-0 flex-1"><span className="block text-sm font-bold">{item.title}</span><span className="mt-1 block text-xs leading-5 text-slate-600 dark:text-slate-300">{item.body}</span><time className="mt-1 block text-[11px] text-slate-400">{moment(item.occurred_at)}</time></span>
               </button>
             ))}
             {!items.length && !loading && !error ? <p className="px-4 py-10 text-center text-sm text-slate-500">No tienes notificaciones.</p> : null}
-            {error ? <button className="w-full px-4 py-6 text-sm text-red-600" onClick={() => void load(false)} type="button">{error} Reintentar</button> : null}
+            {error ? <button className="w-full px-4 py-6 text-sm text-red-600" onClick={() => void cargar(false)} type="button">{error} Reintentar</button> : null}
             {loading ? <p className="flex items-center justify-center gap-2 px-4 py-5 text-sm text-slate-500"><LoaderCircle className="animate-spin" size={17} /> Cargando</p> : null}
-            {hasMore && !loading ? <button className="w-full px-4 py-3 text-sm font-bold text-teal-700" onClick={() => void load(true, cursor)} type="button">Cargar anteriores</button> : null}
+            {hasMore && !loading ? <button className="w-full px-4 py-3 text-sm font-bold text-teal-700" onClick={() => void cargar(true, cursor)} type="button">Cargar anteriores</button> : null}
           </div>
         </section>
       ) : null}

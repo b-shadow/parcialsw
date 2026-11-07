@@ -31,7 +31,7 @@ describe("phase 4 UML method contracts", () => {
   it("creates once with If-None-Match", async () => {
     vi.mocked(clienteApi.put).mockResolvedValue({ data: { revision: 1 } });
 
-    await servicioUML.saveMethodSpecification("method-1", draft, null);
+    await servicioUML.guardarEspecificacionMetodo("method-1", draft, null);
 
     expect(clienteApi.put).toHaveBeenCalledWith(
       "/uml/methods/method-1/specification",
@@ -44,8 +44,8 @@ describe("phase 4 UML method contracts", () => {
     vi.mocked(clienteApi.put).mockResolvedValue({ data: { revision: 5 } });
     vi.mocked(clienteApi.delete).mockResolvedValue({ data: undefined });
 
-    await servicioUML.saveMethodSpecification("method-1", draft, 4);
-    await servicioUML.deleteMethodSpecification("method-1", 5);
+    await servicioUML.guardarEspecificacionMetodo("method-1", draft, 4);
+    await servicioUML.eliminarEspecificacionMetodo("method-1", 5);
 
     expect(clienteApi.put).toHaveBeenCalledWith(
       "/uml/methods/method-1/specification",
@@ -61,8 +61,8 @@ describe("phase 4 UML method contracts", () => {
   it("uses strict validation and an idempotent refinement message", async () => {
     vi.mocked(clienteApi.post).mockResolvedValue({ data: {} });
 
-    await servicioUML.validateMethodSpecification("method-1", true);
-    await servicioUML.refineMethodSpecification("method-1", "Crear formulario", 3);
+    await servicioUML.validarEspecificacionMetodo("method-1", true);
+    await servicioUML.refinarEspecificacionMetodo("method-1", "Crear formulario", 3);
 
     expect(clienteApi.post).toHaveBeenNthCalledWith(
       1,

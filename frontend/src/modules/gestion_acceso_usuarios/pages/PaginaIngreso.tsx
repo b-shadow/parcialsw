@@ -13,8 +13,8 @@ import loginLeftImage from "../../../../assets/login-izquierda.png";
 export function PaginaIngreso() {
   const navigate = useNavigate();
   const isDark = useAlmacenTema((state) => state.mode === "dark");
-  const setToken = useAlmacenAutenticacion((state) => state.setToken);
-  const setUser = useAlmacenAutenticacion((state) => state.setUser);
+  const establecerToken = useAlmacenAutenticacion((state) => state.establecerToken);
+  const establecerUsuario = useAlmacenAutenticacion((state) => state.establecerUsuario);
   const [email, setEmail] = useState("editor@example.com");
   const [password, setPassword] = useState("Password123");
   const [showPassword, setShowPassword] = useState(false);
@@ -22,7 +22,7 @@ export function PaginaIngreso() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(event: FormEvent) {
+  async function manejarEnvio(event: FormEvent) {
     event.preventDefault();
     setError("");
     if (!validarCorreo(email) || !validarContrasena(password)) {
@@ -31,10 +31,10 @@ export function PaginaIngreso() {
     }
     setLoading(true);
     try {
-      const token = await servicioAutenticacion.login({ email, password });
-      setToken(token.access_token);
-      const user = await servicioAutenticacion.me();
-      setUser(user);
+      const token = await servicioAutenticacion.iniciarSesion({ email, password });
+      establecerToken(token.access_token);
+      const user = await servicioAutenticacion.obtenerSesion();
+      establecerUsuario(user);
       navigate("/proyectos/nuevo");
     } catch {
       setError("No se pudo iniciar sesion con esos datos.");
@@ -101,7 +101,7 @@ export function PaginaIngreso() {
             <p className={cn("mt-3 text-xl", bodyTone)}>Inicia sesion para continuar en CASE Inteligente</p>
           </div>
 
-          <form className="grid gap-6" onSubmit={handleSubmit}>
+          <form className="grid gap-6" onSubmit={manejarEnvio}>
             <label className={cn("grid gap-2 text-base font-bold", labelTone)}>
               Correo electronico
               <span className={cn("flex h-14 items-center gap-3 overflow-hidden rounded-lg border transition focus-within:ring-4", fieldTone)}>

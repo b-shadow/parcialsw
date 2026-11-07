@@ -78,7 +78,7 @@ const KIND_FILTERS: { id: KindFilter; label: string; entityType?: string }[] = [
   { id: "gen", label: "Generación", entityType: "generation" },
 ];
 
-function getEntryBadge(entry: EntradaRegistroCambios) {
+function obtenerInsigniaEntrada(entry: EntradaRegistroCambios) {
   if (entry.source === "ai") {
     return <InsigniaEstado tone="ai">IA</InsigniaEstado>;
   }
@@ -117,7 +117,7 @@ export function PanelRegistroCambios({ projectId }: { projectId: string }) {
   useEffect(() => {
     let cancelled = false;
     servicioProyectos
-      .members(projectId)
+      .listarIntegrantes(projectId)
       .then((data) => {
         if (!cancelled) setMembers(data);
       })
@@ -129,7 +129,7 @@ export function PanelRegistroCambios({ projectId }: { projectId: string }) {
     };
   }, [projectId]);
 
-  const fetchPage = useCallback(
+  const obtenerPagina = useCallback(
     async (cursor?: string) => {
       const activeKind = KIND_FILTERS.find((k) => k.id === selectedKind);
       const params = {
@@ -137,16 +137,16 @@ export function PanelRegistroCambios({ projectId }: { projectId: string }) {
         actor_id: selectedActorId || undefined,
         entity_type: activeKind?.entityType,
       };
-      return await servicioRegistroCambios.list(projectId, params);
+      return await servicioRegistroCambios.listar(projectId, params);
     },
     [projectId, selectedActorId, selectedKind]
   );
 
-  const loadInitial = useCallback(async () => {
+  const cargarInicial = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const page: PaginaRegistroCambios = await fetchPage();
+      const page: PaginaRegistroCambios = await obtenerPagina();
       setEntries(page.items);
       setNextCursor(page.next_cursor);
       setSource(page.source);
@@ -155,17 +155,17 @@ export function PanelRegistroCambios({ projectId }: { projectId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [fetchPage]);
+  }, [obtenerPagina]);
 
   useEffect(() => {
-    void loadInitial();
-  }, [loadInitial]);
+    void cargarInicial();
+  }, [cargarInicial]);
 
-  const handleLoadMore = async () => {
+  const manejarCargarMas = async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
     try {
-      const page = await fetchPage(nextCursor);
+      const page = await obtenerPagina(nextCursor);
       setEntries((prev) => {
         const existingIds = new Set(prev.map((e) => e.id));
         const newUnique = page.items.filter((item) => !existingIds.has(item.id));
@@ -182,7 +182,7 @@ export function PanelRegistroCambios({ projectId }: { projectId: string }) {
 
   // WebSocket subscription for live updates
   useEffect(() => {
-    const handleEvent = (event: EventoSocketProyectoAnalizado) => {
+    const manejarEvento = (event: EventoSocketProyectoAnalizado) => {
       const eventRecord = event as unknown as Record<string, unknown>;
       const rawRecord = eventRecord.raw as Record<string, unknown> | undefined;
       const eventType =
@@ -219,26 +219,26 @@ export function PanelRegistroCambios({ projectId }: { projectId: string }) {
       ) {
         if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = setTimeout(() => {
-          void loadInitial();
+          void cargarInicial();
         }, 1000);
       }
     };
 
     const client = new ClienteSocketProyecto({
       projectId,
-      getProjectSequence: () => 0,
-      getConversationSequence: () => 0,
-      onEvent: handleEvent,
-      onStatus: () => {},
+      obtenerSecuenciaProyecto: () => 0,
+      obtenerSecuenciaConversacion: () => 0,
+      alRecibirEvento: manejarEvento,
+      alCambiarEstado: () => {},
     });
 
-    client.connect();
+    client.conectar();
 
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      client.close();
+      client.cerrar();
     };
-  }, [projectId, loadInitial]);
+  }, [projectId, cargarInicial]);
 
   const groupedEntries = useMemo(() => {
     const groups: { day: string; items: EntradaRegistroCambios[] }[] = [];
@@ -370,7 +370,7 @@ export function PanelRegistroCambios({ projectId }: { projectId: string }) {
                             {entry.summary}
                           </p>
                           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                            {getEntryBadge(entry)}
+                            {obtenerInsigniaEntrada(entry)}
                             {entry.metadata && typeof entry.metadata === "object" && (
                               <>
                                 {entry.metadata.confirmed_by && (
@@ -411,7 +411,7 @@ export function PanelRegistroCambios({ projectId }: { projectId: string }) {
               type="button"
               className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
               disabled={loadingMore}
-              onClick={() => void handleLoadMore()}
+              onClick={() => void manejarCargarMas()}
             >
               {loadingMore ? <LoaderCircle className="mr-2 animate-spin" size={14} /> : null}
               Cargar más

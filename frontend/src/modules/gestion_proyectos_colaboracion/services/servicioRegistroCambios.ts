@@ -9,7 +9,7 @@ export type ParametrosRegistroCambios = {
 };
 
 export const servicioRegistroCambios = {
-  async list(projectId: string, params: ParametrosRegistroCambios = {}): Promise<PaginaRegistroCambios> {
+  async listar(projectId: string, params: ParametrosRegistroCambios = {}): Promise<PaginaRegistroCambios> {
     const response = await clienteApi.get<PaginaRegistroCambios>(`/projects/${projectId}/change-log`, {
       params,
     });

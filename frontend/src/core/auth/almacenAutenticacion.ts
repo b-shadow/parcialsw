@@ -14,15 +14,15 @@ export type UsuarioAutenticado = {
 type AuthState = {
   token: string | null;
   user: UsuarioAutenticado | null;
-  setToken: (token: string | null) => void;
-  setUser: (user: UsuarioAutenticado | null) => void;
+  establecerToken: (token: string | null) => void;
+  establecerUsuario: (user: UsuarioAutenticado | null) => void;
   logout: () => void;
 };
 
 export const useAlmacenAutenticacion = create<AuthState>((set) => ({
   token: window.localStorage.getItem("case_access_token"),
   user: null,
-  setToken: (token) => {
+  establecerToken: (token) => {
     if (token) {
       window.localStorage.setItem("case_access_token", token);
     } else {
@@ -30,7 +30,7 @@ export const useAlmacenAutenticacion = create<AuthState>((set) => ({
     }
     set({ token });
   },
-  setUser: (user) => set({ user }),
+  establecerUsuario: (user) => set({ user }),
   logout: () => {
     window.localStorage.removeItem("case_access_token");
     set({ token: null, user: null });

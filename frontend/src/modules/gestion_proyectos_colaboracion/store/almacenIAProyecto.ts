@@ -16,19 +16,19 @@ type ProjectAiState = {
   processing: boolean;
   hasMoreBefore: boolean;
   initialize: (projectId: string, conversationId?: string) => void;
-  setHistory: (messages: MensajeIA[], hasMoreBefore: boolean) => void;
+  establecerHistorial: (messages: MensajeIA[], hasMoreBefore: boolean) => void;
   prependHistory: (messages: MensajeIA[], hasMoreBefore: boolean) => void;
   upsertMessage: (message: MensajeIA) => void;
-  setActions: (actions: AccionIA[]) => void;
+  establecerAcciones: (actions: AccionIA[]) => void;
   upsertAction: (action: AccionIA) => void;
-  setRecommendations: (items: RecomendacionIA[]) => void;
+  establecerRecomendaciones: (items: RecomendacionIA[]) => void;
   upsertRecommendation: (item: RecomendacionIA) => void;
-  setPresence: (presence: PresenciaProyecto[]) => void;
+  establecerPresencia: (presence: PresenciaProyecto[]) => void;
   upsertPresence: (member: PresenciaProyecto) => void;
-  removePresence: (userId: string) => void;
-  setSequences: (projectSequence?: number, conversationSequence?: number) => void;
-  setSocketStatus: (status: EstadoSocketProyecto) => void;
-  setProcessing: (processing: boolean) => void;
+  quitarPresencia: (userId: string) => void;
+  establecerSecuencias: (projectSequence?: number, conversationSequence?: number) => void;
+  establecerEstadoSocket: (status: EstadoSocketProyecto) => void;
+  establecerProcesamiento: (processing: boolean) => void;
 };
 
 function sortedUnique<T extends { id: string }>(current: T[], incoming: T[], compare: (a: T, b: T) => number) {
@@ -74,7 +74,7 @@ export const useAlmacenIAProyecto = create<ProjectAiState>((set) => ({
     processing: false,
     hasMoreBefore: false
   }),
-  setHistory: (messages, hasMoreBefore) => set((state) => {
+  establecerHistorial: (messages, hasMoreBefore) => set((state) => {
     const merged = sortedUnique(state.messages, messages, (a, b) => a.sequence_number - b.sequence_number);
     return {
       messages: merged,
@@ -92,11 +92,11 @@ export const useAlmacenIAProyecto = create<ProjectAiState>((set) => ({
       sortedUnique(state.messages, [message], (a, b) => a.sequence_number - b.sequence_number)
     )
   })),
-  setActions: (actions) => set({ actions }),
+  establecerAcciones: (actions) => set({ actions }),
   upsertAction: (action) => set((state) => ({
     actions: sortedUnique(state.actions, [action], (a, b) => b.created_at.localeCompare(a.created_at))
   })),
-  setRecommendations: (recommendations) => set({ recommendations }),
+  establecerRecomendaciones: (recommendations) => set({ recommendations }),
   upsertRecommendation: (item) => set((state) => ({
     recommendations: sortedUnique(
       state.recommendations,
@@ -104,7 +104,7 @@ export const useAlmacenIAProyecto = create<ProjectAiState>((set) => ({
       (a, b) => b.created_at.localeCompare(a.created_at)
     )
   })),
-  setPresence: (presence) => set({
+  establecerPresencia: (presence) => set({
     presence: [...new Map(presence.map((member) => [member.user_id, member])).values()]
       .sort((a, b) => a.display_name.localeCompare(b.display_name))
   }),
@@ -114,13 +114,13 @@ export const useAlmacenIAProyecto = create<ProjectAiState>((set) => ({
       member
     ].sort((a, b) => a.display_name.localeCompare(b.display_name))
   })),
-  removePresence: (userId) => set((state) => ({
+  quitarPresencia: (userId) => set((state) => ({
     presence: state.presence.filter((member) => member.user_id !== userId)
   })),
-  setSequences: (projectSequence, conversationSequence) => set((state) => ({
+  establecerSecuencias: (projectSequence, conversationSequence) => set((state) => ({
     projectSequence: Math.max(state.projectSequence, projectSequence ?? 0),
     conversationSequence: Math.max(state.conversationSequence, conversationSequence ?? 0)
   })),
-  setSocketStatus: (socketStatus) => set({ socketStatus }),
-  setProcessing: (processing) => set({ processing })
+  establecerEstadoSocket: (socketStatus) => set({ socketStatus }),
+  establecerProcesamiento: (processing) => set({ processing })
 }));

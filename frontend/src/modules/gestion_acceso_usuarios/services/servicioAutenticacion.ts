@@ -2,19 +2,19 @@ import { clienteApi } from "../../../core/api/cliente";
 import type { CargaIngreso, CargaRegistro, RespuestaToken, Usuario } from "../types/usuario";
 
 export const servicioAutenticacion = {
-  async login(payload: CargaIngreso) {
+  async iniciarSesion(payload: CargaIngreso) {
     const response = await clienteApi.post<RespuestaToken>("/auth/login", payload);
     return response.data;
   },
-  async register(payload: CargaRegistro) {
+  async registrar(payload: CargaRegistro) {
     const response = await clienteApi.post<Usuario>("/auth/register", payload);
     return response.data;
   },
-  async me() {
+  async obtenerSesion() {
     const response = await clienteApi.get<Usuario>("/auth/me");
     return response.data;
   },
-  async listUsers() {
+  async listarUsuarios() {
     const response = await clienteApi.get<Usuario[]>("/users");
     return response.data;
   }

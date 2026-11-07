@@ -172,6 +172,8 @@ jobs:
   frontend-quality:
     name: Frontend unit, build and E2E
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -190,9 +192,6 @@ jobs:
       - name: Production build
         working-directory: frontend
         run: npm run build
-      - name: Install Chromium
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium
       - name: Browser E2E and PWA offline
         working-directory: frontend
         run: npx playwright test

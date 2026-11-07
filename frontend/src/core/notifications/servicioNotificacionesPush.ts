@@ -7,20 +7,20 @@ type PushConfig = {
 
 export type EstadoNotificacionPush = "unsupported" | "disabled" | "available" | "subscribed";
 
-function urlBase64ToUint8Array(value: string) {
+function urlBase64AUint8Array(value: string) {
   const padding = "=".repeat((4 - (value.length % 4)) % 4);
   const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
   const raw = window.atob(base64);
   return Uint8Array.from([...raw].map((character) => character.charCodeAt(0)));
 }
 
-function isSupported() {
+function esCompatible() {
   return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
 
 export const servicioNotificacionesPush = {
-  async state(): Promise<EstadoNotificacionPush> {
-    if (!isSupported()) {
+  async estado(): Promise<EstadoNotificacionPush> {
+    if (!esCompatible()) {
       return "unsupported";
     }
     const { data: config } = await clienteApi.get<PushConfig>("/notifications/push/config");
@@ -32,8 +32,8 @@ export const servicioNotificacionesPush = {
     return subscription ? "subscribed" : "available";
   },
 
-  async subscribe(): Promise<void> {
-    if (!isSupported()) {
+  async suscribir(): Promise<void> {
+    if (!esCompatible()) {
       throw new Error("Este navegador no admite notificaciones push.");
     }
     const { data: config } = await clienteApi.get<PushConfig>("/notifications/push/config");
@@ -48,7 +48,7 @@ export const servicioNotificacionesPush = {
     const existing = await registration.pushManager.getSubscription();
     const subscription = existing ?? await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(config.public_key)
+      applicationServerKey: urlBase64AUint8Array(config.public_key)
     });
     const serialized = subscription.toJSON();
     if (!serialized.endpoint || !serialized.keys?.p256dh || !serialized.keys.auth) {
@@ -63,8 +63,8 @@ export const servicioNotificacionesPush = {
     });
   },
 
-  async unsubscribe(): Promise<void> {
-    if (!isSupported()) {
+  async cancelarSuscripcion(): Promise<void> {
+    if (!esCompatible()) {
       return;
     }
     const registration = await navigator.serviceWorker.ready;
@@ -78,7 +78,7 @@ export const servicioNotificacionesPush = {
     await subscription.unsubscribe();
   },
 
-  async sendTest(): Promise<void> {
+  async enviarPrueba(): Promise<void> {
     await clienteApi.post("/notifications/push/test");
   }
 };

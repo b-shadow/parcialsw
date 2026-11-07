@@ -21,23 +21,23 @@ export type NotificacionBandeja = {
 };
 
 export const servicioNotificaciones = {
-  async list(cursor?: string) {
+  async listar(cursor?: string) {
     const response = await clienteApi.get<{ items: NotificacionBandeja[]; next_cursor: string | null; has_more: boolean }>("/notifications", { params: { cursor, limit: 30 } });
     return response.data;
   },
-  async unreadCount() {
+  async cantidadNoLeidas() {
     const response = await clienteApi.get<{ count: number }>("/notifications/unread-count");
     return response.data.count;
   },
-  async markRead(id: string) {
+  async marcarLeida(id: string) {
     const response = await clienteApi.post<NotificacionBandeja>(`/notifications/${id}/read`);
     return response.data;
   },
-  async clicked(id: string) {
+  async abrir(id: string) {
     const response = await clienteApi.post<NotificacionBandeja>(`/notifications/${id}/clicked`);
     return response.data;
   },
-  async markAllRead() {
+  async marcarTodasLeidas() {
     await clienteApi.post("/notifications/read-all");
   }
 };

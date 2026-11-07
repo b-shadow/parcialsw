@@ -13,7 +13,7 @@ export function BotonNotificacionesPush() {
   const [message, setMessage] = useState("Consultando notificaciones...");
 
   useEffect(() => {
-    servicioNotificacionesPush.state()
+    servicioNotificacionesPush.estado()
       .then((nextState) => {
         setState(nextState);
         setMessage(
@@ -30,21 +30,21 @@ export function BotonNotificacionesPush() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function toggleNotifications() {
+  async function alternarNotificaciones() {
     if (loading || state === "unsupported" || state === "disabled") {
       return;
     }
     setLoading(true);
     try {
       if (state === "subscribed") {
-        await servicioNotificacionesPush.unsubscribe();
+        await servicioNotificacionesPush.cancelarSuscripcion();
         setState("available");
         setMessage("Activar notificaciones");
       } else {
-        await servicioNotificacionesPush.subscribe();
+        await servicioNotificacionesPush.suscribir();
         setState("subscribed");
         setMessage("Desactivar notificaciones");
-        await servicioNotificacionesPush.sendTest();
+        await servicioNotificacionesPush.enviarPrueba();
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo cambiar la suscripcion");
@@ -65,7 +65,7 @@ export function BotonNotificacionesPush() {
         (state === "disabled" || state === "unsupported") && "cursor-not-allowed opacity-60"
       )}
       disabled={loading || state === "disabled" || state === "unsupported"}
-      onClick={toggleNotifications}
+      onClick={alternarNotificaciones}
       title={message}
       type="button"
     >

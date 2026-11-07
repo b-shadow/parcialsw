@@ -47,7 +47,7 @@ const reportTypes = [
   }
 ];
 
-function formatDate(value: string) {
+function formatearFecha(value: string) {
   return new Intl.DateTimeFormat("es", { dateStyle: "medium" }).format(new Date(value));
 }
 
@@ -58,16 +58,16 @@ export function PaginaReportes() {
 
   useEffect(() => {
     let isMounted = true;
-    async function loadReports() {
+    async function cargarReportes() {
       setIsLoading(true);
       setError("");
       try {
-        const projects = await servicioProyectos.list();
+        const projects = await servicioProyectos.listar();
         const details = await Promise.all(
           projects.map(async (project) => {
             const [diagrams, members] = await Promise.all([
-              servicioUML.listDiagrams(project.id).catch(() => []),
-              servicioProyectos.members(project.id).catch(() => [])
+              servicioUML.listarDiagramas(project.id).catch(() => []),
+              servicioProyectos.listarIntegrantes(project.id).catch(() => [])
             ]);
             return { project, diagrams, members };
           })
@@ -85,7 +85,7 @@ export function PaginaReportes() {
         }
       }
     }
-    void loadReports();
+    void cargarReportes();
     return () => {
       isMounted = false;
     };
@@ -173,7 +173,7 @@ export function PaginaReportes() {
                     </td>
                     <td className="px-3 py-3">{item.diagrams.length}</td>
                     <td className="px-3 py-3">{item.members.length}</td>
-                    <td className="px-3 py-3 text-slate-500">{formatDate(item.project.created_at)}</td>
+                    <td className="px-3 py-3 text-slate-500">{formatearFecha(item.project.created_at)}</td>
                   </tr>
                 ))}
                 {!isLoading && reports.length === 0 && (

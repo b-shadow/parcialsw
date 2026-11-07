@@ -17,7 +17,7 @@ const COLOR_CLASSES = [
   "bg-sky-700 text-white",
 ];
 
-function getHashColor(userId?: string): string {
+function obtenerColorHash(userId?: string): string {
   if (!userId) return COLOR_CLASSES[0];
   let hash = 0;
   for (let i = 0; i < userId.length; i++) {
@@ -28,7 +28,7 @@ function getHashColor(userId?: string): string {
   return COLOR_CLASSES[index];
 }
 
-function getInitials(name: string): string {
+function obtenerIniciales(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "U";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
@@ -54,7 +54,7 @@ export function Avatar({ name, userId, kind = "user", size = "md" }: Propiedades
     );
   }
 
-  const colorClass = getHashColor(userId);
+  const colorClass = obtenerColorHash(userId);
 
   return (
     <div
@@ -66,7 +66,7 @@ export function Avatar({ name, userId, kind = "user", size = "md" }: Propiedades
       title={name}
       aria-label={name}
     >
-      {getInitials(name)}
+      {obtenerIniciales(name)}
     </div>
   );
 }

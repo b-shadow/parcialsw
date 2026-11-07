@@ -9,7 +9,7 @@ import { InsigniaEstado } from "../../../shared/components/InsigniaEstado";
 import { servicioAutenticacion } from "../services/servicioAutenticacion";
 import { servicioUsuarios } from "../services/servicioUsuarios";
 
-function formatDate(value?: string | null) {
+function formatearFecha(value?: string | null) {
   if (!value) {
     return "Sin registro";
   }
@@ -21,7 +21,7 @@ function formatDate(value?: string | null) {
 
 export function PaginaPerfil() {
   const user = useAlmacenAutenticacion((state) => state.user);
-  const setUser = useAlmacenAutenticacion((state) => state.setUser);
+  const establecerUsuario = useAlmacenAutenticacion((state) => state.establecerUsuario);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -29,10 +29,10 @@ export function PaginaPerfil() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    servicioAutenticacion.me().then(setUser).catch(() => undefined);
-  }, [setUser]);
+    servicioAutenticacion.obtenerSesion().then(establecerUsuario).catch(() => undefined);
+  }, [establecerUsuario]);
 
-  async function handlePasswordChange(event: FormEvent<HTMLFormElement>) {
+  async function manejarCambioContrasena(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
     if (newPassword !== confirmPassword) {
@@ -41,7 +41,7 @@ export function PaginaPerfil() {
     }
     setIsSaving(true);
     try {
-      await servicioUsuarios.changePassword({
+      await servicioUsuarios.cambiarContrasena({
         current_password: currentPassword,
         new_password: newPassword
       });
@@ -92,11 +92,11 @@ export function PaginaPerfil() {
             <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded-md border border-slate-200 p-4">
                 <p className="text-xs font-semibold uppercase text-slate-500">Ultimo acceso</p>
-                <p className="mt-1 text-sm font-medium text-ink">{formatDate(user?.last_access_at)}</p>
+                <p className="mt-1 text-sm font-medium text-ink">{formatearFecha(user?.last_access_at)}</p>
               </div>
               <div className="rounded-md border border-slate-200 p-4">
                 <p className="text-xs font-semibold uppercase text-slate-500">Cuenta creada</p>
-                <p className="mt-1 text-sm font-medium text-ink">{formatDate(user?.created_at)}</p>
+                <p className="mt-1 text-sm font-medium text-ink">{formatearFecha(user?.created_at)}</p>
               </div>
             </div>
           </div>
@@ -113,7 +113,7 @@ export function PaginaPerfil() {
             </div>
           </div>
 
-          <form className="grid gap-4" onSubmit={handlePasswordChange}>
+          <form className="grid gap-4" onSubmit={manejarCambioContrasena}>
             <Entrada
               label="Contrasena actual"
               onChange={(event) => setCurrentPassword(event.target.value)}

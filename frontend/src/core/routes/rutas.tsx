@@ -17,7 +17,7 @@ const PaginaEspacioProyecto = lazy(() => import("../../modules/gestion_proyectos
 const PaginaEditorUML = lazy(() => import("../../modules/modelado_uml_inteligente/pages/PaginaEditorUML").then((module) => ({ default: module.PaginaEditorUML })));
 const PaginaGeneracion = lazy(() => import("../../modules/transformacion_generacion_software/pages/PaginaGeneracion").then((module) => ({ default: module.PaginaGeneracion })));
 
-function ProtectedRoute() {
+function RutaProtegida() {
   const token = useAlmacenAutenticacion((state) => state.token);
   return token ? <Outlet /> : <Navigate to="/login" replace />;
 }
@@ -28,7 +28,7 @@ export function RutasAplicacion() {
       <Routes>
         <Route path="/login" element={<PaginaIngreso />} />
         <Route path="/registro" element={<PaginaRegistro />} />
-        <Route element={<ProtectedRoute />}>
+        <Route element={<RutaProtegida />}>
           <Route element={<DisposicionAplicacion />}>
             <Route index element={<Navigate to="/proyectos/nuevo" replace />} />
             <Route path="/proyectos" element={<PaginaProyectos />} />
