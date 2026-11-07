@@ -129,4 +129,11 @@ class RepositorioMovil {
       body: {'current_password': currentPassword, 'new_password': newPassword},
     );
   }
+
+  Future<void> registerMobileDevice(String token) async {
+    await api.post(
+      '/notifications/push/mobile-device',
+      body: {'endpoint': token},
+    );
+  }
 }

@@ -10,6 +10,7 @@ from app.modules.acceso_usuarios.models import Usuario
 from app.modules.notificaciones.schemas import (
     CreacionSuscripcionPush,
     EliminacionSuscripcionPush,
+    RegistroDispositivoMovil,
     RespuestaConfiguracionPush,
     RespuestaSuscripcionPush,
 )
@@ -39,6 +40,19 @@ def suscribir(
         payload,
         user_agent,
     )
+
+
+@router.post("/mobile-device", status_code=status.HTTP_201_CREATED)
+def registrar_dispositivo_movil(
+    payload: RegistroDispositivoMovil,
+    current_user: Annotated[Usuario, Depends(obtener_usuario_actual)],
+    db: Annotated[Session, Depends(obtener_sesion_bd)],
+) -> dict[str, str]:
+    ServicioNotificacionesPush(db).suscribir_dispositivo_movil(
+        current_user.id,
+        payload.endpoint,
+    )
+    return {"status": "ok"}
 
 
 @router.delete("/subscriptions", status_code=status.HTTP_204_NO_CONTENT)

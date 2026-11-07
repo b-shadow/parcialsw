@@ -31,3 +31,7 @@ class RespuestaSuscripcionPush(BaseModel):
 class RespuestaConfiguracionPush(BaseModel):
     enabled: bool
     public_key: str | None = None
+
+
+class RegistroDispositivoMovil(BaseModel):
+    endpoint: str = Field(min_length=10, max_length=2048)
