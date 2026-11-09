@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -50,6 +51,7 @@ class ControladorAplicacion extends ChangeNotifier {
         profile = await repository.profile();
         await cache.write(profile!.id, 'profile', profile!.toJson());
         await refreshProjects();
+        unawaited(syncMobileDeviceToken());
       } on ExcepcionApi catch (exception) {
         if (exception.statusCode == 401) {
           await sessionStore.clear();
@@ -72,6 +74,7 @@ class ControladorAplicacion extends ChangeNotifier {
       await sessionStore.save(token: token, userId: profile!.id);
       await cache.write(profile!.id, 'profile', profile!.toJson());
       await refreshProjects();
+      unawaited(syncMobileDeviceToken());
     } on ExcepcionApi catch (exception) {
       await sessionStore.clear();
       profile = null;
@@ -145,5 +148,25 @@ class ControladorAplicacion extends ChangeNotifier {
   void dispose() {
     _connectivitySubscription?.cancel();
     super.dispose();
+  }
+
+  Future<void> syncMobileDeviceToken() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      final settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional) {
+        final token = await messaging.getToken();
+        if (token != null && authenticated) {
+          await repository.registerMobileDevice(token);
+        }
+      }
+    } catch (_) {
+      // Ignora en entornos sin Firebase configurado o pruebas
+    }
   }
 }

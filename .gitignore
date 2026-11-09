@@ -72,3 +72,7 @@ infra/aws/terraform/*.tfplan
 /docs/pruebas/
 /docs/guias_comandos/
 /docs/segundo parcial/
+
+# Credenciales Firebase
+*firebase-service-account*.json
+*adminsdk*.json

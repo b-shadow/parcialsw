@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "876198978676",
+    "project_id": "case-inteligente-uagrm-3f6ae",
+    "storage_bucket": "case-inteligente-uagrm-3f6ae.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:876198978676:android:45fa4d5731035b89a29d21",
+        "android_client_info": {
+          "package_name": "com.caseinteligente.case_inteligente_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBY-5SA3pVleXQkpgxgoGzwJPvI1lkm2e8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

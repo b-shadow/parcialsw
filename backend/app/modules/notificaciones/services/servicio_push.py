@@ -1,11 +1,20 @@
 import json
 import logging
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID
 
 from pywebpush import WebPushException, webpush
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+try:
+    import firebase_admin
+    from firebase_admin import credentials, messaging
+
+    _FIREBASE_AVAILABLE = True
+except ImportError:
+    _FIREBASE_AVAILABLE = False
 
 from app.core.config.configuracion import settings
 from app.core.database.sesion import SessionLocal
@@ -15,6 +24,32 @@ from app.modules.notificaciones.schemas import CreacionSuscripcionPush
 from app.modules.proyectos_colaboracion.models import IntegranteProyecto
 
 logger = logging.getLogger(__name__)
+
+_firebase_app = None
+
+
+def _get_firebase_app():
+    global _firebase_app
+    if not _FIREBASE_AVAILABLE:
+        return None
+    if _firebase_app is not None:
+        return _firebase_app
+    possible_paths = [
+        Path("firebase-service-account.json"),
+        Path(__file__).resolve().parents[5] / "firebase-service-account.json",
+        Path(__file__).resolve().parents[4] / "firebase-service-account.json",
+    ]
+    for path in possible_paths:
+        if path.is_file():
+            try:
+                cred = credentials.Certificate(str(path))
+                _firebase_app = firebase_admin.initialize_app(cred)
+                logger.info("Firebase Admin inicializado correctamente desde %s", path)
+                return _firebase_app
+            except Exception as exc:
+                logger.warning("Fallo al inicializar Firebase Admin desde %s: %s", path, exc)
+                return None
+    return None
 
 
 class ServicioNotificacionesPush:
@@ -61,16 +96,91 @@ class ServicioNotificacionesPush:
         self.db.commit()
         return True
 
+    def suscribir_dispositivo_movil(
+        self,
+        user_id: UUID,
+        token: str,
+        plataforma: str = "android",
+    ) -> SuscripcionPush:
+        endpoint = f"fcm:{token}"
+        subscription = self.subscriptions.obtener_por_endpoint(endpoint)
+        if subscription is None:
+            subscription = SuscripcionPush(
+                user_id=user_id,
+                endpoint=endpoint,
+                p256dh="fcm",
+                auth="fcm",
+                content_encoding="fcm",
+                user_agent=f"mobile/{plataforma}"[:512],
+                is_active=True,
+                failure_count=0,
+            )
+            self.db.add(subscription)
+        else:
+            subscription.user_id = user_id
+            subscription.is_active = True
+            subscription.failure_count = 0
+            subscription.user_agent = f"mobile/{plataforma}"[:512]
+        self.db.commit()
+        self.db.refresh(subscription)
+        return subscription
+
     def enviar_a_usuarios(self, user_ids: set[UUID], payload: dict) -> dict[str, int]:
         result = {"sent": 0, "failed": 0, "removed": 0}
-        if not self.enabled:
+        fb_app = _get_firebase_app()
+        if not self.enabled and not fb_app:
             return result
         data = json.dumps(payload, ensure_ascii=False)
         now = datetime.now(UTC)
+        title = str(payload.get("title") or "CASE Inteligente")
+        body = str(payload.get("body") or payload.get("message") or "Tienes una nueva notificación.")
+        deep_link = payload.get("deep_link") or {}
+        fcm_data = {
+            "title": title,
+            "body": body,
+            "deep_link": json.dumps(deep_link),
+        }
+        if "project_id" in payload:
+            fcm_data["project_id"] = str(payload["project_id"])
+        if "notification_id" in payload:
+            fcm_data["notification_id"] = str(payload["notification_id"])
+
         for subscription in self.subscriptions.listar_activas_para_usuarios(user_ids):
             if subscription.expires_at and subscription.expires_at <= now:
                 self.subscriptions.delete(subscription)
                 result["removed"] += 1
+                continue
+
+            # Caso FCM (dispositivo móvil Android/iOS)
+            if subscription.endpoint.startswith("fcm:"):
+                if not fb_app:
+                    continue
+                fcm_token = subscription.endpoint.removeprefix("fcm:")
+                try:
+                    fcm_msg = messaging.Message(
+                        notification=messaging.Notification(
+                            title=title,
+                            body=body,
+                        ),
+                        data=fcm_data,
+                        token=fcm_token,
+                    )
+                    messaging.send(fcm_msg)
+                    subscription.last_success_at = now
+                    subscription.failure_count = 0
+                    result["sent"] += 1
+                except messaging.UnregisteredError:
+                    self.subscriptions.delete(subscription)
+                    result["removed"] += 1
+                except Exception as exc:
+                    subscription.failure_count += 1
+                    subscription.is_active = subscription.failure_count < 5
+                    result["failed"] += 1
+                    logger.warning("FCM fallo para token: %s", exc)
+                continue
+
+            # Caso WebPush estándar (navegadores web)
+            if not self.enabled:
                 continue
             try:
                 webpush(

@@ -10,6 +10,7 @@ from app.modules.notificaciones.schemas.push import (
     ClavesPush,
     CreacionSuscripcionPush,
     EliminacionSuscripcionPush,
+    RegistroDispositivoMovil,
     RespuestaConfiguracionPush,
     RespuestaSuscripcionPush,
 )
@@ -21,6 +22,7 @@ __all__ = [
     "ElementoPreferenciaNotificacion",
     "EliminacionSuscripcionPush",
     "EnlaceProfundoNotificacion",
+    "RegistroDispositivoMovil",
     "RespuestaCantidadNoLeidas",
     "RespuestaConfiguracionPush",
     "RespuestaNotificacion",
