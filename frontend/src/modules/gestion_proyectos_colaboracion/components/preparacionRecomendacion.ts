@@ -29,7 +29,13 @@ export function preparacionRecomendacion(title: string):
 export function solicitudCorreccionConCriterio(
   title: string,
   description: string,
-  criterion: string
+  criterion: string,
+  recommendationId?: string
 ): string {
-  return `Corrige el diagrama siguiendo esta recomendación: ${title}. ${description}\nMi criterio: ${criterion.trim()}\nPropón cambios UML concretos para que pueda revisarlos y confirmarlos. No apliques nada todavía.`;
+  const identifier = recommendationId ? `\nID de recomendación: ${recommendationId}` : "";
+  return `Corrige el diagrama siguiendo esta recomendación: ${title}. ${description}${identifier}\nMi criterio: ${criterion.trim()}\nPropón cambios UML concretos para que pueda revisarlos y confirmarlos. No apliques nada todavía.`;
+}
+
+export function esSugerenciaDeAtributos(title: string, description: string): boolean {
+  return title === "Sugerencia de diseño" && /^Agregar atributos a [\p{L}\d_]+\.?$/iu.test(description.trim());
 }

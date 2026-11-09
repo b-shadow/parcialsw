@@ -352,6 +352,82 @@ def test_rule_fallback_turns_safe_pending_recommendation_into_actions() -> None:
     assert outcome.result.requires_user_input is False
 
 
+def test_design_recommendation_uses_its_class_and_applies_explicit_attribute_criterion() -> None:
+    context = _context()
+    payment_id = uuid4()
+    context.active_diagram.classes = [
+        {
+            "id": str(payment_id), "name": "Pago",
+            "attributes": [{"name": "id", "data_type": "UUID"}],
+        },
+        {"id": str(uuid4()), "name": "Pedido", "attributes": []},
+    ]
+    recommendation_id = uuid4()
+    context.generation_state["pending_recommendations"] = [
+        {
+            "id": str(recommendation_id), "title": "Sugerencia de diseño",
+            "description": "Agregar atributos a Pago.",
+        },
+        {
+            "id": str(uuid4()), "title": "Sugerencia de diseño",
+            "description": "Agregar atributos a Pedido.",
+        },
+    ]
+    text = (
+        "Corrige el diagrama siguiendo esta recomendación: Sugerencia de diseño. "
+        "Agregar atributos a Pago.\n"
+        f"ID de recomendación: {recommendation_id}\n"
+        "Mi criterio: añade nombre con valor string, cantidad con valor int "
+        "y precio_total con valor double\n"
+        "Propón cambios UML concretos para confirmarlos."
+    )
+    outcome = asyncio.run(OrquestadorIAUnificado(primary_provider=None).process(
+        request_text=text, context=context, correlation_id=uuid4(), model="local",
+    ))
+    actions = outcome.result.actions
+    assert [(action.payload["name"], action.payload["data_type"]) for action in actions] == [
+        ("nombre", "String"), ("cantidad", "Integer"), ("precio_total", "Double"),
+    ]
+    assert all(action.payload["class_id"] == str(payment_id) for action in actions)
+    assert actions[1].depends_on == [actions[0].id]
+    assert actions[2].depends_on == [actions[1].id]
+    assert outcome.result.recommendations == []
+
+    class PrimaryProvider:
+        async def completar_estructura(self, *_args, **_kwargs):
+            pytest.fail("El criterio de atributos ya es determinista; no debe ir al modelo")
+
+    with_primary = asyncio.run(OrquestadorIAUnificado(primary_provider=PrimaryProvider()).process(
+        request_text=text, context=context, correlation_id=uuid4(), model="qwen",
+    ))
+    assert with_primary.result.provider == "rule_engine"
+    assert len(with_primary.result.actions) == 3
+
+
+def test_design_recommendation_does_not_guess_class_or_partial_criterion() -> None:
+    context = _context()
+    context.active_diagram.classes = [
+        {"id": str(uuid4()), "name": "Pago", "attributes": []},
+    ]
+    recommendation_id = uuid4()
+    context.generation_state["pending_recommendations"] = [
+        {"id": str(recommendation_id), "title": "Sugerencia de diseño",
+         "description": "Agregar atributos a Desconocida."},
+    ]
+    provider = ProveedorReglas()
+    request = (
+        f"Corrige esta recomendación: Sugerencia de diseño.\nID de recomendación: {recommendation_id}\n"
+        "Mi criterio: añade nombre con valor string, cantidad sin tipo"
+    )
+    result = provider.complete(request, context, ClasificadorIntenciones().classify(request))
+    assert result.actions == []
+    assert result.requires_user_input
+    context.generation_state["pending_recommendations"][0]["description"] = "Agregar atributos a Pago."
+    malformed = provider.complete(request, context, ClasificadorIntenciones().classify(request))
+    assert malformed.actions == []
+    assert malformed.requires_user_input
+
+
 def test_assistant_proposes_attributes_for_existing_class_without_new_classes() -> None:
     context = _context()
     product_id = uuid4()

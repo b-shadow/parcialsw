@@ -22,6 +22,7 @@ import type {
   MensajeIA,
   EstadoProveedorIA,
   RecomendacionIA,
+  RespuestaInteraccionIA,
   PresenciaProyecto,
   EventoSocketProyectoV2,
 } from "../../../core/contracts/phase1";
@@ -36,7 +37,7 @@ import { servicioProyectos } from "../services/servicioProyectos";
 import { ultimaSecuenciaContinuaMensajes, useAlmacenIAProyecto } from "../store/almacenIAProyecto";
 import { ConfiguracionProveedorIA } from "./ConfiguracionProveedorIA";
 import { dependenciasAccionListas, resumenAccion } from "./resumenAccion";
-import { preparacionRecomendacion, solicitudCorreccionConCriterio } from "./preparacionRecomendacion";
+import { esSugerenciaDeAtributos, preparacionRecomendacion, solicitudCorreccionConCriterio } from "./preparacionRecomendacion";
 
 type Props = {
   projectId: string;
@@ -74,6 +75,7 @@ export function AsistenteIAProyecto({
   const [loading, setLoading] = useState(false);
   const [pendingRequest, setPendingRequest] = useState<{ id: string; content: string; label: string } | null>(null);
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
+  const [applyingCriterion, setApplyingCriterion] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recommendationGuidance, setRecommendationGuidance] = useState<{
@@ -303,7 +305,7 @@ export function AsistenteIAProyecto({
     restoreDraft = false,
     isVoice = false
   ) => {
-    if (!content || loading || !conversationId) return false;
+    if (!content || loading || !conversationId) return null;
     const clientMessageId = crypto.randomUUID();
     if (isVoice) {
       setVoiceMessageIds((prev) => new Set(prev).add(clientMessageId));
@@ -312,6 +314,7 @@ export function AsistenteIAProyecto({
     setLoading(true);
     setPendingRequest({ id: clientMessageId, content, label });
     let interactionCompleted = false;
+    let completedResponse: RespuestaInteraccionIA | null = null;
     try {
       const response = await servicioFase1.interactuar(projectId, {
         client_message_id: clientMessageId,
@@ -321,16 +324,17 @@ export function AsistenteIAProyecto({
         requested_context: { include_diagram: true, include_recent_messages: true },
       });
       interactionCompleted = true;
+      completedResponse = response;
       response.actions.forEach(store.upsertAction);
       response.recommendations.forEach(store.upsertRecommendation);
       await ponerseAlDia();
       setConversations(await servicioFase1.listarConversaciones(projectId));
-      return true;
+      return response;
     } catch {
       store.establecerProcesamiento(false);
       if (interactionCompleted) {
         setError("La respuesta se guardó, pero no se pudo sincronizar el historial. Recarga el chat.");
-        return true;
+        return completedResponse;
       }
       let remoteStatus: "answered" | "pending" | "failed" | "unknown" = "unknown";
       try {
@@ -352,12 +356,12 @@ export function AsistenteIAProyecto({
       }
       if (remoteStatus === "answered") {
         try { await ponerseAlDia(); } catch { /* El historial ya contiene la respuesta. */ }
-        return true;
+        return null;
       }
       if (remoteStatus === "pending") {
         store.establecerProcesamiento(true);
         setError("El mensaje se guardó y el asistente sigue procesándolo.");
-        return true;
+        return null;
       }
       if (restoreDraft) setDraft(content);
       setError(
@@ -365,7 +369,7 @@ export function AsistenteIAProyecto({
           ? "No se pudo enviar. Tu texto se conservó para reintentar."
           : "No se pudo preparar la corrección. La recomendación sigue abierta."
       );
-      return false;
+      return null;
     } finally {
       setLoading(false);
       setPendingRequest(null);
@@ -414,18 +418,59 @@ export function AsistenteIAProyecto({
 
   const prepararConCriterio = async (recommendation: RecomendacionIA) => {
     if (!recommendationCriterion.trim()) return;
-    const accepted = await enviarSolicitud(
+    const response = await enviarSolicitud(
       solicitudCorreccionConCriterio(
         recommendation.title,
         recommendation.description,
-        recommendationCriterion
+        recommendationCriterion,
+        recommendation.id
       ),
       `Preparando propuesta para ${recommendation.title}...`,
       false
     );
-    if (accepted) {
+    if (!response) return;
+    if (response.actions.length === 0) {
+      setError(response.answer);
+      return;
+    }
+    const applyDirectly = esSugerenciaDeAtributos(recommendation.title, recommendation.description)
+      && response.provider === "rule_engine"
+      && canConfirmActions
+      && response.actions.every((action) =>
+        action.action_type === "create_attribute"
+        && action.status === "proposed"
+        && action.risk_level === "low"
+        && typeof action.payload.class_id === "string"
+      );
+    if (!applyDirectly) {
       setRecommendationGuidance(null);
       setRecommendationCriterion("");
+      setActionFeedback("Propuesta preparada. Revisa y confirma los cambios en el chat.");
+      return;
+    }
+    setApplyingCriterion(true);
+    try {
+      for (const action of response.actions) {
+        setBusyActionId(action.id);
+        const result = await servicioFase1.confirmarAccionIA(projectId, action.id);
+        store.upsertAction(result.action);
+        if (result.action.status !== "applied") {
+          throw new Error("La acción no se aplicó");
+        }
+      }
+      const resolved = await servicioFase1.actualizarRecomendacion(projectId, recommendation.id, {
+        status: "resolved",
+      });
+      store.upsertRecommendation(resolved);
+      setRecommendationGuidance(null);
+      setRecommendationCriterion("");
+      setActionFeedback(`${response.actions.length} atributo(s) aplicados al diagrama.`);
+    } catch {
+      setError("No se aplicaron todos los atributos. Revisa el estado de las acciones en el chat antes de reintentar.");
+      await ponerseAlDia().catch(() => undefined);
+    } finally {
+      setBusyActionId(null);
+      setApplyingCriterion(false);
     }
   };
 
@@ -872,13 +917,15 @@ export function AsistenteIAProyecto({
                       />
                       <button
                         type="button"
-                        disabled={!recommendationCriterion.trim() || loading || !canChat || !conversationId}
+                        disabled={!recommendationCriterion.trim() || loading || applyingCriterion || !canChat || !conversationId}
                         onClick={() => void prepararConCriterio(item)}
                         className="mt-2 rounded-md bg-teal-700 px-2.5 py-1.5 font-bold text-white disabled:opacity-50"
                       >
-                        {loading ? "Procesando..." : "Preparar propuesta"}
+                        {loading || applyingCriterion ? "Procesando..." : esSugerenciaDeAtributos(item.title, item.description) && canConfirmActions ? "Aplicar criterio" : "Preparar propuesta"}
                       </button>
-                      <p className="mt-1">Si puede preparar acciones concretas, podrás revisarlas antes de aplicarlas.</p>
+                      <p className="mt-1">{esSugerenciaDeAtributos(item.title, item.description) && canConfirmActions
+                        ? "Se agregarán a la clase indicada por la recomendación solo los atributos que especifiques."
+                        : "Si puede preparar acciones concretas, podrás revisarlas antes de aplicarlas."}</p>
                     </div>
                   )}
                 </aside>

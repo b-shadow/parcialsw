@@ -26,6 +26,19 @@ class ProveedorReglas:
     def __init__(self, engine: MotorIALocal | None = None) -> None:
         self.engine = engine or MotorIALocal()
 
+    def puede_preparar_atributos_recomendados(
+        self, request_text: str, context: ContextoIAProyecto
+    ) -> bool:
+        if context.active_diagram is None:
+            return False
+        normalized = _normalized(request_text)
+        if "mi criterio:" not in normalized or not self._solicita_resolver_recomendacion(normalized):
+            return False
+        actions, issues = self._planificar_cambios_recomendacion(normalized, context)
+        return bool(actions) and not issues and all(
+            action.action_type == "create_attribute" for action in actions
+        )
+
     def puede_responder_con_contexto(
         self,
         request_text: str,
@@ -189,6 +202,7 @@ class ProveedorReglas:
                     f"requiere una decision concreta: {unresolved}. Indica el criterio que deseas "
                     "usar y preparare el cambio para confirmarlo."
                 )
+            return "No encontré un cambio pendiente para esa recomendación en el diagrama actual."
         if "coordinate_team" in intents:
             return self._respuesta_coordinacion_equipo(context)
         if "summarize_conversation" in intents:
@@ -268,11 +282,25 @@ class ProveedorReglas:
             return [], ["abre primero el diagrama que deseas corregir"]
         raw_items = context.generation_state.get("pending_recommendations") or []
         pending = [item for item in raw_items if isinstance(item, dict)]
-        explicitly_selected = [
-            item
-            for item in pending
-            if _normalized(str(item.get("title") or "")) in text
-        ]
+        selected_id = re.search(r"\bid de recomendacion:\s*([0-9a-f-]{36})\b", text)
+        if selected_id:
+            explicitly_selected = [
+                item for item in pending if str(item.get("id")) == selected_id.group(1)
+            ]
+            if not explicitly_selected:
+                return [], ["la recomendación seleccionada ya no está abierta"]
+        else:
+            explicitly_selected = [
+                item for item in pending
+                if _normalized(str(item.get("title") or "")) in text
+            ]
+            if len(explicitly_selected) > 1:
+                explicitly_selected = [
+                    item for item in explicitly_selected
+                    if _normalized(str(item.get("description") or "")) in text
+                ]
+            if len(explicitly_selected) > 1:
+                return [], ["identifica una sola recomendación antes de corregirla"]
         selected = explicitly_selected or pending
         if not selected:
             return [], ["no hay recomendaciones abiertas que pueda relacionar con la orden"]
@@ -306,6 +334,14 @@ class ProveedorReglas:
                     )
                 )
 
+        for item in selected:
+            if _normalized(str(item.get("title") or "")) != "sugerencia de diseno":
+                continue
+            planned, issue = self._atributos_de_criterio(item, text, diagram)
+            actions.extend(planned)
+            if issue:
+                unresolved.append(issue)
+
         non_automatic = {
             "clases sin estado definido": "define los atributos esenciales de cada clase vacia",
             "estados controlados": "elige los valores permitidos para cada estado",
@@ -319,6 +355,76 @@ class ProveedorReglas:
             if title in non_automatic:
                 unresolved.append(non_automatic[title])
         return actions, unresolved
+
+    def _atributos_de_criterio(
+        self, recommendation: dict, text: str, diagram
+    ) -> tuple[list[AccionPlanificada], str | None]:
+        description = _normalized(str(recommendation.get("description") or ""))
+        target = re.fullmatch(
+            r"\s*(?:agregar|agrega|anadir|anade)\s+(?:los\s+)?atributos?\s+"
+            r"(?:a|en|para)\s+(?:la\s+clase\s+)?([a-z][a-z0-9_]*)\s*\.?\s*",
+            description,
+        )
+        if target is None:
+            return [], "la sugerencia no identifica una clase para agregar atributos"
+        uml_class = self._buscar_clase(diagram.classes, target.group(1))
+        if uml_class is None or self._uuid(uml_class.get("id")) is None:
+            return [], "la clase indicada por la sugerencia ya no existe"
+        criterion = re.search(r"\bmi criterio:\s*([^\r\n]+)", text)
+        if criterion is None:
+            return [], f"indica los nombres y tipos de los atributos de {uml_class['name']}"
+        value = criterion.group(1).strip()
+        supported = r"uuid|string|char|int|integer|long|double|decimal|boolean|bool|date|datetime"
+        pattern = re.compile(
+            rf"\b([a-z][a-z0-9_]*)\s+(?:con\s+valor\s+|de\s+tipo\s+|tipo\s+|:\s*)"
+            rf"({supported})\b"
+        )
+        matches = list(pattern.finditer(value))
+        rest = pattern.sub("", value)
+        rest = re.sub(r"\b(?:anade|agrega|incluye|los|las|atributos?|campos?|y)\b|[\s,.;:]+", "", rest)
+        if not matches or rest or len(matches) > 20:
+            return [], "escribe cada atributo como 'nombre con valor String' y separa los demás con comas"
+        canonical = {
+            "uuid": "UUID", "string": "String", "char": "String", "int": "Integer",
+            "integer": "Integer", "long": "Long", "double": "Double",
+            "decimal": "Double", "boolean": "Boolean", "bool": "Boolean",
+            "date": "Date", "datetime": "DateTime",
+        }
+        existing = {
+            str(attribute.get("name", "")).casefold(): str(attribute.get("data_type", "")).casefold()
+            for attribute in uml_class.get("attributes", []) if isinstance(attribute, dict)
+        }
+        requested: dict[str, str] = {}
+        for match in matches:
+            name, data_type = match.groups()
+            normalized_type = canonical[data_type]
+            if name in requested and requested[name] != normalized_type:
+                return [], f"el atributo {name} tiene dos tipos distintos en tu criterio"
+            if name in existing and existing[name] != normalized_type.casefold():
+                return [], f"el atributo {name} ya existe con otro tipo en {uml_class['name']}"
+            requested[name] = normalized_type
+
+        actions: list[AccionPlanificada] = []
+        for name, data_type in requested.items():
+            if name in existing:
+                continue
+            actions.append(
+                AccionPlanificada(
+                    order=len(actions) + 1,
+                    action_type="create_attribute",
+                    target_type="uml_attribute",
+                    diagram_id=diagram.id,
+                    base_diagram_version=diagram.current_version,
+                    depends_on=[actions[-1].id] if actions else [],
+                    payload={
+                        "class_id": str(uml_class["id"]), "name": name, "data_type": data_type,
+                    },
+                    explanation=f"Agregar {name}: {data_type} a {uml_class['name']}.",
+                )
+            )
+        if not actions:
+            return [], f"los atributos solicitados ya existen en {uml_class['name']}"
+        return actions, None
 
     def _respuesta_coordinacion_equipo(self, context: ContextoIAProyecto) -> str:
         if not context.team_activity:

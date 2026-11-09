@@ -68,6 +68,9 @@ class OrquestadorIAUnificado:
         prefer_primary_for_recommendations = (
             self.primary_provider is not None
             and "recommend" in intent_names
+            and not self.fallback_provider.puede_preparar_atributos_recomendados(
+                clean_text, budgeted.context
+            )
             and (
                 "modify_uml" not in intent_names
                 or "mi criterio:" in clean_text.casefold()
