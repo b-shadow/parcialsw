@@ -23,6 +23,10 @@ STOPWORDS = {
     "permita",
     "gestionar",
     "gestion",
+    "datos",
+    "diagrama",
+    "diagramas",
+    "uml",
 }
 
 
@@ -41,6 +45,13 @@ def extraer_terminos_dominio(text: str) -> list[str]:
         if not words:
             continue
         term = words[-1]
+        # Los sustantivos enumerados suelen venir en plural; una clase UML
+        # representa el concepto singular. No altera nombres terminados en s
+        # que no parecen plurales regulares.
+        if len(term) > 5 and term.endswith(("nes", "res")) and term[-4] in "aeiou":
+            term = term[:-2]
+        elif len(term) > 4 and term.endswith("s") and term[-2] in "aeiou":
+            term = term[:-1]
         class_name = term[:1].upper() + term[1:]
         if class_name not in terms:
             terms.append(class_name)

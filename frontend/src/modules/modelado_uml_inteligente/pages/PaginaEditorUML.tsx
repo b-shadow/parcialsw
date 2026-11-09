@@ -41,7 +41,7 @@ import { EditorEspecificacionMetodo } from "../components/EditorEspecificacionMe
 import { BarraHerramientasUML } from "../components/BarraHerramientasUML";
 import { AsistenteIAProyecto } from "../../gestion_proyectos_colaboracion/components/AsistenteIAProyecto";
 import { PanelHistorialProyecto } from "../../gestion_proyectos_colaboracion/components/PanelHistorialProyecto";
-import { servicioIA } from "../services/servicioIA";
+import { servicio_ia } from "../services/servicio_ia";
 import { SelectorTipoElemento } from "../components/SelectorTipoElemento";
 import { servicioUML } from "../services/servicioUML";
 import { useAlmacenUML } from "../store/almacenUML";
@@ -93,7 +93,7 @@ function simboloVisibilidad(visibility: string) {
   return visibilityOptions.find((option) => option.value === visibility)?.symbol ?? "+";
 }
 
-type AiUmlResult = Awaited<ReturnType<typeof servicioIA.textoAUml>>;
+type AiUmlResult = Awaited<ReturnType<typeof servicio_ia.textoAUml>>;
 
 type BrowserSpeechRecognition = {
   lang: string;
@@ -875,7 +875,7 @@ export function PaginaEditorUML() {
       return;
     }
     const aiResult =
-      await servicioIA.imagenAUml({
+      await servicio_ia.imagenAUml({
         project_id: projectId,
         description: promptOverride?.trim() || undefined,
         image_base64: file ? await archivoABase64(file) : undefined,
@@ -927,13 +927,13 @@ export function PaginaEditorUML() {
     if (currentClasses.length === 0) {
       const generatedResult =
         sourceType === "voice"
-          ? await servicioIA.vozAUml({ transcript: instruction })
-          : await servicioIA.textoAUml(instruction);
+          ? await servicio_ia.vozAUml({ transcript: instruction })
+          : await servicio_ia.textoAUml(instruction);
       await aplicarResultadoIAAlDiagramaActual(generatedResult, sourceType, instruction, model);
       return;
     }
     const classNameById = new Map(currentClasses.map((umlClass) => [umlClass.id, umlClass.name]));
-    const aiResult = await servicioIA.modificarUml({
+    const aiResult = await servicio_ia.modificarUml({
       instruction,
       selected_class_name: selectedClassName,
       classes: currentClasses.map((umlClass) => ({
@@ -977,6 +977,10 @@ export function PaginaEditorUML() {
         })
         .filter((relationship): relationship is NonNullable<typeof relationship> => relationship !== null)
     });
+    if (aiResult.changes.length === 0 || aiResult.confidence < 0.55) {
+      setAiObservation("No se pudo interpretar el cambio con seguridad. Indique el nombre y tipo de cada atributo y la clase de destino.");
+      return;
+    }
     await aplicarResultadoIAAlDiagramaActual(aiResult, sourceType, instruction, model);
     setAiObservation(
       `${aiResult.engine} edito el diagrama actual: ${

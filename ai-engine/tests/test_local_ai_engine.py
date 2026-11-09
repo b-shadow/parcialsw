@@ -430,6 +430,39 @@ def test_modify_existing_uml_uses_selected_class_for_implicit_attribute_edit() -
     ]
 
 
+def test_attribute_values_edit_existing_class_without_creating_classes() -> None:
+    classes = [ClaseUMLMotor(name=name) for name in ("Cliente", "Producto", "Pedido", "Pago")]
+    response = ServicioIALocal().modificar_uml(
+        SolicitudModificacionUML(
+            instruction="añade id con valor UUID y nombre con valor string a la tabla Cliente",
+            classes=classes,
+        )
+    )
+
+    assert [item.name for item in response.classes] == [item.name for item in classes]
+    assert [(item.name, item.data_type) for item in response.classes[0].attributes] == [
+        ("id", "UUID"), ("nombre", "String")
+    ]
+    assert all(not item.attributes for item in response.classes[1:])
+    assert response.changes == [
+        "Atributo agregado en Cliente: id", "Atributo agregado en Cliente: nombre"
+    ]
+
+
+def test_attribute_edit_without_existing_target_never_creates_classes() -> None:
+    classes = [ClaseUMLMotor(name="Cliente")]
+    response = ServicioIALocal().modificar_uml(
+        SolicitudModificacionUML(
+            instruction="añade id con valor UUID a la tabla Desconocida",
+            classes=classes,
+        )
+    )
+
+    assert response.classes == classes
+    assert response.changes == []
+    assert response.confidence < 0.55
+
+
 def test_modify_existing_uml_uses_selected_class_for_implicit_relationship() -> None:
     service = ServicioIALocal()
 

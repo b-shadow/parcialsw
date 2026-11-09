@@ -249,6 +249,17 @@ class MotorIALocal:
         if class_member_change:
             return class_member_change
 
+        normalized_instruction = normalizar_texto(request.instruction)
+        if any(re.search(rf"\b{word}\b", normalized_instruction) for word in (*self.ATTRIBUTE_WORDS, *self.METHOD_WORDS)) or re.search(
+            r"\bcon\s+valor\b", normalized_instruction
+        ):
+            return RespuestaModificacionUML(
+                classes=[*request.classes],
+                relationships=[*request.relationships],
+                changes=[],
+                confidence=0.2,
+            )
+
         generated = self._construir_respuesta(request.instruction, "text", True)
         existing_names = {uml_class.name.lower() for uml_class in request.classes}
         classes = [*request.classes]
@@ -767,7 +778,9 @@ class MotorIALocal:
         request: SolicitudModificacionUML,
     ) -> RespuestaModificacionUML | None:
         normalized = normalizar_texto(request.instruction)
-        has_attribute_request = any(marker in normalized for marker in self.ATTRIBUTE_WORDS)
+        has_attribute_request = any(
+            re.search(rf"\b{marker}\b", normalized) for marker in self.ATTRIBUTE_WORDS
+        ) or bool(re.search(r"\bcon\s+valor\b", normalized))
         has_method_request = any(marker in normalized for marker in self.METHOD_WORDS)
         if not (has_attribute_request or has_method_request):
             return None
@@ -1116,11 +1129,6 @@ class MotorIALocal:
             return response
 
         terms = extraer_terminos_dominio(text)
-        for example in obtener_datos_iniciales():
-            if example.intent in text.lower():
-                terms = [*example.expected_classes, *terms]
-        if not terms:
-            terms = ["Usuario", "Entidad", "Registro"]
         deduplicated_terms = []
         seen_terms = set()
         for term in terms:
@@ -1130,26 +1138,13 @@ class MotorIALocal:
         classes = [
             ClaseUMLMotor(
                 name=term,
-                attributes=[
-                    AtributoUMLMotor(name="id", data_type="UUID", is_required=True),
-                    AtributoUMLMotor(name="nombre", data_type="String", is_required=True),
-                ],
-                methods=[MetodoUMLMotor(name="validar", return_type="Boolean")],
+                attributes=[],
+                methods=[],
             )
             for term in deduplicated_terms[:10]
         ]
         class_names = {uml_class.name.lower(): uml_class.name for uml_class in classes}
-        relationships = [
-            RelacionUMLMotor(
-                source=classes[index].name,
-                target=classes[index + 1].name,
-                relationship_type="association",
-                label="relaciona",
-                source_cardinality="1",
-                target_cardinality="*",
-            )
-            for index in range(len(classes) - 1)
-        ]
+        relationships = []
         for example in obtener_datos_iniciales():
             if example.intent in text.lower():
                 for source, target, relation_type in example.expected_relationships:
@@ -1158,20 +1153,18 @@ class MotorIALocal:
                             RelacionUMLMotor(
                                 source=class_names[source.lower()],
                                 target=class_names[target.lower()],
-                                relationship_type=relation_type,
-                                label="derivada de dataset especializado",
-                                source_cardinality="1",
-                                target_cardinality="*",
+                                relationship_type="association",
                             )
                         )
         knowledge = self.vector_store.buscar(text, 3) if use_rag else []
         return RespuestaGeneracionUML(
             classes=classes,
             relationships=relationships,
-            confidence=0.86 if source_type == "text" else 0.78,
+            confidence=0.68 if classes else 0.2,
             observations=[
                 f"Procesado localmente en modo {source_type}.",
-                "Salida estructurada compatible con el motor UML.",
+                "Se extrajeron clases nombradas; atributos y metodos no indicados quedaron vacios.",
+                "Las relaciones sugeridas por el dominio requieren revision; no se asignaron multiplicidades sin evidencia.",
                 "RAG local aplicado." if knowledge else "RAG local sin coincidencias relevantes.",
             ],
             knowledge_context=[item.topic for item in knowledge],
@@ -1239,7 +1232,7 @@ class MotorIALocal:
             maxsplit=1,
         )[0]
         pattern = re.compile(
-            r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::|que\s+es|de\s+tipo|tipo|es)\s*([a-zA-Z_][a-zA-Z0-9_]*)"
+            r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::|que\s+es|de\s+tipo|tipo|es|con\s+valor(?:\s+de\s+tipo)?)\s*([a-zA-Z_][a-zA-Z0-9_]*)"
         )
         attributes: list[AtributoUMLMotor] = []
         seen: set[str] = set()
@@ -1259,6 +1252,9 @@ class MotorIALocal:
             seen.add(name.lower())
         if attributes:
             return attributes
+
+        if re.search(r"\bcon\s+valor\b", attributes_section):
+            return []
 
         tokens = [
             token

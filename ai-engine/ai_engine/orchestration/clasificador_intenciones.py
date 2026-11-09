@@ -39,7 +39,7 @@ class ClasificadorIntenciones:
         (
             "modify_uml",
             (
-                "agrega", "crea", "conecta", "relaciona", "cambia", "edita",
+                "agrega", "anade", "ponle", "crea", "conecta", "relaciona", "cambia", "edita",
                 "elimina", "borra", "quita", "renombra", "corrige", "aplica",
                 "implementa", "resuelve", "resolver", "soluciona",
             ),

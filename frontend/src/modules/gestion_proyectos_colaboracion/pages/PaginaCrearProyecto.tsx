@@ -16,12 +16,12 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { useAlmacenTema } from "../../../core/theme/almacenTema";
 import { cn } from "../../../shared/utils/cn";
-import { servicioIA } from "../../modelado_uml_inteligente/services/servicioIA";
+import { servicio_ia } from "../../modelado_uml_inteligente/services/servicio_ia";
 import { servicioUML } from "../../modelado_uml_inteligente/services/servicioUML";
 import { servicioProyectos } from "../services/servicioProyectos";
 
 type FuenteIA = "text" | "voice" | "image";
-type ResultadoUmlIA = Awaited<ReturnType<typeof servicioIA.textoAUml>>;
+type ResultadoUmlIA = Awaited<ReturnType<typeof servicio_ia.textoAUml>>;
 
 type ReconocimientoVozNavegador = {
   lang: string;
@@ -145,7 +145,7 @@ export function PaginaCrearProyecto() {
 
   async function construirResultadoIA() {
     if (aiSource === "image" && imageFile) {
-      const result = await servicioIA.imagenAUml({
+      const result = await servicio_ia.imagenAUml({
         image_base64: await archivoABase64(imageFile),
         file_name: imageFile.name,
       });
@@ -157,8 +157,8 @@ export function PaginaCrearProyecto() {
     if (!prompt.trim()) return null;
     if (prompt.trim().length < 3) throw new Error("Describa el modelo con mayor detalle.");
     return aiSource === "voice"
-      ? servicioIA.vozAUml({ transcript: prompt.trim() })
-      : servicioIA.textoAUml(prompt.trim());
+      ? servicio_ia.vozAUml({ transcript: prompt.trim() })
+      : servicio_ia.textoAUml(prompt.trim());
   }
 
   async function inicializarProyecto(data: { name: string; description?: string }) {

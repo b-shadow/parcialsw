@@ -42,6 +42,10 @@ class ProveedorReglas:
             normalized_request
         ):
             return True
+        if "modify_uml" in intent_names and self._atributos_para_clase_existente(
+            normalized_request, self._classes(context)
+        ):
+            return True
         if not intent_names & {"answer_question", "explain_uml", "recommend", "review_uml", "validate_uml"}:
             return False
         if "recommend" in intent_names:
@@ -822,6 +826,36 @@ class ProveedorReglas:
                     )
                 )
 
+        attribute_request = self._atributos_para_clase_existente(text, classes)
+        if attribute_request:
+            target_class, attributes = attribute_request
+            existing_names = {
+                str(item.get("name", "")).casefold()
+                for item in target_class.get("attributes", [])
+                if isinstance(item, dict)
+            }
+            for attribute_name, data_type in attributes:
+                if attribute_name.casefold() in existing_names:
+                    continue
+                actions.append(
+                    AccionPlanificada(
+                        order=len(actions) + 1,
+                        action_type="create_attribute",
+                        target_type="uml_attribute",
+                        diagram_id=diagram.id,
+                        base_diagram_version=diagram.current_version,
+                        payload={
+                            "class_id": str(target_class["id"]),
+                            "name": attribute_name,
+                            "data_type": data_type,
+                            "is_required": attribute_name.casefold() == "id",
+                        },
+                        depends_on=[actions[-1].id] if actions else [],
+                        explanation=f"Agregar {attribute_name}: {data_type} a {target_class['name']}.",
+                    )
+                )
+                existing_names.add(attribute_name.casefold())
+
         relation_requested = any(
             marker in text for marker in ("conecta", "relaciona", "asocia", "vincula", "uno a uno", "1 a 1")
         )
@@ -891,6 +925,37 @@ class ProveedorReglas:
         )
         aliases = {"integer": "int", "bool": "boolean"}
         return [(name, aliases.get(data_type, data_type)) for name, data_type in pairs]
+
+    @classmethod
+    def _atributos_para_clase_existente(
+        cls, text: str, classes: list[dict]
+    ) -> tuple[dict, list[tuple[str, str]]] | None:
+        target = re.search(
+            r"\b(?:a|en|para)\s+(?:(?:la|el)\s+)?(?:clase|tabla|entidad)\s+([a-z][a-z0-9_]*)\b",
+            text,
+        )
+        if not target or not re.search(r"\b(?:agrega|anade|pon|ponle|incluye)\b", text):
+            return None
+        uml_class = cls._buscar_clase(classes, target.group(1))
+        if uml_class is None or cls._uuid(uml_class.get("id")) is None:
+            return None
+        supported = r"uuid|string|char|int|integer|long|double|decimal|boolean|bool|date|datetime"
+        pairs = re.findall(
+            rf"\b([a-z][a-z0-9_]*)\s+(?:con\s+valor\s+|de\s+tipo\s+|tipo\s+|:\s*|es\s+)?({supported})\b",
+            text[:target.start()],
+        )
+        aliases = {"integer": "Integer", "int": "Integer", "bool": "Boolean"}
+        canonical = {
+            "uuid": "UUID", "string": "String", "char": "String", "long": "Long",
+            "double": "Double", "decimal": "Double", "boolean": "Boolean",
+            "date": "Date", "datetime": "DateTime",
+        }
+        attributes = [
+            (name, aliases.get(data_type, canonical.get(data_type, data_type)))
+            for name, data_type in pairs
+            if name not in {"atributo", "atributos", "campo", "campos"}
+        ]
+        return (uml_class, attributes) if attributes else None
 
     @staticmethod
     def _cardinalidades(text: str) -> tuple[str | None, str | None]:

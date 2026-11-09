@@ -14,7 +14,7 @@ import type {
   ValidacionUML,
   ElementoVisualUML
 } from "../types/uml";
-import type { RespuestaUMLIA } from "./servicioIA";
+import type { RespuestaUMLIA } from "./servicio_ia";
 
 function normalizarTipoRelacion(type: string) {
   const normalized = type.toLowerCase();

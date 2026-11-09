@@ -29,6 +29,7 @@ from ai_engine.providers.errores import (
     ErrorSalidaEstructuradaInvalida,
 )
 from ai_engine.providers.proveedor_ollama import ProveedorOllama, validar_url_base_ollama
+from ai_engine.providers.proveedor_reglas import ProveedorReglas
 
 
 def _context(with_diagram: bool = True) -> ContextoIAProyecto:
@@ -349,6 +350,58 @@ def test_rule_fallback_turns_safe_pending_recommendation_into_actions() -> None:
     assert outcome.result.actions[1].depends_on == [outcome.result.actions[0].id]
     assert "pulsa Aplicar" in outcome.result.answer
     assert outcome.result.requires_user_input is False
+
+
+def test_assistant_proposes_attributes_for_existing_class_without_new_classes() -> None:
+    context = _context()
+    product_id = uuid4()
+    context.active_diagram.classes = [
+        {"id": str(product_id), "name": "Producto", "attributes": []},
+        {"id": str(uuid4()), "name": "Cliente", "attributes": []},
+    ]
+    request_text = "agrega id con valor UUID y nombre con valor string en la clase Producto"
+    assert ProveedorReglas().puede_responder_con_contexto(
+        request_text, context, ClasificadorIntenciones().classify(request_text)
+    )
+    outcome = asyncio.run(
+        OrquestadorIAUnificado(primary_provider=None).process(
+            request_text=request_text,
+            context=context,
+            correlation_id=uuid4(),
+            model="deterministic-v2",
+        )
+    )
+
+    actions = outcome.result.actions
+    assert [action.action_type for action in actions] == ["create_attribute", "create_attribute"]
+    assert [action.payload["name"] for action in actions] == ["id", "nombre"]
+    assert [action.payload["data_type"] for action in actions] == ["UUID", "String"]
+    assert all(action.payload["class_id"] == str(product_id) for action in actions)
+    assert actions[1].depends_on == [actions[0].id]
+    assert all(action.requires_confirmation for action in actions)
+    assert "Prepar" in outcome.result.answer
+
+
+def test_assistant_does_not_target_missing_class_or_repeat_existing_attribute() -> None:
+    context = _context()
+    product_id = uuid4()
+    context.active_diagram.classes = [
+        {
+            "id": str(product_id),
+            "name": "Producto",
+            "attributes": [{"id": str(uuid4()), "name": "id", "data_type": "UUID"}],
+        }
+    ]
+    provider = ProveedorReglas()
+    intents = ClasificadorIntenciones().classify("agrega id UUID y nombre String a la clase Producto")
+    result = provider.complete("agrega id UUID y nombre String a la clase Producto", context, intents)
+    assert [(action.payload["name"], action.payload["data_type"]) for action in result.actions] == [
+        ("nombre", "String")
+    ]
+    missing = provider.complete(
+        "agrega id UUID a la clase Desconocida", context, intents
+    )
+    assert missing.actions == []
 
 
 def test_rule_fallback_does_not_fake_resolution_when_domain_decision_is_missing() -> None:

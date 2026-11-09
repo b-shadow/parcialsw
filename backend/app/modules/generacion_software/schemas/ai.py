@@ -95,6 +95,7 @@ class SolicitudModificacionIA(BaseModel):
     instruction: str = Field(min_length=1)
     classes: list[ClaseUMLIA]
     relationships: list[RelacionUMLIA] = Field(default_factory=list)
+    selected_class_name: str | None = None
 
 
 class RespuestaModificacionIA(BaseModel):

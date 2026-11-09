@@ -30,7 +30,7 @@ type AiValidationResponse = {
   engine: string;
 };
 
-export const servicioIA = {
+export const servicio_ia = {
   async textoAUml(prompt: string) {
     const response = await clienteApi.post<RespuestaUMLIA>("/ai/uml/text", {
       prompt,
