@@ -160,8 +160,12 @@ class ControladorAplicacion extends ChangeNotifier {
       );
       if (settings.authorizationStatus == AuthorizationStatus.authorized ||
           settings.authorizationStatus == AuthorizationStatus.provisional) {
-        final token = await messaging.getToken();
-        if (token != null && authenticated) {
+        final registration = messaging.onRegistered.first.timeout(
+          const Duration(seconds: 10),
+        );
+        await messaging.register();
+        final token = await registration;
+        if (authenticated) {
           await repository.registerMobileDevice(token);
         }
       }

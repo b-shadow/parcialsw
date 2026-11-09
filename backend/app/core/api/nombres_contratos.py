@@ -427,6 +427,7 @@ CLAVES = (
     "score",
     "secondary",
     "secondary_color",
+    "selected_class_name",
     "selected_model",
     "selected_model_available",
     "selected_primary_model",
@@ -530,6 +531,7 @@ TRADUCCIONES.update(CAMPOS)
 TRADUCCIONES["ai"] = "ia"
 TRADUCCIONES["component"] = "componente"
 TRADUCCIONES.update({
+    "selected_class_name": "nombre_clase_seleccionada",
     "connection_id": "conexion_id",
     "project_sequence": "secuencia_proyecto",
     "last_project_sequence": "ultima_secuencia_proyecto",

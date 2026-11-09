@@ -383,6 +383,7 @@
   "score": "puntaje",
   "secondary": "secundario",
   "secondary_color": "secundario_color",
+  "selected_class_name": "nombre_clase_seleccionada",
   "selected_model": "seleccionado_modelo",
   "selected_model_available": "seleccionado_modelo_disponible",
   "selected_primary_model": "seleccionado_primario_modelo",
