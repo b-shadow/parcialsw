@@ -899,7 +899,7 @@ class ServicioProyectos:
             correlation_id=_optional_uuid(payload.get("correlation_id")),
             summary_key=f"activity.{EVENT_ALIASES.get(event_type, event_type).casefold()}",
         )
-        project.revision += 1
+        GuardiaMutacionesProyecto.avanzar(project)
         self.db.add(event)
         self.db.commit()
         self.db.refresh(event)

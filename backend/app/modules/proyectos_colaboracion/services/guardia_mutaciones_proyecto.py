@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.modules.proyectos_colaboracion.models import Proyecto
 
@@ -36,4 +36,11 @@ class GuardiaMutacionesProyecto:
     @staticmethod
     def avanzar(project: Proyecto) -> int:
         project.revision += 1
+        session = object_session(project)
+        if session is not None:
+            from app.modules.modelado_uml.services.almacen_diagrama_activo import (
+                marcar_proyecto_uml_para_sincronizar,
+            )
+
+            marcar_proyecto_uml_para_sincronizar(session, project.id)
         return project.revision
