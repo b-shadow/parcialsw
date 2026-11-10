@@ -329,7 +329,8 @@ export function AsistenteIAProyecto({
     content: string,
     label: string,
     restoreDraft = false,
-    isVoice = false
+    isVoice = false,
+    recommendationId?: string
   ) => {
     if (!content || loading || !conversationId) return null;
     const clientMessageId = crypto.randomUUID();
@@ -346,6 +347,7 @@ export function AsistenteIAProyecto({
         client_message_id: clientMessageId,
         conversation_id: conversationId,
         content,
+        recommendation_id: recommendationId ?? null,
         diagram_id: diagramId ?? null,
         requested_context: { include_diagram: true, include_recent_messages: true },
       });
@@ -448,11 +450,12 @@ export function AsistenteIAProyecto({
       solicitudCorreccionConCriterio(
         recommendation.title,
         recommendation.description,
-        recommendationCriterion,
-        recommendation.id
+        recommendationCriterion
       ),
       `Preparando propuesta para ${recommendation.title}...`,
-      false
+      false,
+      false,
+      recommendation.id
     );
     if (!response) return;
     if (response.actions.length === 0) {

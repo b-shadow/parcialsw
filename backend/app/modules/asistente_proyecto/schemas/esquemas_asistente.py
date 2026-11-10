@@ -174,6 +174,7 @@ class ContextoSolicitado(BaseModel):
 class SolicitudInteraccionIA(BaseModel):
     client_message_id: UUID
     content: str = Field(min_length=1, max_length=20000)
+    recommendation_id: UUID | None = None
     conversation_id: UUID | None = None
     diagram_id: UUID | None = None
     base_diagram_version: int | None = Field(default=None, ge=0)

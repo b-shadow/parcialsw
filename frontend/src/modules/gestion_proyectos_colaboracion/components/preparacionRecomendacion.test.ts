@@ -38,12 +38,11 @@ describe("preparación de recomendaciones", () => {
     const prompt = solicitudCorreccionConCriterio(
       "Sugerencia de diseño",
       "Agregar atributos a Pago.",
-      "añade nombre con valor string",
-      "3d0d3465-3a17-4f93-91aa-35c3c6d6f041"
+      "añade nombre con valor string"
     );
     expect(prompt).toContain("Agregar atributos a Pago.");
-    expect(prompt).toContain("ID de recomendación: 3d0d3465-3a17-4f93-91aa-35c3c6d6f041");
-    expect(contenidoVisibleMensajeIA(prompt)).not.toContain("ID de recomendación:");
+    expect(prompt).not.toContain("ID de recomendación:");
+    expect(contenidoVisibleMensajeIA(`${prompt}\nID de recomendación: 3d0d3465-3a17-4f93-91aa-35c3c6d6f041`)).not.toContain("ID de recomendación:");
     expect(contenidoVisibleMensajeIA(prompt)).toContain("Mi criterio: añade nombre con valor string");
     expect(esSugerenciaDeAtributos("Sugerencia de diseño", "Agregar atributos a Pago.")).toBe(true);
     expect(esSugerenciaDeAtributos("Estados controlados", "Agregar atributos a Pago.")).toBe(false);

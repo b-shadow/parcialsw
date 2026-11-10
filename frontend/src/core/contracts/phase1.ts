@@ -90,6 +90,7 @@ export type RecomendacionIA = {
 export type SolicitudInteraccionIA = {
   client_message_id: string;
   content: string;
+  recommendation_id?: string | null;
   conversation_id?: string | null;
   diagram_id?: string | null;
   base_diagram_version?: number | null;

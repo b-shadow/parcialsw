@@ -29,11 +29,9 @@ export function preparacionRecomendacion(title: string):
 export function solicitudCorreccionConCriterio(
   title: string,
   description: string,
-  criterion: string,
-  recommendationId?: string
+  criterion: string
 ): string {
-  const identifier = recommendationId ? `\nID de recomendación: ${recommendationId}` : "";
-  return `Corrige el diagrama siguiendo esta recomendación: ${title}. ${description}${identifier}\nMi criterio: ${criterion.trim()}\nPropón cambios UML concretos para que pueda revisarlos y confirmarlos. No apliques nada todavía.`;
+  return `Corrige el diagrama siguiendo esta recomendación: ${title}. ${description}\nMi criterio: ${criterion.trim()}\nPropón cambios UML concretos para que pueda revisarlos y confirmarlos. No apliques nada todavía.`;
 }
 
 // El identificador selecciona la recomendación en el motor; no es parte del texto público del chat.

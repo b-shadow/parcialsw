@@ -52,6 +52,20 @@ def test_interaction_contract_normalizes_content_and_bounds_version() -> None:
         SolicitudInteraccionIA(client_message_id=uuid4(), content="revisa", base_diagram_version=-1)
 
 
+def test_recommendation_id_is_passed_to_inference_without_exposing_it_in_message() -> None:
+    recommendation_id = uuid4()
+    request = SolicitudInteraccionIA(
+        client_message_id=uuid4(),
+        content="Corrige los atributos de Pago.",
+        recommendation_id=recommendation_id,
+    )
+    assert str(recommendation_id) not in request.content
+    assert request.model_dump(mode="json")["recommendation_id"] == str(recommendation_id)
+    assert ServicioAplicacionIAProyecto._texto_para_inferencia(request).endswith(
+        f"ID de recomendacion: {recommendation_id}"
+    )
+
+
 def test_project_can_store_multiple_named_conversations() -> None:
     unique_columns = {
         tuple(column.name for column in constraint.columns)

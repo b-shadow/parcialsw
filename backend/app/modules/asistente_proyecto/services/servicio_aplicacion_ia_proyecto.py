@@ -38,6 +38,12 @@ logger = logging.getLogger(__name__)
 
 
 class ServicioAplicacionIAProyecto:
+    @staticmethod
+    def _texto_para_inferencia(payload: SolicitudInteraccionIA) -> str:
+        if payload.recommendation_id is None:
+            return payload.content
+        return f"{payload.content}\nID de recomendacion: {payload.recommendation_id}"
+
     def __init__(self, db: Session) -> None:
         self.db = db
         self.contracts = ServicioContratoAsistente(db)
@@ -229,7 +235,7 @@ class ServicioAplicacionIAProyecto:
             self.db.rollback()
             async with _INFERENCE_LIMIT:
                 outcome = await orchestrator.process(
-                    request_text=payload.content,
+                    request_text=self._texto_para_inferencia(payload),
                     context=context,
                     correlation_id=persisted_correlation_id,
                     model=selected_model,
