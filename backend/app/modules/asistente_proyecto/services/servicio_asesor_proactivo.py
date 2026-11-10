@@ -24,7 +24,10 @@ from app.core.redis.cliente import clave_redis, obtener_redis
 from app.modules.asistente_proyecto.models import RecomendacionIA
 from app.modules.asistente_proyecto.schemas.esquemas_asistente import CreacionInternaMensajeIA
 from app.modules.asistente_proyecto.services.publicador_eventos import PublicadorEventosIAProyecto
-from app.modules.asistente_proyecto.services.recomendaciones_pendientes import clave_recomendacion, claves_abiertas
+from app.modules.asistente_proyecto.services.recomendaciones_pendientes import (
+    clave_recomendacion,
+    claves_abiertas,
+)
 from app.modules.asistente_proyecto.services.servicio_asistente import ServicioContratoAsistente
 from app.modules.modelado_uml.engine.modelo_interno import ModeloDiagramaUML
 from app.modules.modelado_uml.engine.validador import validar_modelo_interno

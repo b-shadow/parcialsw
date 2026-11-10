@@ -30,7 +30,10 @@ from app.modules.asistente_proyecto.services.limitador_solicitudes import (
     limitador_solicitudes_ia_proyecto,
 )
 from app.modules.asistente_proyecto.services.publicador_eventos import PublicadorEventosIAProyecto
-from app.modules.asistente_proyecto.services.recomendaciones_pendientes import clave_recomendacion, claves_abiertas
+from app.modules.asistente_proyecto.services.recomendaciones_pendientes import (
+    clave_recomendacion,
+    claves_abiertas,
+)
 from app.modules.asistente_proyecto.services.servicio_asistente import ServicioContratoAsistente
 from app.modules.modelado_uml.repositories.repositorio_uml import RepositorioUML
 

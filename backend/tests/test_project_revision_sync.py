@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 from app.core.config.configuracion import settings
 from app.modules.modelado_uml.services.almacen_diagrama_activo import SYNC_PROJECTS_KEY
 from app.modules.proyectos_colaboracion.models import Proyecto
-from app.modules.proyectos_colaboracion.services.guardia_mutaciones_proyecto import GuardiaMutacionesProyecto
+from app.modules.proyectos_colaboracion.services.guardia_mutaciones_proyecto import (
+    GuardiaMutacionesProyecto,
+)
 
 
 def test_project_revision_change_schedules_uml_document_sync(monkeypatch):
