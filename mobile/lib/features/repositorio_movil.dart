@@ -72,7 +72,7 @@ class RepositorioMovil {
   }
 
   Future<List<AccionIA>> actions(String projectId) async =>
-      (await api.get('/projects/$projectId/ai/actions', query: {'limit': '30'})
+      (await api.get('/projects/$projectId/ai/actions', query: {'limit': '100'})
               as List)
           .cast<Json>()
           .map(AccionIA.fromJson)

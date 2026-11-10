@@ -36,7 +36,7 @@ import { servicioProyectos } from "../services/servicioProyectos";
 import { ultimaSecuenciaContinuaMensajes, useAlmacenIAProyecto } from "../store/almacenIAProyecto";
 import { ConfiguracionProveedorIA } from "./ConfiguracionProveedorIA";
 import { dependenciasAccionListas, resumenAccion } from "./resumenAccion";
-import { esSugerenciaDeAtributos, preparacionRecomendacion, solicitudCorreccionConCriterio } from "./preparacionRecomendacion";
+import { contenidoVisibleMensajeIA, esSugerenciaDeAtributos, preparacionRecomendacion, solicitudCorreccionConCriterio } from "./preparacionRecomendacion";
 
 type Props = {
   projectId: string;
@@ -778,7 +778,7 @@ export function AsistenteIAProyecto({
                         : "bg-slate-100 text-slate-900 rounded-bl-sm"
                     )}
                   >
-                    {message.content}
+                    {contenidoVisibleMensajeIA(message.content)}
 
                     {isVoice && (
                       <span
@@ -889,7 +889,7 @@ export function AsistenteIAProyecto({
                 <article className="ml-auto max-w-[85%] flex flex-col items-end">
                   <span className="mb-1 text-[11px] font-semibold text-slate-500">Tú</span>
                   <div className="rounded-2xl rounded-br-sm bg-teal-600 px-3.5 py-2.5 text-sm text-white">
-                    {pendingRequest.content}
+                    {contenidoVisibleMensajeIA(pendingRequest.content)}
                   </div>
                 </article>
               )}
