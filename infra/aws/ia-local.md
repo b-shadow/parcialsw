@@ -19,3 +19,20 @@ Invoke-RestMethod http://127.0.0.1:11434/api/tags
 ```
 
 El sitio publicado en Vercel requiere Internet para ambos orígenes de IA.
+
+## Usar otra computadora por turnos
+
+No se cambia AWS. La segunda computadora usa el mismo puerto de tunel `11435`, el mismo usuario SSH restringido y el mismo script. Primero se cierra el proceso del tunel en la computadora anterior; apagar solo Ollama no libera el puerto.
+
+En la segunda computadora Windows se necesitan Docker Desktop, AWS CLI v2, el plugin de Session Manager, OpenSSH y acceso autorizado al perfil `case-inteligente`. El script detecta el plugin tanto en su instalacion estandar como en la ruta local usada durante el primer despliegue. Autenticarse en esa computadora con `aws login --profile case-inteligente --region us-east-1`; no copiar archivos de credenciales de AWS. La clave privada SSH existente debe transferirse de forma privada a `%LOCALAPPDATA%\case-ia-tunnel\id_ed25519`. Sin esa clave, habria que autorizar una nueva en AWS.
+
+Crear el contenedor en esa computadora (sin GPU; si Docker admite NVIDIA, agregar `--gpus all`):
+
+```powershell
+docker run -d --name case-ollama-local -p 127.0.0.1:11434:11434 -v case_ollama_local:/root/.ollama --restart unless-stopped ollama/ollama:latest
+docker exec case-ollama-local ollama pull qwen2.5-coder:1.5b
+Invoke-RestMethod http://127.0.0.1:11434/api/tags
+powershell -ExecutionPolicy Bypass -File .\infra\aws\start-local-ai.ps1
+```
+
+Mantener abierta la ultima sesion de PowerShell. Si aparece `remote port forwarding failed for listen port 11435`, el tunel de la primera computadora sigue conectado. Una vez conectado, la opcion **Local** del proyecto usa Ollama de la segunda computadora; no hay deteccion directa desde el navegador.
