@@ -24,6 +24,7 @@ from app.core.redis.cliente import clave_redis, obtener_redis
 from app.modules.asistente_proyecto.models import RecomendacionIA
 from app.modules.asistente_proyecto.schemas.esquemas_asistente import CreacionInternaMensajeIA
 from app.modules.asistente_proyecto.services.publicador_eventos import PublicadorEventosIAProyecto
+from app.modules.asistente_proyecto.services.recomendaciones_pendientes import clave_recomendacion, claves_abiertas
 from app.modules.asistente_proyecto.services.servicio_asistente import ServicioContratoAsistente
 from app.modules.modelado_uml.engine.modelo_interno import ModeloDiagramaUML
 from app.modules.modelado_uml.engine.validador import validar_modelo_interno
@@ -110,6 +111,22 @@ class ServicioAsesorProactivo:
             recommendations: list[RecomendacionPlanificada] = []
             if diagram_id:
                 recommendations = self._revisar_diagrama(db, diagram_id)
+            open_keys = claves_abiertas(db, entry.project_id)
+            recommendations = [
+                rec for rec in recommendations
+                if clave_recomendacion(rec.title, rec.description) not in open_keys
+            ]
+
+            if not recommendations and trigger != "version":
+                # Los hallazgos ya están pendientes de decisión o el diagrama no tiene hallazgos.
+                if redis_client is not None:
+                    try:
+                        redis_client.delete(pending_k)
+                    except Exception:
+                        pass
+                else:
+                    _MEMORY_PENDING[project_id_str] = 0
+                return
 
             if trigger == "version":
                 content = self._resumen_version(db, entry.project_id)

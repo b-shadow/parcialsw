@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Settings, X } from "lucide-react";
 import { servicioFase1 } from "../../../core/api/servicioFase1";
 import type { ProveedorIA } from "../../../core/contracts/mejoras2p";
@@ -64,7 +65,6 @@ export function ConfiguracionProveedorIA({
   const [internalOpen, setInternalOpen] = useState(false);
   const [health, setHealth] = useState<EstadoProveedorIA | null>(null);
   const [loading, setLoading] = useState(false);
-  const popoverRef = useRef<HTMLDivElement>(null);
 
   const isControlled = controlledIsOpen !== undefined;
   const open = isControlled ? controlledIsOpen : internalOpen;
@@ -105,22 +105,18 @@ export function ConfiguracionProveedorIA({
         manejarCierre();
       }
     }
-    function alPulsarFuera(e: MouseEvent) {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        manejarCierre();
-      }
-    }
     if (open) {
       window.addEventListener("keydown", alPulsarTecla);
-      window.addEventListener("mousedown", alPulsarFuera);
     }
     return () => {
       window.removeEventListener("keydown", alPulsarTecla);
-      window.removeEventListener("mousedown", alPulsarFuera);
     };
   }, [open]);
 
   const guardarSeleccion = async (providerId: ProveedorIA, source: "local" | "aws") => {
+    if (loading || !health || (providerId === "gemini" && !health.gemini_configured) ||
+        (providerId === "ollama" && !health.configured_sources?.includes(source))) return;
+    setLoading(true);
     try {
       const settings = await servicioFase1.configuracionIA(projectId);
       await servicioFase1.actualizarConfiguracionIA(projectId, {
@@ -130,7 +126,7 @@ export function ConfiguracionProveedorIA({
         require_confirmation: settings.require_confirmation,
         model_name: providerId === settings.preferred_provider
           ? settings.model_name
-          : providerId === "gemini" ? "gemini-2.5-flash" : "qwen2.5-coder:7b",
+          : providerId === "gemini" ? "gemini-2.5-flash" : providerId === "rule_engine" ? "deterministic-v2" : "qwen2.5-coder:1.5b",
         max_context_messages: settings.max_context_messages,
         summary_trigger_messages: settings.summary_trigger_messages,
         settings_json: { ...settings.settings_json, origen_ollama: source },
@@ -141,13 +137,15 @@ export function ConfiguracionProveedorIA({
       manejarCierre();
     } catch {
       toast.error("Error al actualizar proveedor", "No se pudieron guardar los ajustes de la IA");
+    } finally {
+      setLoading(false);
     }
   };
 
   const seleccionarProveedor = (providerId: ProveedorIA) => guardarSeleccion(providerId, currentSource);
 
   return (
-    <div className="relative inline-block" ref={popoverRef}>
+    <div className="relative inline-block">
       {!isControlled && (
         <button
           type="button"
@@ -161,12 +159,9 @@ export function ConfiguracionProveedorIA({
         </button>
       )}
 
-      {open && (
-        <div
-          role="radiogroup"
-          aria-label="Proveedor de IA"
-          className="absolute right-0 top-full z-50 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
-        >
+      {open && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) manejarCierre(); }}>
+        <div role="dialog" aria-modal="true" aria-label="Proveedor de la IA del proyecto" className="w-full max-w-sm max-h-[min(90vh,680px)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
           <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-2 dark:border-slate-800">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
               Proveedor de la IA del proyecto
@@ -181,10 +176,16 @@ export function ConfiguracionProveedorIA({
             </button>
           </div>
 
-          <div className="space-y-1.5">
+          <div role="radiogroup" aria-label="Proveedor de IA" className="space-y-1.5">
             {PROVIDERS.map((prov) => {
               const isSelected = current === prov.id;
+              const disabled = loading || !health ||
+                (prov.id === "gemini" && !health.gemini_configured) ||
+                (prov.id === "ollama" && !health.configured_sources?.length);
               let statusText = prov.subtitle;
+
+              if (prov.id === "gemini" && health && !health.gemini_configured) statusText = "No configurado en el servidor";
+              if (prov.id === "ollama" && health && !health.configured_sources?.length) statusText = "No hay un origen Ollama configurado";
 
               if (health && health.provider === prov.id) {
                 if (health.available) {
@@ -198,21 +199,23 @@ export function ConfiguracionProveedorIA({
                 <div
                   key={prov.id}
                   role="radio"
-                  tabIndex={0}
+                  tabIndex={disabled ? -1 : 0}
                   aria-checked={isSelected}
+                  aria-disabled={disabled}
                   data-prov={prov.dataProv}
-                  onClick={() => void seleccionarProveedor(prov.id)}
+                  onClick={() => { if (!disabled) void seleccionarProveedor(prov.id); }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      void seleccionarProveedor(prov.id);
+                      if (!disabled) void seleccionarProveedor(prov.id);
                     }
                   }}
                   className={cn(
-                    "flex cursor-pointer items-start justify-between gap-3 rounded-lg border p-2.5 transition text-left",
+                    "flex cursor-pointer items-start justify-between gap-3 rounded-lg border p-2.5 text-left transition disabled:opacity-50",
+                    disabled && "cursor-not-allowed opacity-50",
                     isSelected
                       ? "border-teal-500 bg-teal-50/50 dark:border-teal-600 dark:bg-teal-950/20"
-                      : "border-slate-100 hover:border-slate-200 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:border-slate-700 dark:hover:bg-slate-800/40"
+                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-600 dark:hover:bg-slate-800"
                   )}
                 >
                   <div className="flex items-start gap-2.5">
@@ -252,10 +255,11 @@ export function ConfiguracionProveedorIA({
                     key={source}
                     type="button"
                     aria-pressed={currentSource === source}
+                    disabled={loading || !health?.configured_sources?.includes(source)}
                     onClick={() => void guardarSeleccion("ollama", source)}
                     className={cn(
-                      "rounded-md border px-2 py-1.5 text-xs",
-                      currentSource === source ? "border-teal-500 bg-teal-50 text-teal-800 dark:bg-teal-950 dark:text-teal-200" : "border-slate-200 dark:border-slate-700"
+                      "rounded-md border px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50",
+                      currentSource === source ? "border-teal-500 bg-teal-50 text-teal-800 dark:bg-teal-950 dark:text-teal-200" : "border-slate-300 bg-white text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     )}
                   >
                     {source === "local" ? "Local" : "AWS"}
@@ -265,10 +269,8 @@ export function ConfiguracionProveedorIA({
             </div>
           )}
 
-          <div className="mt-2.5 pt-2 border-t border-slate-100 text-right dark:border-slate-800">
-            <span className="text-[10px] text-slate-400">AiProviderSettings · V1.8</span>
-          </div>
         </div>
+        </div>, document.body
       )}
     </div>
   );

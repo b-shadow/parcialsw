@@ -28,6 +28,9 @@ def obtener_url_ollama(origen: str) -> str | None:
     if origen == "aws":
         return settings.ollama_aws_base_url
     if origen == "local":
+        if settings.app_env == "production" and settings.ollama_local_base_url == settings.ollama_aws_base_url:
+            # El contenedor de AWS no representa la máquina del usuario.
+            return None
         return settings.ollama_local_base_url or (
             settings.ollama_base_url if settings.app_env != "production" else None
         )

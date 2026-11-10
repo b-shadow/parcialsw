@@ -22,12 +22,14 @@ from app.modules.asistente_proyecto.schemas.esquemas_asistente import (
 )
 from app.modules.asistente_proyecto.services.constructor_contexto import ConstructorContextoProyecto
 from app.modules.asistente_proyecto.services.fabrica_proveedores import (
+    obtener_url_ollama,
     seleccionar_proveedor,
 )
 from app.modules.asistente_proyecto.services.limitador_solicitudes import (
     limitador_solicitudes_ia_proyecto,
 )
 from app.modules.asistente_proyecto.services.publicador_eventos import PublicadorEventosIAProyecto
+from app.modules.asistente_proyecto.services.recomendaciones_pendientes import clave_recomendacion, claves_abiertas
 from app.modules.asistente_proyecto.services.servicio_asistente import ServicioContratoAsistente
 from app.modules.modelado_uml.repositories.repositorio_uml import RepositorioUML
 
@@ -86,6 +88,8 @@ class ServicioAplicacionIAProyecto:
 
     async def estado_proveedor(self, project_id: UUID, user_id: UUID) -> EstadoProveedorIA:
         project_settings = self.contracts.obtener_configuracion(project_id, user_id)
+        configured = [source for source in ("local", "aws") if obtener_url_ollama(source)]
+        gemini_configured = bool(app_settings.gemini_api_key)
         if project_settings.preferred_provider == "rule_engine":
             return EstadoProveedorIA(
                 provider="rule_engine",
@@ -94,6 +98,8 @@ class ServicioAplicacionIAProyecto:
                 selected_model="deterministic-v2",
                 selected_model_available=True,
                 latency_ms=0,
+                configured_sources=configured,
+                gemini_configured=gemini_configured,
             )
         provider, selected_model = await seleccionar_proveedor(
             project_settings.preferred_provider, project_settings.model_name,
@@ -109,6 +115,8 @@ class ServicioAplicacionIAProyecto:
                 latency_ms=0,
                 error_code="missing_api_key" if project_settings.preferred_provider == "gemini" else "ollama_source_unavailable",
                 error_message="Falta GEMINI_API_KEY" if project_settings.preferred_provider == "gemini" else "El origen Ollama del proyecto no esta configurado en este servidor",
+                configured_sources=configured,
+                gemini_configured=gemini_configured,
             )
         health = await provider.health(selected_model)
         return EstadoProveedorIA(
@@ -120,6 +128,8 @@ class ServicioAplicacionIAProyecto:
             latency_ms=health.latency_ms,
             error_code=health.error_code,
             error_message=health.error_message,
+            configured_sources=configured,
+            gemini_configured=gemini_configured,
         )
 
     async def interactuar(
@@ -518,7 +528,12 @@ class ServicioAplicacionIAProyecto:
                     idempotency_key=action.id,
                 )
             )
+        open_keys = claves_abiertas(self.db, project_id)
         for recommendation in result.recommendations:
+            key = clave_recomendacion(recommendation.title, recommendation.description)
+            if key in open_keys:
+                continue
+            open_keys.add(key)
             self.db.add(
                 RecomendacionIA(
                     project_id=project_id,

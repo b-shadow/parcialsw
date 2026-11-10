@@ -216,6 +216,8 @@ class EstadoProveedorIA(BaseModel):
     latency_ms: int | None = None
     error_code: str | None = None
     error_message: str | None = None
+    configured_sources: list[str] = Field(default_factory=list)
+    gemini_configured: bool = False
 
 
 class RespuestaAccionIA(BaseModel):

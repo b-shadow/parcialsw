@@ -128,6 +128,8 @@ export type EstadoProveedorIA = {
   latency_ms: number | null;
   error_code: string | null;
   error_message: string | null;
+  configured_sources?: string[];
+  gemini_configured?: boolean;
 };
 
 export type DecisionAccionIA = { action: AccionIA; idempotent: boolean };

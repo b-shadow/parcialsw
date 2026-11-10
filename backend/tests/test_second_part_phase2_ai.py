@@ -85,6 +85,8 @@ def test_provider_health_contract_does_not_expose_internal_data() -> None:
         "latency_ms",
         "error_code",
         "error_message",
+        "configured_sources",
+        "gemini_configured",
     }
 
 
@@ -206,6 +208,7 @@ def test_assistant_persists_detected_intent_names_from_orchestrator() -> None:
         uuid4() for _ in range(5)
     )
     service = ServicioAplicacionIAProyecto(Mock())
+    service.db.scalars.return_value = []
     service.repository = Mock()
     service.contracts = Mock()
     service.repository.obtener_conversacion.return_value = SimpleNamespace(id=conversation_id)

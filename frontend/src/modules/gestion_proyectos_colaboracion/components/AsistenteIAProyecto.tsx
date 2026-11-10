@@ -74,6 +74,7 @@ export function AsistenteIAProyecto({
   const [autoSend, setAutoSend] = useState(true);
   const [loading, setLoading] = useState(false);
   const [pendingRequest, setPendingRequest] = useState<{ id: string; content: string; label: string } | null>(null);
+  const [waitingMessageId, setWaitingMessageId] = useState<string | null>(null);
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
   const [applyingCriterion, setApplyingCriterion] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
@@ -120,6 +121,32 @@ export function AsistenteIAProyecto({
     state.establecerRecomendaciones(recommendations);
     state.establecerSecuencias(Math.max(state.projectSequence, ...changes.map((item) => item.sequence_number)));
   }, [conversationId, projectId]);
+
+  useEffect(() => {
+    if (!waitingMessageId || !conversationId) return;
+    let active = true;
+    const revisar = async () => {
+      try {
+        const page = await servicioFase1.listarMensajes(projectId, { conversation_id: conversationId, limit: 100 });
+        if (!active) return;
+        const submitted = page.items.find((item) => item.client_message_id === waitingMessageId);
+        if (!submitted) return;
+        const answered = page.items.some((item) => item.role === "assistant" && item.correlation_id === submitted.correlation_id);
+        if (answered || submitted.status === "failed") {
+          await ponerseAlDia();
+          if (!active) return;
+          setWaitingMessageId(null);
+          store.establecerProcesamiento(false);
+          if (submitted.status === "failed") setError("El asistente no pudo completar la respuesta. Puedes reintentar.");
+        }
+      } catch {
+        // El chat conserva el estado de procesamiento mientras se restablece la conexión.
+      }
+    };
+    void revisar();
+    const timer = window.setInterval(() => void revisar(), 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [waitingMessageId, conversationId, projectId, ponerseAlDia]);
 
   const manejarEvento = useCallback(
     (event: EventoSocketProyectoAnalizado) => {
@@ -360,7 +387,7 @@ export function AsistenteIAProyecto({
       }
       if (remoteStatus === "pending") {
         store.establecerProcesamiento(true);
-        setError("El mensaje se guardó y el asistente sigue procesándolo.");
+        setWaitingMessageId(clientMessageId);
         return null;
       }
       if (restoreDraft) setDraft(content);
@@ -535,6 +562,26 @@ export function AsistenteIAProyecto({
   const canEditAiSettings = can("ai.settings");
   const canConfirmActions = can("ai.confirm_actions");
   const canChat = can("ai.chat");
+  const visibleMessages = useMemo(() => {
+    const proactiveTexts = new Set<string>();
+    return store.messages.filter((message) => {
+      if (message.role !== "assistant" || message.metadata_json?.kind !== "proactive") return true;
+      const key = message.content.trim().toLocaleLowerCase();
+      if (proactiveTexts.has(key)) return false;
+      proactiveTexts.add(key);
+      return true;
+    });
+  }, [store.messages]);
+  const visibleRecommendations = useMemo(() => {
+    const keys = new Set<string>();
+    return store.recommendations.filter((item) => {
+      if (item.status !== "open") return false;
+      const key = `${item.title.trim().toLocaleLowerCase()}|${item.description.trim().toLocaleLowerCase()}`;
+      if (keys.has(key)) return false;
+      keys.add(key);
+      return true;
+    });
+  }, [store.recommendations]);
 
   return (
     <div className={embedded ? "h-full min-h-0" : "fixed bottom-5 right-24 z-[65]"}>
@@ -678,7 +725,7 @@ export function AsistenteIAProyecto({
               </p>
             )}
 
-            {store.messages.map((message) => {
+            {visibleMessages.map((message) => {
               const isMe =
                 message.role === "user" &&
                 (Boolean(message.author_user_id && message.author_user_id === currentUser?.id) ||
@@ -870,9 +917,7 @@ export function AsistenteIAProyecto({
 
             <div ref={endRef} />
 
-            {store.recommendations
-              .filter((item) => item.status === "open")
-              .map((item) => (
+            {visibleRecommendations.map((item) => (
                 <aside
                   key={item.id}
                   className={cn(

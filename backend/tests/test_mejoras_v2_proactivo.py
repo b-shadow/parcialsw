@@ -12,7 +12,7 @@ from app.core.changelog.consumidor import ConsumidorRegistroCambios
 from app.core.changelog.contratos import EntradaRegistroCambios
 from app.core.config.configuracion import settings
 from app.core.redis.cliente import clave_redis, establecer_cliente_prueba
-from app.modules.asistente_proyecto.models import ConversacionIA
+from app.modules.asistente_proyecto.models import ConversacionIA, RecomendacionIA
 from app.modules.asistente_proyecto.services.servicio_asesor_proactivo import (
     _MEMORY_COOLDOWN,
     _MEMORY_PENDING,
@@ -75,6 +75,8 @@ class FakeSession:
 
         if "uml_classes" in q_str:
             return Result(self.classes)
+        if "recomendaciones_ia" in q_str:
+            return Result([item for item in self.added if isinstance(item, RecomendacionIA) and item.status == "open"])
         return Result([])
 
     def add(self, obj):
@@ -285,6 +287,29 @@ def test_diagram_without_findings_does_not_publish(fake_redis):
             asyncio.run(advisor.al_cambiar(_make_entry(project_id, diagram_id=diagram_id)))
 
         assert mock_pub.await_count == 0
+
+
+def test_same_open_design_recommendation_is_not_published_again(fake_redis):
+    project_id = uuid4()
+    diagram_id = uuid4()
+    diagram = _make_diagram(project_id, diagram_id)
+    session = FakeSession(diagram, [_make_class(diagram_id, "Factura", attributes=[])], _make_conversation(project_id))
+    session.add(RecomendacionIA(
+        project_id=project_id,
+        conversation_id=session.conversation.id,
+        source_message_id=uuid4(),
+        category="architecture",
+        severity="info",
+        title="Sugerencia de diseño",
+        description="Agregar atributos a Factura.",
+        references_json=[],
+        status="open",
+    ))
+    advisor = ServicioAsesorProactivo(db_factory=lambda: session, diagram_model_loader=_load_diagram_model)
+    with patch.object(settings, "ai_proactive_min_changes", 5), patch.object(advisor, "_publish", new_callable=AsyncMock) as published:
+        for _ in range(6):
+            asyncio.run(advisor.al_cambiar(_make_entry(project_id, diagram_id=diagram_id)))
+    assert published.await_count == 0
 
 
 def test_system_source_is_ignored_ai_counts_as_team(fake_redis):

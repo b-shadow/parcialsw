@@ -414,9 +414,42 @@ class ServicioContratoAsistente:
         conversation_id: UUID | None = None,
     ):
         self._proyecto_y_miembro(project_id, user_id)
-        return self.repository.listar_recomendaciones(
+        items = self.repository.listar_recomendaciones(
             project_id, item_status, severity, max(1, min(limit, 200)), conversation_id
         )
+        # Una sugerencia automática de "agregar atributos" deja de ser válida
+        # cuando la clase ya tiene atributos, aunque se hayan agregado a mano.
+        pending_names = {
+            item.description.removeprefix("Agregar atributos a ").removesuffix(".")
+            for item in items
+            if item.status == "open"
+            and item.title == "Sugerencia de diseño"
+            and item.description.startswith("Agregar atributos a ")
+        }
+        if pending_names:
+            from app.modules.modelado_uml.repositories.repositorio_uml import RepositorioUML
+            from app.modules.modelado_uml.services.servicio_uml import ServicioUML
+
+            classes_by_name: dict[str, list[bool]] = {}
+            uml = RepositorioUML(self.db)
+            for diagram in uml.listar_diagramas_por_proyecto(project_id):
+                model = ServicioUML(self.db)._construir_modelo_interno(diagram)
+                for uml_class in model.classes:
+                    if uml_class.name in pending_names:
+                        classes_by_name.setdefault(uml_class.name, []).append(bool(uml_class.attributes))
+            resolved = {
+                name for name, present in classes_by_name.items() if present and all(present)
+            }
+            if resolved:
+                for item in items:
+                    if item.status == "open" and item.description in {
+                        f"Agregar atributos a {name}." for name in resolved
+                    }:
+                        item.status = "resolved"
+                        item.resolution_note = "La clase ya contiene atributos en el diagrama."
+                        item.resolved_at = datetime.now(UTC)
+                self.db.commit()
+        return [item for item in items if item_status is None or item.status == item_status]
 
     def actualizar_recomendacion(
         self,

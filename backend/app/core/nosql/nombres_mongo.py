@@ -78,6 +78,14 @@ def traducir_clave(clave: str, *, al_espanol: bool) -> str:
     )
 
 
+def traducir_orden(orden: Any) -> Any:
+    if isinstance(orden, str):
+        return traducir_clave(orden, al_espanol=True)
+    if isinstance(orden, (list, tuple)):
+        return [(traducir_clave(campo, al_espanol=True), direccion) for campo, direccion in orden]
+    return orden
+
+
 def traducir_documento(valor: Any, *, al_espanol: bool) -> Any:
     if isinstance(valor, list):
         return [traducir_documento(item, al_espanol=al_espanol) for item in valor]
@@ -100,10 +108,7 @@ class CursorTraducido:
         self.cursor = cursor
 
     def sort(self, clave: Any, direccion: Any = None):
-        if isinstance(clave, str):
-            clave = traducir_clave(clave, al_espanol=True)
-        elif isinstance(clave, list):
-            clave = [(traducir_clave(campo, al_espanol=True), orden) for campo, orden in clave]
+        clave = traducir_orden(clave)
         self.cursor = self.cursor.sort(clave, direccion) if direccion is not None else self.cursor.sort(clave)
         return self
 
@@ -142,12 +147,16 @@ class ColeccionTraducida:
     def find_one(self, filtro, proyeccion=None, *args, **kwargs):
         filtro = traducir_documento(filtro, al_espanol=True)
         proyeccion = traducir_documento(proyeccion, al_espanol=True) if proyeccion is not None else None
+        if kwargs.get("sort") is not None:
+            kwargs["sort"] = traducir_orden(kwargs["sort"])
         parametros = (filtro, proyeccion) if proyeccion is not None else (filtro,)
         return self._resultado(self.coleccion.find_one(*parametros, *args, **kwargs))
 
     def find(self, filtro=None, proyeccion=None, *args, **kwargs):
         filtro = traducir_documento(filtro or {}, al_espanol=True)
         proyeccion = traducir_documento(proyeccion, al_espanol=True) if proyeccion is not None else None
+        if kwargs.get("sort") is not None:
+            kwargs["sort"] = traducir_orden(kwargs["sort"])
         parametros = (filtro, proyeccion) if proyeccion is not None else (filtro,)
         return CursorTraducido(self.coleccion.find(*parametros, *args, **kwargs))
 
