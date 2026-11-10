@@ -210,23 +210,23 @@ class ServicioAplicacionIAProyecto:
             correlation_id=user_message.correlation_id,
             conversation_sequence=user_message.sequence_number,
         )
-        preferred_provider, selected_model = await seleccionar_proveedor(
-            project_settings.preferred_provider, project_settings.model_name,
-            (getattr(project_settings, "settings_json", None) or {}).get("origen_ollama", app_settings.ollama_default_source),
-        )
-        fallback_enabled = (
-            project_settings.fallback_enabled and app_settings.ai_rule_fallback_enabled
-        )
         persisted_user_message_id = user_message.id
         persisted_correlation_id = user_message.correlation_id
-        orchestrator = OrquestadorIAUnificado(
-            primary_provider=preferred_provider,
-            fallback_provider=ProveedorReglas(),
-            context_budget=PresupuestoContexto(app_settings.ai_max_context_chars),
-        )
-        # Libera cualquier transaccion de lectura antes de esperar inferencia local.
-        self.db.rollback()
         try:
+            preferred_provider, selected_model = await seleccionar_proveedor(
+                project_settings.preferred_provider, project_settings.model_name,
+                (getattr(project_settings, "settings_json", None) or {}).get("origen_ollama", app_settings.ollama_default_source),
+            )
+            fallback_enabled = (
+                project_settings.fallback_enabled and app_settings.ai_rule_fallback_enabled
+            )
+            orchestrator = OrquestadorIAUnificado(
+                primary_provider=preferred_provider,
+                fallback_provider=ProveedorReglas(),
+                context_budget=PresupuestoContexto(app_settings.ai_max_context_chars),
+            )
+            # Libera cualquier transaccion de lectura antes de esperar inferencia local.
+            self.db.rollback()
             async with _INFERENCE_LIMIT:
                 outcome = await orchestrator.process(
                     request_text=payload.content,
@@ -236,6 +236,7 @@ class ServicioAplicacionIAProyecto:
                     fallback_enabled=fallback_enabled,
                 )
         except Exception as exc:
+            self.db.rollback()
             failed = self.repository.obtener_mensaje(persisted_user_message_id)
             if failed is not None:
                 failed.status = "failed"

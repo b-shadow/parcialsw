@@ -26,6 +26,9 @@ build-backend = "setuptools.build_meta"
 include = ["ai_engine*"]
 exclude = ["models*", "training*", "inference*", "datasets*", "preprocessing*", "prompts*", "validators*", "services*"]
 
+[tool.setuptools.package-data]
+ai_engine = ["prompts/*.md"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

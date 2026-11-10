@@ -428,6 +428,37 @@ def test_design_recommendation_does_not_guess_class_or_partial_criterion() -> No
     assert malformed.requires_user_input
 
 
+def test_design_recommendation_prepares_single_uuid_attribute_for_payment() -> None:
+    context = _context()
+    payment_id = uuid4()
+    context.active_diagram.classes = [
+        {"id": str(payment_id), "name": "Pago", "attributes": []},
+    ]
+    recommendation_id = uuid4()
+    context.generation_state["pending_recommendations"] = [
+        {
+            "id": str(recommendation_id), "title": "Sugerencia de diseño",
+            "description": "Agregar atributos a Pago.",
+        },
+    ]
+    text = (
+        "Corrige el diagrama siguiendo esta recomendación: Sugerencia de diseño. "
+        "Agregar atributos a Pago.\n"
+        f"ID de recomendación: {recommendation_id}\n"
+        "Mi criterio: añade id con valor UUID\n"
+        "Propón cambios UML concretos para que pueda revisarlos y confirmarlos. "
+        "No apliques nada todavía."
+    )
+    outcome = asyncio.run(OrquestadorIAUnificado(primary_provider=None).process(
+        request_text=text, context=context, correlation_id=uuid4(), model="local",
+    ))
+    assert len(outcome.result.actions) == 1
+    payload = outcome.result.actions[0].payload
+    assert (payload["class_id"], payload["name"], payload["data_type"]) == (
+        str(payment_id), "id", "UUID",
+    )
+
+
 def test_assistant_proposes_attributes_for_existing_class_without_new_classes() -> None:
     context = _context()
     product_id = uuid4()
