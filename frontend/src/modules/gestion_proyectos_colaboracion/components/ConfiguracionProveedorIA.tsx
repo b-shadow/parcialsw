@@ -115,7 +115,7 @@ export function ConfiguracionProveedorIA({
 
   const guardarSeleccion = async (providerId: ProveedorIA, source: "local" | "aws") => {
     if (loading || !health || (providerId === "gemini" && !health.gemini_configured) ||
-        (providerId === "ollama" && !health.configured_sources?.includes(source))) return;
+        (providerId === "ollama" && !health.source_health?.[source])) return;
     setLoading(true);
     try {
       const settings = await servicioFase1.configuracionIA(projectId);
@@ -142,7 +142,12 @@ export function ConfiguracionProveedorIA({
     }
   };
 
-  const seleccionarProveedor = (providerId: ProveedorIA) => guardarSeleccion(providerId, currentSource);
+  const seleccionarProveedor = (providerId: ProveedorIA) => {
+    const source = providerId === "ollama" && !health?.source_health?.[currentSource]
+      ? (health?.source_health?.aws ? "aws" : "local")
+      : currentSource;
+    return guardarSeleccion(providerId, source);
+  };
 
   return (
     <div className="relative inline-block">
@@ -177,11 +182,13 @@ export function ConfiguracionProveedorIA({
           </div>
 
           <div role="radiogroup" aria-label="Proveedor de IA" className="space-y-1.5">
-            {PROVIDERS.map((prov) => {
+            {PROVIDERS.filter((prov) =>
+              prov.id === "rule_engine" ||
+              (prov.id === "gemini" && health?.gemini_configured) ||
+              (prov.id === "ollama" && Object.values(health?.source_health ?? {}).some(Boolean))
+            ).map((prov) => {
               const isSelected = current === prov.id;
-              const disabled = loading || !health ||
-                (prov.id === "gemini" && !health.gemini_configured) ||
-                (prov.id === "ollama" && !health.configured_sources?.length);
+              const disabled = loading || !health;
               let statusText = prov.subtitle;
 
               if (prov.id === "gemini" && health && !health.gemini_configured) statusText = "No configurado en el servidor";
@@ -246,6 +253,11 @@ export function ConfiguracionProveedorIA({
             })}
           </div>
 
+          {loading && !health && <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">Comprobando motores de IA...</p>}
+          {health && !health.source_health?.local && (
+            <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">La IA local aparecerá cuando Ollama y el túnel de esta computadora estén activos.</p>
+          )}
+
           {current === "ollama" && (
             <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
               <p className="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-200">Origen compartido del proyecto</p>
@@ -255,7 +267,7 @@ export function ConfiguracionProveedorIA({
                     key={source}
                     type="button"
                     aria-pressed={currentSource === source}
-                    disabled={loading || !health?.configured_sources?.includes(source)}
+                    disabled={loading || !health?.source_health?.[source]}
                     onClick={() => void guardarSeleccion("ollama", source)}
                     className={cn(
                       "rounded-md border px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50",

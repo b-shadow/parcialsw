@@ -100,6 +100,7 @@ def test_provider_health_contract_does_not_expose_internal_data() -> None:
         "error_code",
         "error_message",
         "configured_sources",
+        "source_health",
         "gemini_configured",
     }
 

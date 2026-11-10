@@ -218,6 +218,7 @@ class EstadoProveedorIA(BaseModel):
     error_code: str | None = None
     error_message: str | None = None
     configured_sources: list[str] = Field(default_factory=list)
+    source_health: dict[str, bool] = Field(default_factory=dict)
     gemini_configured: bool = False
 
 

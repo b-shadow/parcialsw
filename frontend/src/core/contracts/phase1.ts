@@ -130,6 +130,7 @@ export type EstadoProveedorIA = {
   error_code: string | null;
   error_message: string | null;
   configured_sources?: string[];
+    source_health?: Record<string, boolean>;
   gemini_configured?: boolean;
 };
 
