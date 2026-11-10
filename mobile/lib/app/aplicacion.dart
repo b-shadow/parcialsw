@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -57,6 +59,18 @@ class _EstadoAplicacionCaseMovil extends State<AplicacionCaseMovil> {
   void initState() {
     super.initState();
     _modo = widget.modoInicial;
+    unawaited(_cargarTema());
+  }
+
+  Future<void> _cargarTema() async {
+    try {
+      final modo = await cargarModoTemaMovil().timeout(
+        const Duration(seconds: 5),
+      );
+      if (mounted) setState(() => _modo = modo);
+    } catch (_) {
+      // La preferencia del tema no debe impedir abrir la aplicacion.
+    }
   }
 
   void _alternarTema() {

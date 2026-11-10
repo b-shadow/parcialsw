@@ -126,6 +126,7 @@ class _EstadoPaginaDetalleProyecto extends State<PaginaDetalleProyecto> {
                         actions: _controller.actions,
                         diagrams: _controller.diagrams,
                         sending: _controller.sendingMessage,
+                        pendingMessage: _controller.pendingMessage,
                         onSend: _controller.sendMessage,
                       ),
                     ],

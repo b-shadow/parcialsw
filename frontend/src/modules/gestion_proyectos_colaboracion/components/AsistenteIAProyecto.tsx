@@ -9,7 +9,6 @@ import {
   MessagesSquare,
   Mic,
   Send,
-  Sparkles,
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -563,15 +562,16 @@ export function AsistenteIAProyecto({
   const canConfirmActions = can("ai.confirm_actions");
   const canChat = can("ai.chat");
   const visibleMessages = useMemo(() => {
-    const proactiveTexts = new Set<string>();
-    return store.messages.filter((message) => {
-      if (message.role !== "assistant" || message.metadata_json?.kind !== "proactive") return true;
-      const key = message.content.trim().toLocaleLowerCase();
-      if (proactiveTexts.has(key)) return false;
-      proactiveTexts.add(key);
-      return true;
-    });
+    return store.messages.filter((message) =>
+      message.role !== "assistant" || message.metadata_json?.kind !== "proactive"
+    );
   }, [store.messages]);
+  const proactiveNotices = useMemo(() => [
+    ...new Set(store.messages
+      .filter((message) => message.role === "assistant" && message.metadata_json?.kind === "proactive")
+      .map((message) => message.content.trim())
+    ),
+  ], [store.messages]);
   const visibleRecommendations = useMemo(() => {
     const keys = new Set<string>();
     return store.recommendations.filter((item) => {
@@ -709,6 +709,16 @@ export function AsistenteIAProyecto({
 
           {/* Historial de mensajes */}
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3.5" aria-live="polite">
+            {proactiveNotices.length > 0 && (
+              <details className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100">
+                <summary className="cursor-pointer font-semibold">
+                  Avisos automáticos de la IA ({proactiveNotices.length})
+                </summary>
+                <div className="mt-2 space-y-2">
+                  {proactiveNotices.map((notice) => <p key={notice}>{notice}</p>)}
+                </div>
+              </details>
+            )}
             {store.hasMoreBefore && (
               <button
                 className="mx-auto mb-2 flex items-center gap-1 text-xs font-semibold text-teal-600 hover:underline"
@@ -719,7 +729,7 @@ export function AsistenteIAProyecto({
               </button>
             )}
 
-            {!loading && store.messages.length === 0 && (
+            {!loading && visibleMessages.length === 0 && (
               <p className="mt-12 text-center text-sm text-slate-400">
                 Consulta sobre este proyecto o solicita cambios al diagrama abierto.
               </p>
@@ -731,32 +741,8 @@ export function AsistenteIAProyecto({
                 (Boolean(message.author_user_id && message.author_user_id === currentUser?.id) ||
                   !message.author_user_id);
               const isAi = message.role === "assistant";
-              const isProactive =
-                isAi && message.metadata_json && message.metadata_json.kind === "proactive";
               const isVoice =
                 Boolean(message.metadata_json?.voice_input) || voiceMessageIds.has(message.id);
-
-              if (isProactive) {
-                return (
-                  <div
-                    key={message.id}
-                    className="rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/25"
-                  >
-                    <div className="mb-2 flex items-center gap-2">
-                      <Sparkles className="text-amber-600 dark:text-amber-400" size={16} />
-                      <b className="text-xs font-bold text-amber-950 dark:text-amber-200">
-                        Sugerencia de la IA
-                      </b>
-                      <span className="rounded-full bg-amber-200/80 px-2 py-0.5 text-[10px] font-bold text-amber-900 dark:bg-amber-900/60 dark:text-amber-200">
-                        Proactiva
-                      </span>
-                    </div>
-                    <div className="whitespace-pre-wrap text-xs text-amber-950/90 dark:text-amber-100/90 leading-5">
-                      {message.content}
-                    </div>
-                  </div>
-                );
-              }
 
               return (
                 <article

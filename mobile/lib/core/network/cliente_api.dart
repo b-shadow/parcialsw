@@ -46,10 +46,9 @@ class ClienteApi {
 
   Future<dynamic> get(String path, {Map<String, String>? query}) async {
     try {
-      final response = await _client.get(
-        _uri(path, query),
-        headers: await _headers(),
-      );
+      final response = await _client
+          .get(_uri(path, query), headers: await _headers())
+          .timeout(const Duration(seconds: 12));
       return _decode(response);
     } on ExcepcionApi {
       rethrow;
@@ -65,13 +64,16 @@ class ClienteApi {
     String path, {
     Object? body,
     bool authenticated = true,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     try {
-      final response = await _client.post(
-        _uri(path),
-        headers: await _headers(authenticated: authenticated),
-        body: jsonEncode(body ?? const <String, dynamic>{}),
-      );
+      final response = await _client
+          .post(
+            _uri(path),
+            headers: await _headers(authenticated: authenticated),
+            body: jsonEncode(body ?? const <String, dynamic>{}),
+          )
+          .timeout(timeout);
       return _decode(response);
     } on ExcepcionApi {
       rethrow;
@@ -85,11 +87,13 @@ class ClienteApi {
 
   Future<dynamic> patch(String path, {Object? body}) async {
     try {
-      final response = await _client.patch(
-        _uri(path),
-        headers: await _headers(),
-        body: jsonEncode(body ?? const <String, dynamic>{}),
-      );
+      final response = await _client
+          .patch(
+            _uri(path),
+            headers: await _headers(),
+            body: jsonEncode(body ?? const <String, dynamic>{}),
+          )
+          .timeout(const Duration(seconds: 20));
       return _decode(response);
     } on ExcepcionApi {
       rethrow;

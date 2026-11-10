@@ -45,24 +45,30 @@ class ControladorAplicacion extends ChangeNotifier {
 
   Future<void> restoreSession() async {
     restoring = true;
-    final token = await sessionStore.readToken();
-    if (token != null) {
-      try {
+    try {
+      final token = await sessionStore.readToken().timeout(
+        const Duration(seconds: 5),
+      );
+      if (token != null) {
         profile = await repository.profile();
         await cache.write(profile!.id, 'profile', profile!.toJson());
         await refreshProjects();
         unawaited(syncMobileDeviceToken());
-      } on ExcepcionApi catch (exception) {
-        if (exception.statusCode == 401) {
-          await sessionStore.clear();
-        } else {
-          await _loadCachedProfile();
-          await _loadCachedProjects();
-        }
       }
+    } on ExcepcionApi catch (exception) {
+      if (exception.statusCode == 401) {
+        await sessionStore.clear();
+      } else {
+        await _loadCachedProfile();
+        await _loadCachedProjects();
+      }
+    } catch (exception) {
+      debugPrint('No se pudo restaurar la sesion: $exception');
+      error = 'No se pudo restaurar la sesion. Inicia sesion nuevamente.';
+    } finally {
+      restoring = false;
+      notifyListeners();
     }
-    restoring = false;
-    notifyListeners();
   }
 
   Future<void> login(String email, String password) async {

@@ -10,6 +10,7 @@ class PestanaAsistente extends StatefulWidget {
   final List<AccionIA> actions;
   final List<ResumenDiagrama> diagrams;
   final bool sending;
+  final String? pendingMessage;
   final Future<void> Function(String content, {String? diagramId}) onSend;
   const PestanaAsistente({
     super.key,
@@ -17,6 +18,7 @@ class PestanaAsistente extends StatefulWidget {
     required this.actions,
     required this.diagrams,
     required this.sending,
+    this.pendingMessage,
     required this.onSend,
   });
 
@@ -50,7 +52,17 @@ class _EstadoPestanaAsistente extends State<PestanaAsistente> {
   }
 
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) {
+    final chatMessages = widget.messages.where((message) => !message.proactive).toList()
+      ..sort((a, b) => a.sequence.compareTo(b.sequence));
+    final notices = <String>{};
+    for (final message in widget.messages.where((message) => message.proactive)) {
+      notices.add(message.content);
+    }
+    final pendingVisible = widget.pendingMessage != null &&
+        !chatMessages.any((message) => message.role == 'user' &&
+            message.content == widget.pendingMessage);
+    return Column(
     children: [
       Container(
         width: double.infinity,
@@ -130,8 +142,16 @@ class _EstadoPestanaAsistente extends State<PestanaAsistente> {
             ],
           ),
         ),
+      if (notices.isNotEmpty)
+        ExpansionTile(
+          title: Text('Avisos automáticos de la IA (${notices.length})'),
+          children: notices.take(3).map((notice) => Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Align(alignment: Alignment.centerLeft, child: Text(notice)),
+          )).toList(),
+        ),
       Expanded(
-        child: widget.messages.isEmpty
+        child: chatMessages.isEmpty && !pendingVisible
             ? const EstadoVacio(
                 icon: Icons.auto_awesome_outlined,
                 title: 'Asistente del proyecto',
@@ -141,10 +161,37 @@ class _EstadoPestanaAsistente extends State<PestanaAsistente> {
             : ListView.builder(
                 reverse: true,
                 padding: const EdgeInsets.all(14),
-                itemCount: widget.messages.length,
+                itemCount: chatMessages.length + (pendingVisible ? 1 : 0) +
+                    (widget.sending ? 1 : 0),
                 itemBuilder: (context, reverseIndex) {
-                  final index = widget.messages.length - 1 - reverseIndex;
-                  final message = widget.messages[index];
+                  final index = chatMessages.length + (pendingVisible ? 1 : 0) +
+                      (widget.sending ? 1 : 0) - 1 - reverseIndex;
+                  if (widget.sending && index == chatMessages.length +
+                      (pendingVisible ? 1 : 0)) {
+                    return const Padding(
+                      padding: EdgeInsets.only(bottom: 9),
+                      child: Align(alignment: Alignment.centerLeft,
+                        child: Text('El asistente está analizando...')),
+                    );
+                  }
+                  if (pendingVisible && index == chatMessages.length) {
+                    return Align(
+                      alignment: Alignment.centerRight,
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 340),
+                        margin: const EdgeInsets.only(bottom: 9),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(widget.pendingMessage!, style: TextStyle(
+                          color: Theme.of(context).colorScheme.onPrimary,
+                        )),
+                      ),
+                    );
+                  }
+                  final message = chatMessages[index];
                   final user = message.role == 'user';
                   return Align(
                     alignment: user
@@ -167,13 +214,23 @@ class _EstadoPestanaAsistente extends State<PestanaAsistente> {
                                 ).colorScheme.outlineVariant,
                               ),
                       ),
-                      child: Text(
-                        message.content,
-                        style: TextStyle(
-                          color: user
-                              ? Theme.of(context).colorScheme.onPrimary
-                              : null,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(message.content, style: TextStyle(
+                            color: user ? Theme.of(context).colorScheme.onPrimary : null,
+                          )),
+                          if (message.status == 'failed')
+                            const Padding(
+                              padding: EdgeInsets.only(top: 6),
+                              child: Text('No se pudo procesar. Inténtalo de nuevo.'),
+                            ),
+                          if (message.status == 'pending' || message.status == 'streaming')
+                            const Padding(
+                              padding: EdgeInsets.only(top: 6),
+                              child: Text('Procesando...'),
+                            ),
+                        ],
                       ),
                     ),
                   );
@@ -215,4 +272,5 @@ class _EstadoPestanaAsistente extends State<PestanaAsistente> {
       ),
     ],
   );
+  }
 }

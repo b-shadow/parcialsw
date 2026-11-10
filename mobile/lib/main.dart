@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -21,14 +23,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  } catch (error) {
-    debugPrint('Firebase no inicializado: ');
-  }
   const baseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'http://10.0.2.2:8081/api/v1',
@@ -40,11 +34,20 @@ Future<void> main() async {
     sessionStore: sessionStore,
     cache: CachePrivada(),
   );
-  await controller.restoreSession();
-  runApp(
-    AplicacionCaseMovil(
-      controller: controller,
-      modoInicial: await cargarModoTemaMovil(),
-    ),
-  );
+  runApp(AplicacionCaseMovil(controller: controller));
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_initializeFirebase());
+    unawaited(controller.restoreSession());
+  });
+}
+
+Future<void> _initializeFirebase() async {
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    ).timeout(const Duration(seconds: 10));
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  } catch (error) {
+    debugPrint('Firebase no inicializado: $error');
+  }
 }

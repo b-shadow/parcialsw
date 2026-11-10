@@ -40,6 +40,8 @@ class MensajeIA {
   final String? author;
   final int sequence;
   final DateTime createdAt;
+  final String status;
+  final bool proactive;
 
   const MensajeIA({
     required this.id,
@@ -48,6 +50,8 @@ class MensajeIA {
     this.author,
     required this.sequence,
     required this.createdAt,
+    this.status = 'completed',
+    this.proactive = false,
   });
 
   factory MensajeIA.fromJson(Json json) => MensajeIA(
@@ -57,6 +61,9 @@ class MensajeIA {
     author: json['author_display_name']?.toString(),
     sequence: json['sequence_number'] as int? ?? 0,
     createdAt: parseDate(json['created_at']),
+    status: json['status']?.toString() ?? 'completed',
+    proactive: json['metadata_json'] is Json &&
+        (json['metadata_json'] as Json)['kind'] == 'proactive',
   );
 }
 

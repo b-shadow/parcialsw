@@ -78,13 +78,14 @@ class RepositorioMovil {
           .map(AccionIA.fromJson)
           .toList();
 
-  Future<void> sendMessage(
+  Future<Json> sendMessage(
     String projectId,
     String content, {
     String? diagramId,
   }) async {
-    await api.post(
+    return await api.post(
       '/projects/$projectId/ai/interactions',
+      timeout: const Duration(minutes: 5),
       body: {
         'client_message_id': const Uuid().v4(),
         'content': content.trim(),
@@ -96,7 +97,7 @@ class RepositorioMovil {
           'surface': 'mobile_readonly',
         },
       },
-    );
+    ) as Json;
   }
 
   Future<List<ElementoNotificacion>> notifications({
